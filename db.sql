@@ -1,8 +1,10 @@
 CREATE TABLE IF NOT EXISTS `ips` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(50) DEFAULT NULL,
-  `mac` varchar(50) DEFAULT NULL,
+  `mac` varchar(50) CHARACTER SET latin1 COLLATE latin1_general_ci DEFAULT NULL,
   `ip` varchar(50) DEFAULT NULL,
+  `important` tinyint(4) DEFAULT NULL,
+  `repeater` tinyint(4) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`),
   UNIQUE KEY `mac` (`mac`),
@@ -11,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `ips` (
 
 CREATE TABLE IF NOT EXISTS `ping` (
   `ip` varchar(50) NOT NULL,
-  `mac` varchar(50) DEFAULT NULL,
+  `mac` varchar(50) CHARACTER SET latin1 COLLATE latin1_general_ci DEFAULT NULL,
   `status` varchar(50) DEFAULT NULL,
   `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`ip`)
