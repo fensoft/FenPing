@@ -1,0 +1,1 @@
+Deleted ! <a href="?ping.php">Back</a>

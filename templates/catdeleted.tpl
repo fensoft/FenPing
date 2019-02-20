@@ -1,0 +1,1 @@
+Category deleted ! <a href="?">Back</a>

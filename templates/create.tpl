@@ -1,0 +1,1 @@
+Created! <a href="?edit={$edit}">continue</a>
