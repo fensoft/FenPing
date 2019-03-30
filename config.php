@@ -6,3 +6,4 @@ $db = 'ping';
 $network = '192.168.0';
 $myself = '192.168.0.100';
 $password = '';
+$secret = 'token';
