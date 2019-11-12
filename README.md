@@ -13,7 +13,7 @@ zone "lan" {
 ```
 3. Add this to ```/etc/sudoers```
 ```
-www-data ALL=(ALL) NOPASSWD: ALL
+www-data ALL = NOPASSWD: /var/www/html/ips2hosts.sh
 ```
 4. Edit config.php and import db.sql
 5. Run php composer.phar install
@@ -22,11 +22,13 @@ www-data ALL=(ALL) NOPASSWD: ALL
 ```
     0    * * * * flock -n /tmp/ping.lck -c "/var/www/html/ping/network_inventory.sh"
     *    * * * * flock -n /tmp/ping.lck -c "/var/www/html/ping/ping.sh"
+    *    * * * * flock -n /tmp/dhcp.lck -c "php /var/www/html/ping/dhcpd.leases.php"
 ```
 
-or if you dont' have flock:
+or if you don't have flock:
 
 ```
     0    * * * * /var/www/html/ping/network_inventory.sh
     *    * * * * /var/www/html/ping/ping.sh
+    *    * * * * php /var/www/html/ping/dhcpd.leases.php
 ```
