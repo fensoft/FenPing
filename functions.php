@@ -159,9 +159,10 @@ function create($ip, $mac) {
   $stmt->execute(array("mac" => $mac, "ip" => $ip));
 }
 
-function edit($id, $ip, $mac, $name, $repeater, $important) {
-  $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important WHERE id=:id");
-  $stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "id" => $id));
+function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns) {
+  $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns WHERE id=:id");
+  if (!$stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "id" => $id)))
+    print_r($stmt->errorInfo());
 }
 
 function del($id) {

@@ -1,4 +1,8 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/config.php';
 require __DIR__ . '/functions.php';
@@ -48,13 +52,24 @@ if (isset($_REQUEST["addcat"])) {
   $smarty->assign("name", $data["name"]);
   $smarty->assign("important", $data["important"]);
   $smarty->assign("repeater", $data["repeater"]);
+  $smarty->assign("router", $data["router"]);
+  $smarty->assign("dns", $data["dns"]);
+  $smarty->assign("web", $data["web"]);
   $smarty->assign("id", $_REQUEST["id"]);
   $smarty->assign("num", str_replace($network . ".", "", $data["ip"]));
   $smarty->display("templates/edit.tpl");
   die();
 } else if (isset($_REQUEST["edit2"])) {
   testPassword();
-  edit($_REQUEST["edit2"], $_REQUEST["ip"], $_REQUEST["mac"], $_REQUEST["name"], isset($_REQUEST["repeater"])?"1":null, isset($_REQUEST["important"])?"1":null);
+  if ($_REQUEST["ip"] == "")
+    $_REQUEST["ip"] = null;
+  else
+    $_REQUEST["ip"] = $network . "." . $_REQUEST["ip"];
+  if ($_REQUEST["router"] == "")
+    $_REQUEST["router"] = null;
+  if ($_REQUEST["dns"] == "")
+    $_REQUEST["dns"] = null;
+  edit($_REQUEST["edit2"], $_REQUEST["ip"], $_REQUEST["mac"], $_REQUEST["name"], isset($_REQUEST["repeater"])?"1":null, isset($_REQUEST["important"])?"1":null, isset($_REQUEST["web"])?"1":null, $_REQUEST["router"], $_REQUEST["dns"]);
   $smarty->assign("log", exec("sudo " . __DIR__ . "/ips2hosts.sh"));
   $smarty->display("templates/edited.tpl");
   die();

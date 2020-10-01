@@ -30,9 +30,15 @@
             {else}
               <td>{$value.status}</td>
             {/if}
-            <td>{$value.name}</td>
-            <td>{$value.mac|strtolower}{if isset($value.via)}<img src="res/png/antenna.png" title="{$value.via}"/>{/if}</td>
-            <td>{$value.vendor}</td>
+            <td>
+              {if isset($value.web) && $value.web == 1}
+                <a href="http://{$value.ip}">{$value.name}</a>
+              {else}
+                {$value.name}
+              {/if}
+            </td>
+            <td><a href="?edit={$value.ip}&id={$value.id}&mac={$value.mac}">{$value.mac|strtolower}{if isset($value.via)}<img src="res/png/antenna.png" title="{$value.via}"/>{/if}</a></td>
+            <td><a href="?edit={$value.ip}&id={$value.id}&mac={$value.mac}">{$value.vendor}</a></td>
             <td>
               <a href="?edit={$value.ip}&id={$value.id}&mac={$value.mac}">{$value.ip}</a>
               {if isset($value.xml)}
