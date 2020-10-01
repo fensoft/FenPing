@@ -43,8 +43,7 @@ foreach($contents as $line) {
   }
 }
 
-print_r($data);
-$db = new PDO('mysql:host=' . $db_host . ';dbname=' . $db, $db_user, $db_pass);
+$db = new PDO('mysql:host=' . $db_host . ';dbname=' . $db_name, $db_user, $db_pass);
 $stmt = $db->prepare("truncate leases");
 $stmt->execute();
 foreach ($data as $ip => $content) {

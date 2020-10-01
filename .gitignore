@@ -3,3 +3,5 @@ nmap.raw/
 nmap/
 res/xsl/
 templates_c/
+config.php
+*.old
