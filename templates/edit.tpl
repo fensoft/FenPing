@@ -1,7 +1,7 @@
 <a href="?">back</a><br/>
-Edit {$edit}:<br/>
+Edit ID {$edit}:<br/>
 <form action="?" method="post">
-  <input type="hidden" name="edit2" value="{$edit2}">
+  <input type="hidden" name="edit2" value="{$edit}">
   IP: {$network}.<input type="input" name="ip" value="{$num}"><br/>
   Router: {$network}.<input type="input" name="router" value="{$router}"><br/>
   MAC: <input type="input" name="mac" value="{$mac}"><br/>
@@ -12,5 +12,5 @@ Edit {$edit}:<br/>
   Web: <input type="checkbox" name="web" {if {$web} == "1"}checked{/if}><br/>
   Password: <input type="password" name="p" value=""><br/>
   <button type="submit" class="btn btn-primary mb-2">Confirm</button>
-  <a href="?del={$id}">delete</a>
+  <a href="?del={$edit}">delete</a>
 </form>

@@ -3,7 +3,6 @@ ME=`cd $(dirname $0); pwd`
 config=`mktemp`
 cat $ME/config.php | grep -v php | sed "s#\\\$##" | sed -e "s#[ ]*=[ ]*'#=#" | sed "s#';##" > $config
 . $config
-cat $config
 IFS=$'\n'
 TARGET=/etc/dhcp/dhcpd.hosts
 TARGET2=/etc/bind/lan
@@ -11,9 +10,8 @@ rm -f $TARGET $TARGET2
 echo '$TTL    3600' >> $TARGET2
 echo '@       IN      SOA     lan. lan. ( 2012033101  3600 1800 604800 43200 )' >> $TARGET2
 echo '        IN      NS      lan.' >> $TARGET2
-echo '@       IN      A       $myself' >> $TARGET2
+echo "@       IN      A       $myself" >> $TARGET2
 for i in `echo 'select concat(name, ";", ifnull(mac, ""), ";", ip, ";", ifnull(router, ""),";", ifnull(dns, "")) from ips where ip is not null and name is not null' | mysql -h${db_host} -u${db_user} -p${db_pass} ${db_name} | tail -n+2`; do
-  echo $i
   name=`echo $i | cut -d\; -f1`
   mac=`echo $i | cut -d\; -f2`
   ip=`echo $i | cut -d\; -f3`

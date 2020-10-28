@@ -8,6 +8,8 @@ require __DIR__ . '/config.php';
 require __DIR__ . '/functions.php';
 
 $smarty = new Smarty();
+
+function smarty_modifier_temps($in) { return temps(intval($in)); }
 $smarty->assign("network", $network);
 
 function testPassword() {
@@ -36,17 +38,18 @@ if (isset($_REQUEST["addcat"])) {
   delCategory($_REQUEST["delcat2"]);
   $smarty->display("templates/catdeleted.tpl");
   die();
+} else if (isset($_REQUEST["create"])) {
+  $id = create(NULL, $_REQUEST["create"]);
+  $smarty->assign("edit", $id);
+  $smarty->display("templates/create.tpl");
+  die();
 } else if (isset($_REQUEST["edit"])) {
-  if (getIp($_REQUEST["edit"]) == false) {
-    if (getMac($_REQUEST["mac"]) == false) {
-      create($_REQUEST["ip"], $_REQUEST["mac"]);
-      $smarty->assign("edit", $_REQUEST["edit"]);
-      $smarty->display("templates/create.tpl");
-      die();
-    }
+  $data = getId($_REQUEST["edit"]);
+  if ($data == false) {
+    echo("not found");
+    die();
   }
   $smarty->assign("edit", $_REQUEST["edit"]);
-  $smarty->assign("edit2", $data["id"]);
   $smarty->assign("ip", $data["ip"]);
   $smarty->assign("mac", $data["mac"]);
   $smarty->assign("name", $data["name"]);
@@ -55,7 +58,6 @@ if (isset($_REQUEST["addcat"])) {
   $smarty->assign("router", $data["router"]);
   $smarty->assign("dns", $data["dns"]);
   $smarty->assign("web", $data["web"]);
-  $smarty->assign("id", $_REQUEST["id"]);
   $smarty->assign("num", str_replace($network . ".", "", $data["ip"]));
   $smarty->display("templates/edit.tpl");
   die();
@@ -82,11 +84,13 @@ if (isset($_REQUEST["addcat"])) {
   del($_REQUEST["del2"]);
   $smarty->display("templates/deleted.tpl");
   die();
+} else if (isset($_REQUEST["history"])) {
+  $smarty->assign("history", get_history($_REQUEST["history"]));
+  $smarty->display("templates/history.tpl");
+  die();
 }
 $res = getInventory();
-echo "<!--";
-print_r($res);
-echo "-->";
 $smarty->assign("results", $res);
 $smarty->display("templates/header.tpl");
 $smarty->display("templates/inventory.tpl");
+$smarty->display("templates/footer.tpl");

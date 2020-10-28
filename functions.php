@@ -29,20 +29,18 @@ function getVendor($mac) {
 }
 
 function getDb() {
+  global $db;
   global $db_host;
   global $db_name;
   global $db_user;
   global $db_pass;
-  return new PDO('mysql:host=' . $db_host . ';dbname=' . $db_name, $db_user, $db_pass);;
+  if (!isset($db))
+    $db = new PDO('mysql:host=' . $db_host . ';dbname=' . $db_name, $db_user, $db_pass);
+  return $db;
 }
 
 function getInventory() {
   global $myself;
-
-  if (!file_exists(__DIR__ . '/nmap'))
-    mkdir(__DIR__ . '/nmap');
-  if (!file_exists(__DIR__ . '/res/xsl'))
-    mkdir(__DIR__ . '/res/xsl');
 
   $db = getDb();
 
@@ -105,6 +103,7 @@ function getInventory() {
   global $network;
   $old_ip = $network . ".0";
   $res = array();
+  $stats = get_stats();
   foreach ($sorted_ips as $key => $data) {
     $ip = $data["ip"];
     $stmt2 = $db->prepare("select ip_begin, type from `range` where INET_ATON(:ip_begin) < INET_ATON(ip_begin) and INET_ATON(:ip_end) >= INET_ATON(ip_begin) order by INET_ATON(ip_begin) desc");
@@ -118,13 +117,12 @@ function getInventory() {
     $data["vendor"] = "";
     if ($data["mac"] != "")
       $data["vendor"] = getVendor($data["mac"]);
-    $num = str_replace($network . ".", "", $ip);
-
-    file_put_contents("res/xsl/nmap.xsl", file_get_contents("/usr/share/nmap/nmap.xsl"));
-    if (file_exists(__DIR__ . "/nmap.raw/" . $num . ".xml")) {
-      $data["xml"] = $num;
-      $content = str_replace("file:///usr/bin/../share/nmap/", "../res/xsl/", file_get_contents(__DIR__ . "/nmap.raw/" . $num . ".xml"));
-      file_put_contents("nmap/" . $num . ".xml", $content);
+    if (isset($stats[$ip])) {
+      $data["stats"] = $stats[$ip];
+      $data["stats2"] = count(get_history($data["ip"]));
+    }
+    if (file_exists(__DIR__ . "/nmap/" . $ip . ".xml")) {
+      $data["xml"] = $ip;
     }
     array_push($res, $data);
   }
@@ -154,12 +152,21 @@ function getMac($mac) {
   return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
+function getId($id) {
+  $stmt = getDb()->prepare("select * from ips where id=:id");
+  $stmt->execute(array("id" => $id));
+  return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 function create($ip, $mac) {
+  $mac = strtolower(str_replace("-", ":", $mac));
   $stmt = getDb()->prepare("INSERT INTO ips (mac,ip) VALUES (:mac,:ip)");
   $stmt->execute(array("mac" => $mac, "ip" => $ip));
+  return getDb()->lastInsertId();
 }
 
 function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns) {
+  $mac = strtolower(str_replace("-", ":", $mac));
   $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns WHERE id=:id");
   if (!$stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "id" => $id)))
     print_r($stmt->errorInfo());
@@ -168,4 +175,43 @@ function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns)
 function del($id) {
   $stmt = getDb()->prepare("DELETE FROM ips WHERE id=:id");
   $stmt->execute(array("id" => $id));
+}
+
+function get_stats() {
+  $stmt = getDb()->prepare("select ip, count(ip) as cnt from stats where date_begin > date_sub(now(), interval 1 day) and nb_scan > 10 group by ip");
+  $stmt->execute();
+  $arr = array();
+  while ($i = $stmt->fetch(PDO::FETCH_ASSOC))
+    $arr[$i["ip"]] = $i["cnt"];
+  return $arr;
+}
+
+function temps($val) {
+  if ($val < 60)
+    return $val . " s";
+  if ($val < 60 * 60)
+    return intval($val / 60) . " m";
+  if ($val < 60 * 60 * 24)
+    return intval($val / (60 * 60)) . " h";
+  return intval($val / (60 * 60 * 24)) . " j";
+}
+
+function get_history($ip, $regroup = 10) {
+  $stmt = getDb()->prepare("select *, UNIX_TIMESTAMP(date_begin) as `begin`, UNIX_TIMESTAMP(date_end) as `end`, UNIX_TIMESTAMP(date_end)-UNIX_TIMESTAMP(date_begin) as duration from stats where ip=:ip order by id asc limit 1000");
+  $stmt->execute(array("ip" => $ip));
+  $before = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  $after = array();
+  foreach ($before as $i) {
+    if ($i["nb_scan"] >= $regroup) {
+      $index = count($after)-1;
+      if ($index >= 0 && $after[$index]["status"] == $i["status"]) {
+        $after[$index]["date_end"] = $i["date_end"];
+        $after[$index]["end"] = $i["end"];
+        $after[$index]["duration"] += $i["duration"];
+      } else {
+        array_push($after, $i);
+      }
+    }
+  }
+  return $after;
 }
