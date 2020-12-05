@@ -36,6 +36,7 @@ This page show you all devices.
 
 ### History
 ![](img/history.png)
+
 Warning: a down will appear only if the down is more than 5 minutes
 
 ### Scanner
