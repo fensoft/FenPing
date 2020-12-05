@@ -1,7 +1,7 @@
 # What is it ?
 A software to scan your network, add aliases and configure DHCP and DNS.
 
-###Main page
+### Main page
 ![](img/main.png)
 With important machine down:
 ![](img/main-red.png)
@@ -21,10 +21,10 @@ This page show you all devices.
 - The + after a mac is to create a new static entry
 - The small router icon is when a device is connected through another router
 
-###New pool
+### New pool
 ![](img/addcat.png)
 
-###Editor
+### Editor
 ![](img/edit.png)
 
 - Router is DHCP option router
@@ -34,11 +34,11 @@ This page show you all devices.
 - DNS is DHCP dns option
 - Web if port 80 is open, to show link in the main page
 
-###History
+### History
 ![](img/history.png)
 Warning: a down will appear only if the down is more than 5 minutes
 
-###Scanner
+### Scanner
 ![](img/scan.png)
 Show you a lot of information about the target
 
