@@ -5,3 +5,7 @@ res/xsl/
 templates_c/
 config.php
 *.old
+data
+adminer.php
+fenping.sql
+dump.gz

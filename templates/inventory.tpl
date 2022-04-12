@@ -47,7 +47,7 @@
               </td>
             <td>{$value.vendor}</td>
             <td>
-              {if $value.stats2 > 1}
+              {if isset($value.stats2) && $value.stats2 > 1}
                 <a href="?history={$value.ip}" title="{$value.stats}">{$value.stats2}</a>
               {/if}
             </td>

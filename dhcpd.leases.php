@@ -23,6 +23,9 @@ foreach($contents as $line) {
       else if(preg_match("/^server-duid/", $line)) {
         // ignore
       }
+      else if(preg_match("/^authoring-byte-order/", $line)) {
+        // ignore
+      }
       else {
         print "Failed parsing '$line'\n";
       }

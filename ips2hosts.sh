@@ -33,14 +33,19 @@ for i in `echo 'select concat(name, ";", ifnull(mac, ""), ";", ip, ";", ifnull(r
   echo >> $TARGET
   echo "$name     IN      A       $ip" >> $TARGET2
 done
+echo "filename \"netboot.xyz.kpxe\";" >> $TARGET
+echo "next-server 10.68.69.24;" >> $TARGET
 for i in `seq 255`; do
   echo "_$i     IN      A       $network.$i" >> $TARGET2
+  echo "@$i     IN      A       $network.$i" >> $TARGET2
+  echo "ip$i     IN      A       $network.$i" >> $TARGET2
 done
 service bind9 restart
 service isc-dhcp-server restart
 echo "dhcp reloaded !"
 sleep 1
-service isc-dhcp-server status > /dev/null || echo dhcp down
-service bind9 status > /dev/null || echo bind down
-service isc-dhcp-server status
-service bind9 status
+killall dhcpd
+killall named
+sleep 1
+dhcpd
+named
