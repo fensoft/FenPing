@@ -12,7 +12,7 @@ if [ "$1" -a "$1" != "DEBUG" ]; then
 fi
 file1=`mktemp`
 file2=`mktemp`
-nmap $network.$FROM-$TO -sP -v -oG $file1 -T3 -e $interface --max-retries 10 > /dev/null 2> /dev/null
+nmap $network.$FROM-$TO -n -sn	 -v -oG $file1 -T3 -e $interface --max-retries 10 > /dev/null 2> /dev/null
 cat $file1 | grep "Host: " | sed "s#Host: ##" | sed "s#[ ]*Status: ##" | sed "s# ([)][\t]*#;#" > $file2
 rm -f $file1
 for i in `seq $FROM $TO`; do
@@ -38,7 +38,7 @@ for i in `seq $FROM $TO`; do
     echo "INSERT INTO ping (ip,mac,status) VALUES ('$network.$i', '${arp}', '${status}') on duplicate key update mac=values(mac), status=values(status)" | mysql -h${db_host} -u${db_user} -p${db_pass} ${db_name} 2> /dev/null
     echo "CALL update_status('$network.$i', '${arp}', '${status}')" | mysql -h${db_host} -u${db_user} -p${db_pass} ${db_name} 2> /dev/null
   fi
-  if [ "$1" != "" ]; then
+  if [ "$1" != "" -o "$DEBUG" != "" ]; then
     echo "$network.$i $status"
   fi
 done

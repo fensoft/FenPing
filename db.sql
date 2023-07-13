@@ -47,7 +47,9 @@ CREATE TABLE `stats` (
   `date_end` datetime DEFAULT CURRENT_TIMESTAMP,
   `nb_scan` int(11) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
-  KEY `ip` (`ip`)
+  KEY `ip` (`ip`),
+  KEY `stats_date_begin` (`date_begin`) USING BTREE,
+  KEY `stats_date_end` (`date_end`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 CREATE TABLE `stats_old` (

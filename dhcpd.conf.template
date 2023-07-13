@@ -1,0 +1,13 @@
+log-facility local7;
+default-lease-time 600;
+max-lease-time 7200;
+option subnet-mask 255.255.255.0;
+option broadcast-address ENV_NETWORK.255;
+option routers ENV_DHCP_DEFAULT_ROUTER;
+option domain-name-servers ENV_ME;
+option domain-name "lan";
+
+subnet ENV_NETWORK.0 netmask 255.255.255.0 {
+  range ENV_NETWORK.ENV_DHCP_DYNAMIC_BEGIN ENV_NETWORK.ENV_DHCP_DYNAMIC_END;
+}
+include "/etc/dhcp/dhcpd.hosts";

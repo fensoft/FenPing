@@ -1,3 +1,8 @@
 data/
 fenping.sql
 dump.gz
+*.tgz
+nmap
+README.md
+vendor
+templates_c

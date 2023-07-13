@@ -197,7 +197,7 @@ function temps($val) {
 }
 
 function get_history($ip, $regroup = 10) {
-  $stmt = getDb()->prepare("select *, UNIX_TIMESTAMP(date_begin) as `begin`, UNIX_TIMESTAMP(date_end) as `end`, UNIX_TIMESTAMP(date_end)-UNIX_TIMESTAMP(date_begin) as duration from stats where ip=:ip order by id asc limit 1000");
+  $stmt = getDb()->prepare("select *, UNIX_TIMESTAMP(date_begin) as `begin`, UNIX_TIMESTAMP(date_end) as `end`, UNIX_TIMESTAMP(date_end)-UNIX_TIMESTAMP(date_begin) as duration from stats where ip=:ip and date_end > date_sub(now(), interval 7 day) order by id asc");
   $stmt->execute(array("ip" => $ip));
   $before = $stmt->fetchAll(PDO::FETCH_ASSOC);
   $after = array();

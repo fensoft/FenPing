@@ -9,3 +9,10 @@ data
 adminer.php
 fenping.sql
 dump.gz
+*.orig
+debug_dhcp.sh
+gen.sh
+inspect.*
+.env
+q.sh
+*.tgz
