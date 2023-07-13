@@ -8,7 +8,7 @@ RUN cd /default; tar czf ../default.tgz *
 
 FROM ubuntu:bionic
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y cron nano apache2 mariadb-server libapache2-mod-php php-mysql isc-dhcp-server bind9 libxml-xpath-perl nmap iputils-ping php-curl sudo iptables composer curl && apt clean; rm /var/www/html/index.html
+RUN apt-get update && apt-get install -y cron nano apache2 mariadb-server libapache2-mod-php php-mysql isc-dhcp-server bind9 libxml-xpath-perl nmap iputils-ping php-curl sudo iptables composer curl unzip && apt clean; rm /var/www/html/index.html
 COPY --from=builder /default.tgz /var/lib/mysql.tgz
 ADD res/xsl /var/www/html/res/xsl/
 ADD res/png /var/www/html/res/png/

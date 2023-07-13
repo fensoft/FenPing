@@ -1,7 +1,7 @@
 {
     "require": {
-        "smarty/smarty": "^3.1",
-        "bramus/router": "~1.4",
-        "firebase/php-jwt": "^5.0"
+        "smarty/smarty": "^4",
+        "bramus/router": "^1.6",
+        "firebase/php-jwt": "^6"
     }
 }
