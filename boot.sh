@@ -25,4 +25,9 @@ echo 'OPTIONS="-4"'       >> /etc/default/isc-dhcp-server
 cat config.php.template | sed "s#\$db_pass = ''#\$db_pass = 'root'#" | sed "s#\$network = .*#\$network = '$NETWORK';#" | sed "s#\$myself = .*#\$myself = '$ME';#" > config.php
 ./ips2hosts.sh
 cron
-apachectl -D FOREGROUND
+apachectl start
+service syslog-ng start
+while `true`; do
+  tail -n 1000 -f /var/log/syslog
+  sleep 5
+done

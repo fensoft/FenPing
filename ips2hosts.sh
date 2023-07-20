@@ -1,4 +1,5 @@
 #!/bin/bash
+env > /tmp/env
 ME=`cd $(dirname $0); pwd`
 config=`mktemp`
 cat $ME/config.php | grep -v php | sed "s#\\\$##" | sed -e "s#[ ]*=[ ]*'#=#" | sed "s#';##" > $config
@@ -41,5 +42,7 @@ for i in `seq 255`; do
   echo "ip$i     IN      A       $network.$i" >> $TARGET2
 done
 service bind9 restart
-service isc-dhcp-server restart
+service isc-dhcp-server stop
+rm /var/run/dhcpd.pid
+service isc-dhcp-server start
 echo "dhcp reloaded !"
