@@ -9,4 +9,5 @@ html {
   background-color: white;
 }
 </style>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
 <title>Ping Fensoft</title>
