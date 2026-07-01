@@ -7,7 +7,9 @@ cat $ME/config.php | grep -v php | sed "s#\\\$##" | sed -e "s#[ ]*=[ ]*'#=#" | s
 IFS=$'\n'
 TARGET=/etc/dhcp/dhcpd.hosts
 TARGET2=/etc/bind/lan
+mkdir -p `dirname $TARGET` `dirname $TARGET2`
 rm -f $TARGET $TARGET2
+touch $TARGET
 echo '$TTL    3600' >> $TARGET2
 echo '@       IN      SOA     lan. lan. ( 2012033101  3600 1800 604800 43200 )' >> $TARGET2
 echo '        IN      NS      lan.' >> $TARGET2
@@ -43,6 +45,6 @@ for i in `seq 255`; do
 done
 service bind9 restart
 service isc-dhcp-server stop
-rm /var/run/dhcpd.pid
+rm -f /var/run/dhcpd.pid
 service isc-dhcp-server start
 echo "dhcp reloaded !"

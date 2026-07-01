@@ -7,26 +7,31 @@ require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/config.php';
 require __DIR__ . '/functions.php';
 
-$smarty = new Smarty();
-
 function smarty_modifier_temps($in) { return temps(intval($in)); }
+
+$smarty = new Smarty();
+$smarty->registerPlugin("modifier", "strtolower", function($value) {
+  return strtolower((string)$value);
+});
+$smarty->registerPlugin("modifier", "temps", "smarty_modifier_temps");
 $smarty->assign("network", $network);
 
 function testPassword() {
   global $smarty;
   global $password;
-  if ($_REQUEST["p"] != $password) {
+  if (($_REQUEST["p"] ?? "") != $password) {
     $smarty->display("templates/wrongpassword.tpl");
     die();
   }
 }
 
 if (isset($_REQUEST["addcat"])) {
+  $smarty->assign("name", "");
   $smarty->display("templates/addcat.tpl");
   die();
 } else if (isset($_REQUEST["addcat2"])) {
   testPassword();
-  addCategory($_REQUEST["ip"], $_REQUEST["name"]);
+  addCategory($_REQUEST["ip"] ?? "", $_REQUEST["name"] ?? "");
   $smarty->display("templates/catadded.tpl");
   die();
 } else if (isset($_REQUEST["delcat"])) {
@@ -49,16 +54,17 @@ if (isset($_REQUEST["addcat"])) {
     echo("not found");
     die();
   }
+  $ip = $data["ip"] ?? "";
   $smarty->assign("edit", $_REQUEST["edit"]);
-  $smarty->assign("ip", $data["ip"]);
-  $smarty->assign("mac", $data["mac"]);
-  $smarty->assign("name", $data["name"]);
-  $smarty->assign("important", $data["important"]);
-  $smarty->assign("repeater", $data["repeater"]);
-  $smarty->assign("router", $data["router"]);
-  $smarty->assign("dns", $data["dns"]);
-  $smarty->assign("web", $data["web"]);
-  $smarty->assign("num", str_replace($network . ".", "", $data["ip"]));
+  $smarty->assign("ip", $ip);
+  $smarty->assign("mac", $data["mac"] ?? "");
+  $smarty->assign("name", $data["name"] ?? "");
+  $smarty->assign("important", $data["important"] ?? "");
+  $smarty->assign("repeater", $data["repeater"] ?? "");
+  $smarty->assign("router", $data["router"] ?? "");
+  $smarty->assign("dns", $data["dns"] ?? "");
+  $smarty->assign("web", $data["web"] ?? "");
+  $smarty->assign("num", str_replace($network . ".", "", $ip));
   $smarty->display("templates/edit.tpl");
   die();
 } else if (isset($_REQUEST["edit2"])) {
