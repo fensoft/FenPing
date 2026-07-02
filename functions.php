@@ -58,7 +58,8 @@ function normalizeInventoryRow($data, $ip = null) {
     "status" => "",
     "date" => null,
     "important" => 0,
-    "web" => null
+    "web" => null,
+    "repeater" => null
   );
   $row = array_merge($defaults, $data);
   $row["name"] = $row["name"] === null ? "" : $row["name"];
@@ -84,13 +85,13 @@ function getInventory() {
 
   $ips = array();
   #cas normal
-  $stmt = $db->prepare("select id, name, i.ip, i.mac, status, date, i.important, i.web from ips i left outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where i.ip!='' and i.ip=p.ip and (p.mac=i.mac or p.mac='')");
+  $stmt = $db->prepare("select id, name, i.ip, i.mac, status, date, i.important, i.web, i.repeater from ips i left outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where i.ip!='' and i.ip=p.ip and (p.mac=i.mac or p.mac='')");
   $stmt->execute();
   while ($data = $stmt->fetch(PDO::FETCH_ASSOC))
     if (($data["ip"] ?? "") != "")
       $ips[$data["ip"]] = $data;
   #derri�re un autre routeur
-  $stmt = $db->prepare("select id, name, i.ip, p.mac, i.mac as mac_i, status, date, i.important, i.web from ips i left outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where i.ip!='' and p.mac!='' and i.ip=p.ip and p.mac!=i.mac");
+  $stmt = $db->prepare("select id, name, i.ip, p.mac, i.mac as mac_i, status, date, i.important, i.web, i.repeater from ips i left outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where i.ip!='' and p.mac!='' and i.ip=p.ip and p.mac!=i.mac");
   $stmt->execute();
   while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $mac = (string)($data["mac"] ?? "");
@@ -101,14 +102,14 @@ function getInventory() {
       $ips[$data["ip"]] = $data;
   }
   #mauvaise ip
-  $stmt = $db->prepare("select id, name, p.ip, i.ip as ip_should, p.mac, status, date, i.important, i.web from ips i left outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where p.ip != i.ip and status = 'Up' and repeater is null");
+  $stmt = $db->prepare("select id, name, p.ip, i.ip as ip_should, p.mac, status, date, i.important, i.web, i.repeater from ips i left outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where p.ip != i.ip and status = 'Up' and repeater is null");
   $stmt->execute();
   while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
     if (($data["ip"] ?? "") != "")
       $ips[$data["ip"]] = $data;
   }
   #en db mais ne pingent pas
-  $stmt = $db->prepare("select id, name, p.ip, p.mac, status, date, i.important, i.web from ips i right outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where p.status != 'Down' and id is null");
+  $stmt = $db->prepare("select id, name, p.ip, p.mac, status, date, i.important, i.web, i.repeater from ips i right outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where p.status != 'Down' and id is null");
   $stmt->execute();
   while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
     if (($data["ip"] ?? "") != "")

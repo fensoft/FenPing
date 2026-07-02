@@ -1,92 +1,217 @@
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
+declare(strict_types=1);
+
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
 require __DIR__ . '/config.php';
 require __DIR__ . '/functions.php';
 
-use \Firebase\JWT\JWT;
+set_exception_handler(function (Throwable $e): void {
+  jsonError(500, 'server error');
+});
 
-function checkAdmin() {
-  global $secret;
-  if (isset($_SERVER["HTTP_AUTHORIZATION"])) {
-    try {
-      $res = JWT::decode($_SERVER["HTTP_AUTHORIZATION"], $secret, array('HS256'));
-      if ($res->admin == "1")
-        return;
-    } catch(Exception $e){
-    }
-  }
-  //header('HTTP/1.0 403 Forbidden');
-  //die();
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$segments = routeSegments();
+
+if (count($segments) === 0) {
+  jsonError(404, 'not found');
 }
 
-function route($type, $name, $function) {
-  if ($_SERVER["REQUEST_METHOD"] == $type && $_REQUEST["method"] == $name) {
-    header('Content-Type: application/json');
-    echo json_encode(call_user_func($function));
-  }
+if ($method === 'GET' && $segments === array('inventory')) {
+  jsonResponse(array(
+    'network' => $GLOBALS['network'] ?? '',
+    'hosts' => getInventory()
+  ));
 }
 
-route('GET', 'ips', function() {
-  return getInventory();
-});
+if ($method === 'POST' && $segments === array('ping', 'refresh')) {
+  refreshPing();
+}
 
-route('GET', 'hash', function() {
-  return password_hash($_REQUEST['hash'], PASSWORD_DEFAULT);
-});
+if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'history') {
+  $ip = validateIp($segments[1]);
+  jsonResponse(get_history($ip));
+}
 
-route('POST', 'login', function() {
-  global $secret;
-  $stmt = getDb()->prepare('select * from users where login=:login');
-  $stmt->execute(array("login" => $_REQUEST['user']));
-  $data = $stmt->fetch();
-  if ($data && password_verify($_REQUEST['pass'], $data['pass']))
-    return JWT::encode(array('admin' => true, 'user' => $_REQUEST['user']), $secret, 'HS256');
-});
+if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'hosts') {
+  $id = validateId($segments[1]);
+  $host = getId($id);
+  if ($host === false)
+    jsonError(404, 'host not found');
+  jsonResponse($host);
+}
 
-route('POST', 'restore', function() {
-  checkAdmin();
-  $stmt = getDb()->prepare(file_get_contents('dump.sql'));
-  $stmt->execute();
-  return "ok";
-});
+if ($method === 'POST' && $segments === array('hosts')) {
+  $body = requestBody();
+  requirePassword($body);
+  $id = create(normalizeHostIp($body['ip'] ?? null), $body['mac'] ?? '');
+  jsonResponse(array('id' => (int)$id));
+}
 
-route('DELETE', 'ip', function() {
-  checkAdmin();
-  del($_REQUEST["id"]);
-  return "ok";
-});
+if ($method === 'PUT' && count($segments) === 2 && $segments[0] === 'hosts') {
+  $id = validateId($segments[1]);
+  $body = requestBody();
+  requirePassword($body);
 
-route('POST', 'category', function() {
-  checkAdmin();
-  addCategory($_REQUEST["ip"], $_REQUEST["name"]);
-  return "ok";
-});
+  edit(
+    $id,
+    normalizeHostIp($body['ip'] ?? null),
+    $body['mac'] ?? '',
+    $body['name'] ?? '',
+    toDbFlag($body['repeater'] ?? null),
+    toDbFlag($body['important'] ?? null),
+    toDbFlag($body['web'] ?? null),
+    normalizeEmpty($body['router'] ?? null),
+    normalizeEmpty($body['dns'] ?? null)
+  );
 
-route('DELETE', 'category', function() {
-  checkAdmin();
-  delCategory($_REQUEST["ip"]);
-  return "ok";
-});
+  $log = reloadDhcpHosts();
+  jsonResponse(array('log' => $log));
+}
 
-route('GET', 'ip', function() {
-  checkAdmin();
-  return getIp($_REQUEST["ip"]);
-});
+if ($method === 'DELETE' && count($segments) === 2 && $segments[0] === 'hosts') {
+  $id = validateId($segments[1]);
+  $body = requestBody();
+  requirePassword($body);
+  del($id);
+  jsonResponse(array('deleted' => true));
+}
 
-route('GET', 'mac', function() {
-  checkAdmin();
-  return getMac($_REQUEST["mac"]);
-});
+if ($method === 'POST' && $segments === array('categories')) {
+  $body = requestBody();
+  requirePassword($body);
+  addCategory($body['ip'] ?? '', $body['name'] ?? '');
+  jsonResponse(array('created' => true));
+}
 
-route('POST', 'ip', function() {
-  checkAdmin();
-  create($_REQUEST["ip"], $_REQUEST["mac"]);
-  return "ok";
-});
+if ($method === 'DELETE' && $segments === array('categories')) {
+  $body = requestBody();
+  requirePassword($body);
+  delCategory($body['ip'] ?? '');
+  jsonResponse(array('deleted' => true));
+}
 
-route('PUT', 'ip', function() {
-  checkAdmin();
-  edit($_REQUEST["id"], $_REQUEST["ip"], $_REQUEST["mac"], $_REQUEST["name"], $_REQUEST["repeater"], $_REQUEST["important"]);
-  return "ok";
-});
+if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'scans') {
+  streamScan($segments[1]);
+}
+
+jsonError(404, 'not found');
+
+function routeSegments(): array {
+  $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+  $path = rawurldecode($path === false ? '/' : $path);
+
+  if (str_starts_with($path, '/api.php')) {
+    $path = substr($path, strlen('/api.php'));
+  } elseif (str_starts_with($path, '/api')) {
+    $path = substr($path, strlen('/api'));
+  }
+
+  $path = trim($path, '/');
+  if ($path === '')
+    return array();
+
+  return array_values(array_filter(explode('/', $path), fn($part) => $part !== ''));
+}
+
+function requestBody(): array {
+  $raw = file_get_contents('php://input');
+  if ($raw === false || trim($raw) === '')
+    return $_POST;
+
+  $data = json_decode($raw, true);
+  if (!is_array($data))
+    jsonError(400, 'invalid json');
+
+  return $data;
+}
+
+function requirePassword(array $body): void {
+  $expected = (string)($GLOBALS['password'] ?? '');
+  $given = (string)($body['password'] ?? '');
+  if ($given !== $expected)
+    jsonError(403, 'wrong password');
+}
+
+function normalizeHostIp($ip): ?string {
+  $ip = trim((string)$ip);
+  if ($ip === '')
+    return null;
+  if (strpos($ip, '.') === false)
+    $ip = ($GLOBALS['network'] ?? '') . '.' . $ip;
+  if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
+    jsonError(400, 'invalid ip');
+  return $ip;
+}
+
+function normalizeEmpty($value): ?string {
+  $value = trim((string)$value);
+  return $value === '' ? null : $value;
+}
+
+function toDbFlag($value): ?string {
+  if ($value === true || $value === 1 || $value === '1')
+    return '1';
+  return null;
+}
+
+function validateId(string $value): int {
+  if (!ctype_digit($value))
+    jsonError(400, 'invalid id');
+  return (int)$value;
+}
+
+function validateIp(string $value): string {
+  if (filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
+    jsonError(400, 'invalid ip');
+  return $value;
+}
+
+function refreshPing(): void {
+  $command = 'flock -n /tmp/ping.lck -c ' . escapeshellarg('/usr/bin/sudo /usr/bin/php ' . __DIR__ . '/cli.php ping');
+  $output = array();
+  $code = 0;
+  exec($command . ' 2>&1', $output, $code);
+
+  if ($code !== 0)
+    jsonError(409, trim(implode("\n", $output)) ?: 'scan already running');
+
+  jsonResponse(array('status' => 'complete'));
+}
+
+function reloadDhcpHosts(): string {
+  $command = '/usr/bin/sudo ' . escapeshellarg(__DIR__ . '/ips2hosts.sh');
+  $output = array();
+  $code = 0;
+  exec($command . ' 2>&1', $output, $code);
+  if ($code !== 0)
+    jsonError(500, trim(implode("\n", $output)) ?: 'dhcp reload failed');
+  return implode("\n", $output);
+}
+
+function streamScan(string $file): void {
+  if (!preg_match('/^(\d{1,3}(?:\.\d{1,3}){3})\.xml$/', $file, $matches))
+    jsonError(404, 'scan not found');
+
+  $ip = validateIp($matches[1]);
+  $path = __DIR__ . '/nmap/' . $ip . '.xml';
+  if (!is_file($path) || !is_readable($path))
+    jsonError(404, 'scan not found');
+
+  header('Content-Type: application/xml; charset=utf-8');
+  readfile($path);
+  exit;
+}
+
+function jsonResponse($data, int $status = 200): void {
+  http_response_code($status);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode($data);
+  exit;
+}
+
+function jsonError(int $status, string $message): void {
+  jsonResponse(array('error' => $message), $status);
+}

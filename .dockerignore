@@ -6,3 +6,5 @@ nmap
 README.md
 vendor
 templates_c
+node_modules
+dist
