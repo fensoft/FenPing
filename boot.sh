@@ -32,9 +32,8 @@ done
 MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot"
 $MYSQL_ROOT -e "SELECT 1" > /dev/null 2>&1 || MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot"
 $MYSQL_ROOT -e "CREATE DATABASE IF NOT EXISTS ping; ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; FLUSH PRIVILEGES;"
-if ! $MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot ping -e "SHOW TABLES LIKE 'ips'" | grep -q ips; then
-  $MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot ping < db.sql
-fi
+MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot"
+$MYSQL_ROOT ping < db.sql
 ME=${IP:-`ip -4 a show dev $IFACE | awk '/inet/ {print $2}' | head -n1 | sed "s#/.*##"`}
 cp dhcpd.conf.template /etc/dhcp/dhcpd.conf
 for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sort -r -n -s | cut -d" " -f2-` ME; do

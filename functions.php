@@ -156,6 +156,9 @@ function getInventory() {
   $stats = get_stats();
   foreach ($sorted_ips as $key => $data) {
     $ip = $data["ip"];
+    $mac = trim((string)$data["mac"]);
+    if ($mac == "")
+      continue;
     $stmt2 = $db->prepare("
       select ip_begin, ip_begin_full, type from (
         select
@@ -177,9 +180,7 @@ function getInventory() {
       $data["category_ip"] = $data2["ip_begin"];
     }
     $data["vendor"] = "";
-    $mac = (string)$data["mac"];
-    if ($mac != "")
-      $data["vendor"] = getVendor($mac);
+    $data["vendor"] = getVendor($mac);
     if ($ip != "" && isset($stats[$ip])) {
       $data["stats"] = $stats[$ip];
       $data["stats2"] = count(get_history($ip));

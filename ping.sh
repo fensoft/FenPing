@@ -15,9 +15,23 @@ file2=`mktemp`
 nmap $network.$FROM-$TO -n -sn	 -v -oG $file1 -T3 -e $interface --max-retries 10 > /dev/null 2> /dev/null
 cat $file1 | grep "Host: " | sed "s#Host: ##" | sed "s#[ ]*Status: ##" | sed "s# ([)][\t]*#;#" > $file2
 rm -f $file1
+local_mac=""
+if [ "$interface" != "" -a -r "/sys/class/net/$interface/address" ]; then
+  local_mac=`cat /sys/class/net/$interface/address`
+fi
 for i in `seq $FROM $TO`; do
-  status=`cat $file2 | grep "$network.$i;" | sed "s#$network.$i;##"`
-  arp=`arp -a $network.$i | grep -v "no match found" | grep -v "incomplete" | sed "s#.* at ##" | sed "s# [[]ether.*##"`
+  target=$network.$i
+  arp=""
+  if [ "$target" == "$IP" -o "$target" == "$myself" ]; then
+    status=Up
+    arp=$local_mac
+  else
+    status=`cat $file2 | grep "$network.$i;" | sed "s#$network.$i;##"`
+    arp=`arp -a $network.$i | grep -v "no match found" | grep -v "incomplete" | sed "s#.* at ##" | sed "s# [[]ether.*##"`
+  fi
+  if [ "$status" == "" ]; then
+    status=Down
+  fi
   if [ "$status" == "Down" ]; then
     if [ "$arp" != "" ]; then
       status=arp
