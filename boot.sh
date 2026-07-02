@@ -1,5 +1,6 @@
 #!/bin/bash
 echo -e "\n\n-- booting fenping ... ---"
+grep -q "[[:space:]]$(hostname)\\([[:space:]]\\|$\\)" /etc/hosts || echo "127.0.1.1 $(hostname)" >> /etc/hosts
 if [ "$FENPING_NETWORK_MODE" = "host" ]; then
   IFACE=${HOST_INTERFACE:-`ip route show default 2>/dev/null | awk '{ print $5; exit }'`}
   IFACE=${IFACE:-eth0}

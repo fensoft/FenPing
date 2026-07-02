@@ -25,6 +25,10 @@ function testPassword() {
   }
 }
 
+function refreshPingInBackground() {
+  exec('flock -n /tmp/ping.lck -c "/usr/bin/sudo /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' ping" > /dev/null 2>&1 &');
+}
+
 if (isset($_REQUEST["addcat"])) {
   $smarty->assign("name", "");
   $smarty->display("templates/addcat.tpl");
@@ -95,6 +99,7 @@ if (isset($_REQUEST["addcat"])) {
   $smarty->display("templates/history.tpl");
   die();
 }
+refreshPingInBackground();
 $res = getInventory();
 $smarty->assign("results", $res);
 $smarty->display("templates/header.tpl");
