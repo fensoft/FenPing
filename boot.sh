@@ -36,10 +36,11 @@ $MYSQL_ROOT -e "CREATE DATABASE IF NOT EXISTS ping; ALTER USER 'root'@'localhost
 MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot"
 $MYSQL_ROOT ping < db.sql
 ME=${IP:-`ip -4 a show dev $IFACE | awk '/inet/ {print $2}' | head -n1 | sed "s#/.*##"`}
-cp dhcpd.conf.template /etc/dhcp/dhcpd.conf
-for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sort -r -n -s | cut -d" " -f2-` ME; do
+mkdir -p /etc/dnsmasq.d
+cp dnsmasq.conf.template /etc/dnsmasq.d/fenping.conf
+for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sort -r -n -s | cut -d" " -f2-` IFACE ME; do
   eval "CURRENT=\${$i}"
-  sed -i.bak "s#ENV_$i#$CURRENT#g" /etc/dhcp/dhcpd.conf
+  sed -i.bak "s#ENV_$i#$CURRENT#g" /etc/dnsmasq.d/fenping.conf
 done
 if [ "$FENPING_NETWORK_MODE" != "host" ]; then
   IFS=","
@@ -47,16 +48,12 @@ if [ "$FENPING_NETWORK_MODE" != "host" ]; then
     ip address add $i dev $IFACE
   done
 fi
-echo "INTERFACESv4=\"$IFACE\"" > /etc/default/isc-dhcp-server
-echo 'OPTIONS="-4"'       >> /etc/default/isc-dhcp-server
-mkdir -p /etc/dhcp
-touch /etc/dhcp/dhcpd.hosts
-mkdir -p /var/lib/dhcp
-touch /var/lib/dhcp/dhcpd.leases
+touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts
+mkdir -p /var/lib/misc
+touch /var/lib/misc/dnsmasq.leases
 cat config.php.template | sed "s#\$db_pass = ''#\$db_pass = 'root'#" | sed "s#\$network = .*#\$network = '$NETWORK';#" | sed "s#\$interface = .*#\$interface = '$IFACE';#" | sed "s#\$myself = .*#\$myself = '$ME';#" > config.php
-./ips2hosts.sh
 service syslog-ng start
-service isc-dhcp-server start || echo "isc-dhcp-server failed to start; check /var/log/syslog"
+php /var/www/html/cli.php hosts
 cron
 apachectl start
 while `true`; do

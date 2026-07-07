@@ -2,13 +2,19 @@
 require __DIR__ . '/config.php';
 require __DIR__ . '/database.php';
 require __DIR__ . '/ping.php';
+require __DIR__ . '/hosts.php';
 
 $command = $argv[1] ?? '';
 if ($command === 'ping') {
   exit(runPingCommand(array_slice($argv, 2)));
 }
 
-fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]\n");
+if ($command === 'hosts') {
+  exit(runHostsCommand());
+}
+
+fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
+fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
 exit(2);
 
 function runPingCommand($args) {

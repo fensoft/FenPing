@@ -182,7 +182,7 @@ function refreshPing(): void {
 }
 
 function reloadDhcpHosts(): string {
-  $command = '/usr/bin/sudo ' . escapeshellarg(__DIR__ . '/ips2hosts.sh');
+  $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' hosts';
   $output = array();
   $code = 0;
   exec($command . ' 2>&1', $output, $code);
