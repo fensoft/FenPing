@@ -73,6 +73,7 @@ function getInventory() {
   global $myself;
 
   $db = getDb();
+  $latestScans = getLatestScans();
 
   $repeater = array();
   $stmt = $db->prepare("select mac, ip, name from ips where repeater=1");
@@ -189,9 +190,34 @@ function getInventory() {
     if ($ip != "" && file_exists(__DIR__ . "/nmap/" . $ip . ".xml")) {
       $data["xml"] = $ip;
     }
+    if ($ip != "" && isset($latestScans[$ip])) {
+      $data["scan"] = $latestScans[$ip];
+    }
     array_push($res, $data);
   }
   return $res;
+}
+
+function getLatestScans() {
+  $stmt = getDb()->prepare("
+    SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.xml, s.error
+    FROM scans s
+    INNER JOIN (
+      SELECT ip, MAX(id) id
+      FROM scans
+      GROUP BY ip
+    ) latest ON latest.id=s.id
+  ");
+  $stmt->execute();
+
+  $scans = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $row["id"] = (int)$row["id"];
+    $row["duration"] = $row["duration"] === null ? null : (int)$row["duration"];
+    $row["ports_count"] = (int)$row["ports_count"];
+    $scans[$row["ip"]] = $row;
+  }
+  return $scans;
 }
 
 function addCategory($ip, $name) {

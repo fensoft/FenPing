@@ -37,6 +37,36 @@
       <div v-if="notice" class="alert alert-success mb-3" role="alert">{{ notice }}</div>
 
       <div class="table-wrap">
+        <div class="table-toolbar">
+          <div class="input-icon filter-search">
+            <span class="input-icon-addon">
+              <i class="ti ti-search"></i>
+            </span>
+            <input v-model="filters.search" class="form-control form-control-sm" type="search" placeholder="Search" />
+          </div>
+          <label class="form-check form-switch toolbar-switch">
+            <input v-model="filters.onlyDown" class="form-check-input" type="checkbox" />
+            <span class="form-check-label">Down</span>
+          </label>
+          <label class="form-check form-switch toolbar-switch">
+            <input v-model="filters.onlyImportant" class="form-check-input" type="checkbox" />
+            <span class="form-check-label">Important</span>
+          </label>
+          <label class="form-check form-switch toolbar-switch">
+            <input v-model="filters.hideUnknown" class="form-check-input" type="checkbox" />
+            <span class="form-check-label">Hide new</span>
+          </label>
+          <button
+            v-if="hasActiveFilters"
+            class="btn btn-outline-secondary btn-sm icon-btn"
+            type="button"
+            title="Clear filters"
+            @click="resetFilters"
+          >
+            <i class="ti ti-filter-x"></i>
+          </button>
+          <div class="text-secondary small filter-count">{{ visibleHosts.length }}/{{ hosts.length }}</div>
+        </div>
         <table class="table table-sm inventory-table">
           <thead>
             <tr>
@@ -61,6 +91,9 @@
           <tbody>
             <tr v-if="inventoryLoading && tableRows.length === 0">
               <td class="text-secondary text-center py-4" colspan="7">Loading</td>
+            </tr>
+            <tr v-else-if="!inventoryLoading && tableRows.length === 0">
+              <td class="text-secondary text-center py-4" colspan="7">No hosts</td>
             </tr>
             <tr v-for="row in tableRows" :key="row.key" :class="rowClass(row)">
               <template v-if="row.type === 'category'">
@@ -144,14 +177,14 @@
                 <td class="text-end action-cell">
                   <button
                     v-if="row.host.ip"
-                    class="btn btn-outline-secondary btn-sm icon-btn"
-                    :class="{ 'is-spinning': isHostScanning(row.host) }"
+                    class="btn btn-sm icon-btn"
+                    :class="scanActionClass(row.host)"
                     type="button"
-                    :title="isHostScanning(row.host) ? 'Scanning' : 'Quick scan'"
+                    :title="scanButtonTitle(row.host)"
                     :disabled="isHostScanning(row.host)"
                     @click="quickScanHost(row.host)"
                   >
-                    <i :class="isHostScanning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i>
+                    <i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i>
                   </button>
                   <button
                     v-if="row.host.id"
@@ -401,12 +434,24 @@
                     <strong>{{ modal.scan.status || '-' }}</strong>
                   </div>
                   <div class="scan-fact">
-                    <span>Ports</span>
-                    <strong>{{ modal.scan.ports.length }}</strong>
+                    <span>State</span>
+                    <strong>{{ modal.scan.metadata?.state || '-' }}</strong>
                   </div>
                   <div class="scan-fact">
-                    <span>Hostnames</span>
-                    <strong>{{ modal.scan.hostnames.length }}</strong>
+                    <span>Mode</span>
+                    <strong>{{ modal.scan.metadata?.mode || '-' }}</strong>
+                  </div>
+                  <div class="scan-fact">
+                    <span>Ports</span>
+                    <strong>{{ modal.scan.metadata?.ports_count ?? modal.scan.ports.length }}</strong>
+                  </div>
+                  <div class="scan-fact">
+                    <span>Duration</span>
+                    <strong>{{ formatScanDuration(modal.scan.metadata?.duration ?? modal.scan.duration) }}</strong>
+                  </div>
+                  <div class="scan-fact">
+                    <span>Last</span>
+                    <strong>{{ formatScanDate(modal.scan.metadata?.date_end || modal.scan.metadata?.date_begin || modal.scan.started) }}</strong>
                   </div>
                 </div>
 
@@ -490,7 +535,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const network = ref('');
 const hosts = ref([]);
@@ -505,7 +550,17 @@ const modal = ref(null);
 const modalError = ref('');
 const saving = ref(false);
 const darkMode = ref(readCookie('fenping_theme') === 'dark');
-const collapsedCategories = ref(new Set());
+const filterDefaults = {
+  search: '',
+  onlyDown: false,
+  onlyImportant: false,
+  hideUnknown: false
+};
+const filters = ref({
+  ...filterDefaults,
+  ...readJsonStorage('fenping_filters', {})
+});
+const collapsedCategories = ref(new Set(readJsonStorage('fenping_collapsed_categories', [])));
 
 const refreshLabel = computed(() => {
   if (scanning.value && refreshQueued.value) return 'Queued';
@@ -532,19 +587,51 @@ const modalDialogClass = computed(() => {
   return modal.value?.type === 'scan' ? 'modal-xl scan-modal-dialog' : 'modal-lg';
 });
 
+const hasActiveFilters = computed(() => {
+  return filters.value.search.trim() !== ''
+    || filters.value.onlyDown
+    || filters.value.onlyImportant
+    || filters.value.hideUnknown;
+});
+
+const categorizedHosts = computed(() => {
+  const rows = [];
+  let category = null;
+
+  for (const host of hosts.value) {
+    if (host.category) {
+      category = {
+        key: categoryKey(host),
+        name: host.category,
+        ip: host.category_ip
+      };
+    }
+    rows.push({
+      ...host,
+      categoryContext: category
+    });
+  }
+
+  return rows;
+});
+
+const visibleHosts = computed(() => categorizedHosts.value.filter(hostMatchesFilters));
+
 const tableRows = computed(() => {
   const rows = [];
   let currentCategoryKey = '';
 
-  for (const host of hosts.value) {
-    if (host.category) {
-      currentCategoryKey = categoryKey(host);
+  for (const host of visibleHosts.value) {
+    const category = host.categoryContext;
+
+    if (category && category.key !== currentCategoryKey) {
+      currentCategoryKey = category.key;
       rows.push({
         type: 'category',
         key: currentCategoryKey,
         categoryKey: currentCategoryKey,
-        name: host.category,
-        categoryIp: host.category_ip,
+        name: category.name,
+        categoryIp: category.ip,
         collapsed: collapsedCategories.value.has(currentCategoryKey)
       });
     }
@@ -560,6 +647,14 @@ const tableRows = computed(() => {
   }
 
   return rows;
+});
+
+watch(filters, (value) => {
+  writeJsonStorage('fenping_filters', value);
+}, { deep: true });
+
+watch(collapsedCategories, (value) => {
+  writeJsonStorage('fenping_collapsed_categories', Array.from(value));
 });
 
 function categoryKey(host) {
@@ -614,6 +709,53 @@ function readCookie(name) {
 function writeCookie(name, value) {
   const maxAge = 60 * 60 * 24 * 365;
   document.cookie = `${name}=${value}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
+}
+
+function readJsonStorage(name, fallback) {
+  try {
+    const value = window.localStorage.getItem(name);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonStorage(name, value) {
+  try {
+    window.localStorage.setItem(name, JSON.stringify(value));
+  } catch {
+    // Ignore storage failures; filters still work for the current page.
+  }
+}
+
+function resetFilters() {
+  filters.value = { ...filterDefaults };
+}
+
+function hostMatchesFilters(host) {
+  if (filters.value.onlyDown && host.status === 'Up')
+    return false;
+
+  if (filters.value.onlyImportant && !toFlag(host.important))
+    return false;
+
+  if (filters.value.hideUnknown && !host.id)
+    return false;
+
+  const query = filters.value.search.trim().toLowerCase();
+  if (query === '')
+    return true;
+
+  return [
+    host.name,
+    host.ip,
+    host.mac,
+    host.vendor,
+    host.status,
+    host.scan?.status,
+    host.scan?.state,
+    host.scan?.mode
+  ].some((value) => String(value || '').toLowerCase().includes(query));
 }
 
 async function apiJson(path, options = {}) {
@@ -705,6 +847,14 @@ function scanUrl(ip) {
   return `/api/scans/${encodeURIComponent(ip)}.xml`;
 }
 
+function scanJsonUrl(ip) {
+  return `/api/scans/${encodeURIComponent(ip)}`;
+}
+
+function scanStatusUrl(ip) {
+  return `/api/scans/${encodeURIComponent(ip)}/status`;
+}
+
 function hostScanKey(host) {
   return String(host?.ip || host?.id || host?.mac || '');
 }
@@ -712,6 +862,29 @@ function hostScanKey(host) {
 function isHostScanning(host) {
   const key = hostScanKey(host);
   return key !== '' && scanningHosts.value.has(key);
+}
+
+function isScanRunning(host) {
+  return isHostScanning(host) || host?.scan?.state === 'running';
+}
+
+function scanActionClass(host) {
+  return {
+    'btn-outline-primary': isScanRunning(host),
+    'btn-outline-danger': host?.scan?.state === 'failed',
+    'btn-outline-secondary': !isScanRunning(host) && host?.scan?.state !== 'failed',
+    'is-spinning': isScanRunning(host)
+  };
+}
+
+function scanButtonTitle(host) {
+  if (isScanRunning(host))
+    return 'Scanning';
+  if (host?.scan?.state === 'failed')
+    return `Scan failed${host.scan.error ? `: ${host.scan.error}` : ''}`;
+  if (host?.scan?.date_end)
+    return `Quick scan, last ${host.scan.date_end}`;
+  return 'Quick scan';
 }
 
 function setHostScanning(host, value) {
@@ -730,9 +903,12 @@ async function quickScanHost(host) {
   if (!host?.ip || isHostScanning(host)) return;
   clearMessages();
   setHostScanning(host, true);
+  pollScanStatus(host);
 
   try {
     const result = await apiJson(`/api/scans/${encodeURIComponent(host.ip)}/quick`, { method: 'POST' });
+    if (result?.metadata)
+      updateHostScan(host.ip, result.metadata, result.saved);
     notice.value = result && result.saved ? 'Scan saved' : 'Scan complete';
     await loadInventory();
   } catch (error) {
@@ -740,6 +916,38 @@ async function quickScanHost(host) {
   } finally {
     setHostScanning(host, false);
   }
+}
+
+function pollScanStatus(host) {
+  const key = hostScanKey(host);
+  const ip = host.ip;
+
+  window.setTimeout(async function poll() {
+    if (!scanningHosts.value.has(key))
+      return;
+
+    try {
+      const metadata = await apiJson(scanStatusUrl(ip));
+      if (metadata && metadata.state !== 'none')
+        updateHostScan(ip, metadata, false);
+    } catch {
+      // The POST request will surface the useful error; polling can be quiet.
+    }
+
+    window.setTimeout(poll, 1000);
+  }, 300);
+}
+
+function updateHostScan(ip, metadata, saved) {
+  hosts.value = hosts.value.map((host) => {
+    if (host.ip !== ip)
+      return host;
+    return {
+      ...host,
+      scan: metadata,
+      xml: saved || metadata?.xml ? ip : host.xml
+    };
+  });
 }
 
 function rowClass(row) {
@@ -791,6 +999,16 @@ function formatDuration(value) {
   if (seconds < 60 * 60) return `${Math.floor(seconds / 60)} m`;
   if (seconds < 60 * 60 * 24) return `${Math.floor(seconds / (60 * 60))} h`;
   return `${Math.floor(seconds / (60 * 60 * 24))} j`;
+}
+
+function formatScanDuration(value) {
+  if (value === null || value === undefined || value === '')
+    return '-';
+  return formatDuration(value);
+}
+
+function formatScanDate(value) {
+  return value || '-';
 }
 
 function toShortIp(ip) {
@@ -913,11 +1131,10 @@ async function openScan(ip) {
   };
 
   try {
-    const raw = await apiText(scanUrl(ip));
-    const scan = parseScanXml(raw);
+    const scan = await apiJson(scanJsonUrl(ip));
     if (modal.value && modal.value.type === 'scan' && modal.value.ip === ip) {
       modal.value.loading = false;
-      modal.value.raw = raw;
+      modal.value.raw = '';
       modal.value.scan = scan;
     }
   } catch (error) {
@@ -954,63 +1171,6 @@ async function apiText(path, options = {}) {
   return text;
 }
 
-function parseScanXml(raw) {
-  const document = new DOMParser().parseFromString(raw, 'application/xml');
-  if (document.querySelector('parsererror'))
-    throw new Error('Invalid scan XML');
-
-  const nmap = document.querySelector('nmaprun');
-  const host = document.querySelector('host');
-  if (!host)
-    throw new Error('No host data in scan');
-
-  const status = host.querySelector('status');
-  const uptime = host.querySelector('uptime');
-
-  return {
-    args: xmlAttr(nmap, 'args'),
-    started: xmlAttr(nmap, 'startstr'),
-    status: xmlAttr(status, 'state'),
-    uptime: xmlAttr(uptime, 'lastboot'),
-    addresses: Array.from(host.querySelectorAll('address')).map((address) => ({
-      addr: xmlAttr(address, 'addr'),
-      type: xmlAttr(address, 'addrtype'),
-      vendor: xmlAttr(address, 'vendor')
-    })),
-    hostnames: Array.from(host.querySelectorAll('hostnames hostname')).map((hostname) => ({
-      name: xmlAttr(hostname, 'name'),
-      type: xmlAttr(hostname, 'type')
-    })),
-    os: Array.from(host.querySelectorAll('os osmatch')).slice(0, 5).map((os) => ({
-      name: xmlAttr(os, 'name'),
-      accuracy: xmlAttr(os, 'accuracy')
-    })),
-    ports: Array.from(host.querySelectorAll('ports port')).map(parseScanPort)
-  };
-}
-
-function parseScanPort(port) {
-  const state = port.querySelector('state');
-  const service = port.querySelector('service');
-  const details = [
-    xmlAttr(service, 'product'),
-    xmlAttr(service, 'version'),
-    xmlAttr(service, 'extrainfo')
-  ].filter(Boolean).join(' ');
-
-  return {
-    protocol: xmlAttr(port, 'protocol'),
-    port: xmlAttr(port, 'portid'),
-    state: xmlAttr(state, 'state'),
-    service: xmlAttr(service, 'name'),
-    details
-  };
-}
-
-function xmlAttr(node, name) {
-  return node ? node.getAttribute(name) || '' : '';
-}
-
 function scanStateClass(state) {
   if (state === 'open') return 'scan-state scan-state-open';
   if (state === 'closed') return 'scan-state scan-state-closed';
@@ -1018,9 +1178,25 @@ function scanStateClass(state) {
   return 'scan-state';
 }
 
-function toggleScanRaw() {
-  if (modal.value && modal.value.type === 'scan')
-    modal.value.showRaw = !modal.value.showRaw;
+async function toggleScanRaw() {
+  if (!modal.value || modal.value.type !== 'scan')
+    return;
+
+  if (modal.value.showRaw) {
+    modal.value.showRaw = false;
+    return;
+  }
+
+  if (modal.value.raw === '') {
+    try {
+      modal.value.raw = await apiText(scanUrl(modal.value.ip));
+    } catch (error) {
+      modalError.value = error.message;
+      return;
+    }
+  }
+
+  modal.value.showRaw = true;
 }
 
 async function submitCreate() {

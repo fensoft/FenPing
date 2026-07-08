@@ -6,7 +6,9 @@ ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
 require __DIR__ . '/config.php';
+require __DIR__ . '/database.php';
 require __DIR__ . '/functions.php';
+require __DIR__ . '/scans.php';
 
 set_exception_handler(function (Throwable $e): void {
   jsonError(500, 'server error');
@@ -98,8 +100,16 @@ if ($method === 'POST' && count($segments) === 3 && $segments[0] === 'scans' && 
   quickScan($ip);
 }
 
+if ($method === 'GET' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'status') {
+  $ip = validateIp($segments[1]);
+  scanStatus($ip);
+}
+
 if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'scans') {
-  streamScan($segments[1]);
+  if (str_ends_with($segments[1], '.xml'))
+    streamScan($segments[1]);
+  else
+    scanJson(validateIp($segments[1]));
 }
 
 jsonError(404, 'not found');
@@ -213,8 +223,29 @@ function quickScan(string $ip): void {
   jsonResponse(array(
     'saved' => strpos("\n" . $log . "\n", "\n" . $ip . " saved\n") !== false,
     'log' => $log,
+    'metadata' => scanMetadataLatest($ip),
     'xml' => '/api/scans/' . rawurlencode($ip) . '.xml'
   ));
+}
+
+function scanStatus(string $ip): void {
+  jsonResponse(scanMetadataLatest($ip) ?: array(
+    'ip' => $ip,
+    'state' => 'none',
+    'ports_count' => 0
+  ));
+}
+
+function scanJson(string $ip): void {
+  $xml = scanReadXml($ip);
+  if ($xml === null)
+    jsonError(404, 'scan not found');
+
+  $metadata = scanMetadataLatest($ip);
+  $scan = scanParseXml($xml, $metadata ?: array('ip' => $ip));
+  if ($metadata === null)
+    $scan['metadata'] = null;
+  jsonResponse($scan);
 }
 
 function streamScan(string $file): void {
@@ -222,20 +253,12 @@ function streamScan(string $file): void {
     jsonError(404, 'scan not found');
 
   $ip = validateIp($matches[1]);
-  $path = __DIR__ . '/nmap/' . $ip . '.xml';
-  if (!is_file($path) || !is_readable($path))
+  $xml = scanReadXml($ip);
+  if ($xml === null)
     jsonError(404, 'scan not found');
 
-  $xml = file_get_contents($path);
-  if ($xml === false)
-    jsonError(500, 'scan read failed');
-
   header('Content-Type: application/xml; charset=utf-8');
-  echo str_replace(
-    array('href="../res/xsl/', 'href="file:///usr/bin/../share/nmap/'),
-    array('href="/res/xsl/', 'href="/res/xsl/'),
-    $xml
-  );
+  echo $xml;
   exit;
 }
 

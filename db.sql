@@ -59,6 +59,23 @@ CREATE TABLE IF NOT EXISTS `stats_old` (
   `date` datetime DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+CREATE TABLE IF NOT EXISTS `scans` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `ip` varchar(50) NOT NULL,
+  `mode` varchar(20) NOT NULL,
+  `state` varchar(20) NOT NULL DEFAULT 'running',
+  `status` varchar(50) DEFAULT NULL,
+  `date_begin` datetime DEFAULT CURRENT_TIMESTAMP,
+  `date_end` datetime DEFAULT NULL,
+  `duration` int(11) unsigned DEFAULT NULL,
+  `ports_count` int(11) unsigned NOT NULL DEFAULT '0',
+  `xml` varchar(255) DEFAULT NULL,
+  `error` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scans_ip_date` (`ip`, `date_begin`),
+  KEY `scans_state` (`state`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
+
 CREATE TABLE IF NOT EXISTS `users` (
   `login` varchar(50) DEFAULT NULL,
   `pass` varchar(128) DEFAULT NULL

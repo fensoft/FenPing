@@ -3,6 +3,7 @@ require __DIR__ . '/config.php';
 require __DIR__ . '/database.php';
 require __DIR__ . '/ping.php';
 require __DIR__ . '/hosts.php';
+require __DIR__ . '/scans.php';
 require __DIR__ . '/inventory.php';
 
 $command = $argv[1] ?? '';

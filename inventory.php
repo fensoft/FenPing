@@ -1,9 +1,5 @@
 <?php
 
-const INVENTORY_DIR = __DIR__ . '/nmap';
-const INVENTORY_XSL_FROM = 'file:///usr/bin/../share/nmap/';
-const INVENTORY_XSL_TO = '/res/xsl/';
-
 function runInventoryCommand(array $args): int {
   try {
     $options = inventoryOptions($args);
@@ -23,7 +19,8 @@ function runInventoryCommand(array $args): int {
 
     $saved = 0;
     foreach ($targets as $ip) {
-      if (inventoryScan($ip, $options['quick'])) {
+      $result = inventoryScan($ip, $options['quick']);
+      if ($result['saved']) {
         $saved++;
         echo "$ip saved" . PHP_EOL;
       } else {
@@ -97,10 +94,14 @@ function inventoryDiscover(string $range): array {
   return array_values(array_unique($hosts));
 }
 
-function inventoryScan(string $ip, bool $quick = false): bool {
+function inventoryScan(string $ip, bool $quick = false): array {
+  $mode = $quick ? 'quick' : 'deep';
+  $scanId = scanMetadataStart($ip, $mode);
   $tmp = tempnam(sys_get_temp_dir(), 'fenping-nmap-');
-  if ($tmp === false)
+  if ($tmp === false) {
+    scanMetadataFailed($scanId, 'failed to create temporary nmap file');
     throw new RuntimeException('failed to create temporary nmap file');
+  }
 
   try {
     $command = $quick
@@ -112,23 +113,33 @@ function inventoryScan(string $ip, bool $quick = false): bool {
     if ($xml === false)
       throw new RuntimeException("failed to read nmap result for $ip");
 
-    if (!inventoryXmlIsUp($xml))
-      return false;
+    $xml = scanNormalizeXml($xml);
+    $scan = scanParseXml($xml, array('ip' => $ip));
+    $status = $scan['status'] ?: 'unknown';
+    $saved = $status === 'up';
+    $xmlPath = null;
 
-    inventorySaveXml($ip, str_replace(INVENTORY_XSL_FROM, INVENTORY_XSL_TO, $xml));
-    return true;
+    if ($saved) {
+      inventorySaveXml($ip, $xml);
+      $xmlPath = scanXmlPath($ip);
+    }
+
+    scanMetadataComplete($scanId, $status, count($scan['ports']), $scan['duration'], $xmlPath);
+    return array(
+      'saved' => $saved,
+      'status' => $status
+    );
+  } catch (Throwable $e) {
+    scanMetadataFailed($scanId, $e->getMessage());
+    throw $e;
   } finally {
     @unlink($tmp);
   }
 }
 
-function inventoryXmlIsUp(string $xml): bool {
-  return preg_match('/<status\b[^>]*\bstate=["\']up["\']/', $xml) === 1;
-}
-
 function inventorySaveXml(string $ip, string $xml): void {
-  $target = INVENTORY_DIR . '/' . $ip . '.xml';
-  $tmp = tempnam(INVENTORY_DIR, $ip . '.');
+  $target = scanXmlPath($ip);
+  $tmp = tempnam(SCAN_DIR, $ip . '.');
   if ($tmp === false)
     throw new RuntimeException("failed to create temporary scan file for $ip");
 
@@ -145,7 +156,7 @@ function inventorySaveXml(string $ip, string $xml): void {
 }
 
 function ensureInventoryDir(): void {
-  if (!is_dir(INVENTORY_DIR) && !mkdir(INVENTORY_DIR, 0755, true))
+  if (!is_dir(SCAN_DIR) && !mkdir(SCAN_DIR, 0755, true))
     throw new RuntimeException('failed to create nmap directory');
 }
 
