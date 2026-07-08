@@ -1,10 +1,19 @@
 <?php
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'ping';
-$network = '192.168.0';
-$interface = 'eth0';
-$myself = '192.168.0.100';
-$password = '';
-$secret = 'token';
+if (!function_exists('fenping_env')) {
+  function fenping_env($name, $default = '') {
+    $value = getenv($name);
+    if ($value === false || $value === '')
+      return $default;
+    return $value;
+  }
+}
+
+$db_host = fenping_env('DB_HOST', 'localhost');
+$db_user = fenping_env('DB_USER', 'root');
+$db_pass = fenping_env('DB_PASS', 'root');
+$db_name = fenping_env('DB_NAME', 'ping');
+$network = fenping_env('NETWORK', '192.168.0');
+$interface = fenping_env('IFACE', fenping_env('INTERFACE', fenping_env('HOST_INTERFACE', 'eth0')));
+$myself = fenping_env('ME', fenping_env('IP', '192.168.0.100'));
+$password = fenping_env('PASSWORD', '');
+$secret = fenping_env('SECRET', 'token');

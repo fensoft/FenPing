@@ -14,28 +14,39 @@ else
 fi
 mkdir -p /var/run/mysqld
 chown mysql:mysql /var/run/mysqld
+mkdir -p /var/log/mysql
+chown mysql:mysql /var/log/mysql
 cd /var/www/html
 mkdir -p /var/lib/mysql
 chown mysql:mysql -R /var/lib/mysql
+MYSQL_AUTH="-proot"
 if [ ! -d /var/lib/mysql/mysql ]; then
   echo "initializing MariaDB data directory"
   mariadb-install-db --user=mysql --datadir=/var/lib/mysql --auth-root-authentication-method=normal
+  MYSQL_AUTH=""
 fi
 MYSQLD=`command -v mariadbd || command -v mysqld`
 MYSQL=`command -v mariadb || command -v mysql`
 MYSQLADMIN=`command -v mariadb-admin || command -v mysqladmin`
-sudo -u mysql $MYSQLD --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock&
+sudo -u mysql $MYSQLD --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --log-error=/var/log/mysql/error.log&
 for i in `seq 30`; do
-  $MYSQLADMIN --socket=/var/run/mysqld/mysqld.sock -uroot ping > /dev/null 2>&1 && break
-  $MYSQLADMIN --socket=/var/run/mysqld/mysqld.sock -uroot -proot ping > /dev/null 2>&1 && break
+  $MYSQLADMIN --socket=/var/run/mysqld/mysqld.sock -uroot $MYSQL_AUTH ping > /dev/null 2>&1 && break
   sleep 1
 done
-MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot"
-$MYSQL_ROOT -e "SELECT 1" > /dev/null 2>&1 || MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot"
+MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot $MYSQL_AUTH"
 $MYSQL_ROOT -e "CREATE DATABASE IF NOT EXISTS ping; ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; FLUSH PRIVILEGES;"
 MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot"
 $MYSQL_ROOT ping < db.sql
 ME=${IP:-`ip -4 a show dev $IFACE | awk '/inet/ {print $2}' | head -n1 | sed "s#/.*##"`}
+export DB_HOST=${DB_HOST:-localhost}
+export DB_USER=${DB_USER:-root}
+export DB_PASS=${DB_PASS:-root}
+export DB_NAME=${DB_NAME:-ping}
+export NETWORK
+export IFACE
+export ME
+export PASSWORD
+export SECRET
 mkdir -p /etc/dnsmasq.d
 cp dnsmasq.conf.template /etc/dnsmasq.d/fenping.conf
 for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sort -r -n -s | cut -d" " -f2-` IFACE ME; do
@@ -51,12 +62,23 @@ fi
 touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts
 mkdir -p /var/lib/misc
 touch /var/lib/misc/dnsmasq.leases
-cat config.php.template | sed "s#\$db_pass = ''#\$db_pass = 'root'#" | sed "s#\$network = .*#\$network = '$NETWORK';#" | sed "s#\$interface = .*#\$interface = '$IFACE';#" | sed "s#\$myself = .*#\$myself = '$ME';#" > config.php
-service syslog-ng start
+cp config.php.template config.php
+cat > /etc/cron.d/fenping <<EOF
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+DB_HOST=$DB_HOST
+DB_USER=$DB_USER
+DB_PASS=$DB_PASS
+DB_NAME=$DB_NAME
+NETWORK=$NETWORK
+IFACE=$IFACE
+ME=$ME
+
+0 * * * * root flock -n /tmp/inv.lck -c "php /var/www/html/cli.php inventory"
+*/15 * * * * root flock -n /tmp/ping.lck -c "php /var/www/html/cli.php ping"
+* * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /var/www/html/dnsmasq.leases.php"
+EOF
+chmod 0644 /etc/cron.d/fenping
 php /var/www/html/cli.php hosts
 cron
-apachectl start
-while `true`; do
-  tail -n 1000 -f /var/log/syslog
-  sleep 5
-done
+exec apachectl -D FOREGROUND

@@ -1,6 +1,6 @@
 <?php
 
-include "config.php";
+require_once __DIR__ . "/config.php";
 
 $leaseFile = "/var/lib/misc/dnsmasq.leases";
 $lines = is_readable($leaseFile) ? file($leaseFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : array();

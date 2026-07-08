@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS `leases` (
   `cltt` varchar(50) DEFAULT NULL,
   `hardware-ethernet` varchar(50) DEFAULT NULL,
   `client-hostname` varchar(50) DEFAULT NULL,
-  `vendor-class-identifier` varchar(50) DEFAULT NULL
+  `vendor-class-identifier` varchar(50) DEFAULT NULL,
+  KEY `leases_ip` (`ip`),
+  KEY `leases_hardware_ethernet` (`hardware-ethernet`),
+  KEY `leases_ends` (`ends`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `ping` (
@@ -30,12 +33,14 @@ CREATE TABLE IF NOT EXISTS `ping` (
   `mac` varchar(50) CHARACTER SET latin1 COLLATE latin1_general_ci DEFAULT NULL,
   `status` varchar(50) DEFAULT NULL,
   `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`ip`)
+  PRIMARY KEY (`ip`),
+  KEY `ping_mac` (`mac`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `range` (
   `ip_begin` varchar(50) CHARACTER SET utf8 DEFAULT NULL,
-  `type` varchar(50) COLLATE utf8_bin DEFAULT NULL
+  `type` varchar(50) COLLATE utf8_bin DEFAULT NULL,
+  KEY `range_ip_begin` (`ip_begin`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 CREATE TABLE IF NOT EXISTS `stats` (
@@ -48,6 +53,7 @@ CREATE TABLE IF NOT EXISTS `stats` (
   `nb_scan` int(11) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `ip` (`ip`),
+  KEY `stats_ip_date_begin` (`ip`, `date_begin`),
   KEY `stats_date_begin` (`date_begin`) USING BTREE,
   KEY `stats_date_end` (`date_end`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
@@ -70,9 +76,12 @@ CREATE TABLE IF NOT EXISTS `scans` (
   `duration` int(11) unsigned DEFAULT NULL,
   `ports_count` int(11) unsigned NOT NULL DEFAULT '0',
   `xml` varchar(255) DEFAULT NULL,
+  `xml_hash` char(64) DEFAULT NULL,
   `error` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `scans_ip_date` (`ip`, `date_begin`),
+  KEY `scans_ip_id` (`ip`, `id`),
+  KEY `scans_ip_xml_hash_id` (`ip`, `xml_hash`, `id`),
   KEY `scans_state` (`state`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
@@ -86,6 +95,16 @@ CREATE TABLE IF NOT EXISTS `vendors` (
   `vendors` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`mac`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+CREATE INDEX IF NOT EXISTS `leases_ip` ON `leases` (`ip`);
+CREATE INDEX IF NOT EXISTS `leases_hardware_ethernet` ON `leases` (`hardware-ethernet`);
+CREATE INDEX IF NOT EXISTS `leases_ends` ON `leases` (`ends`);
+CREATE INDEX IF NOT EXISTS `ping_mac` ON `ping` (`mac`);
+CREATE INDEX IF NOT EXISTS `range_ip_begin` ON `range` (`ip_begin`);
+CREATE INDEX IF NOT EXISTS `stats_ip_date_begin` ON `stats` (`ip`, `date_begin`);
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `xml_hash` char(64) DEFAULT NULL AFTER `xml`;
+CREATE INDEX IF NOT EXISTS `scans_ip_id` ON `scans` (`ip`, `id`);
+CREATE INDEX IF NOT EXISTS `scans_ip_xml_hash_id` ON `scans` (`ip`, `xml_hash`, `id`);
 
 UPDATE ping SET status='Down' WHERE status IS NULL OR status='';
 UPDATE stats SET status='Down' WHERE status IS NULL OR status='';

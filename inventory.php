@@ -116,42 +116,55 @@ function inventoryScan(string $ip, bool $quick = false): array {
     $xml = scanNormalizeXml($xml);
     $scan = scanParseXml($xml, array('ip' => $ip));
     $status = $scan['status'] ?: 'unknown';
+    $xmlHash = scanXmlHash($xml, $ip);
     $saved = $status === 'up';
     $xmlPath = null;
 
     if ($saved) {
-      inventorySaveXml($ip, $xml);
-      $xmlPath = scanXmlPath($ip);
+      $xmlPath = inventorySaveXml($ip, $scanId, $xml);
     }
 
-    scanMetadataComplete($scanId, $status, count($scan['ports']), $scan['duration'], $xmlPath);
+    scanMetadataComplete($scanId, $status, count($scan['ports']), $scan['duration'], $xmlPath, $xmlHash);
+    scanPruneHistory($ip);
     return array(
       'saved' => $saved,
       'status' => $status
     );
   } catch (Throwable $e) {
     scanMetadataFailed($scanId, $e->getMessage());
+    scanPruneHistory($ip);
     throw $e;
   } finally {
     @unlink($tmp);
   }
 }
 
-function inventorySaveXml(string $ip, string $xml): void {
-  $target = scanXmlPath($ip);
-  $tmp = tempnam(SCAN_DIR, $ip . '.');
+function inventorySaveXml(string $ip, int $scanId, string $xml): string {
+  $historyDir = SCAN_DIR . '/history/' . $ip;
+  if (!is_dir($historyDir) && !mkdir($historyDir, 0755, true))
+    throw new RuntimeException("failed to create scan history directory for $ip");
+
+  $historyPath = scanXmlPath($ip, $scanId);
+  inventoryWriteXmlFile($historyPath, $xml);
+  inventoryWriteXmlFile(scanXmlPath($ip), $xml);
+  return $historyPath;
+}
+
+function inventoryWriteXmlFile(string $target, string $xml): void {
+  $dir = dirname($target);
+  $tmp = tempnam($dir, basename($target) . '.');
   if ($tmp === false)
-    throw new RuntimeException("failed to create temporary scan file for $ip");
+    throw new RuntimeException("failed to create temporary scan file");
 
   if (file_put_contents($tmp, $xml) === false) {
     @unlink($tmp);
-    throw new RuntimeException("failed to write scan file for $ip");
+    throw new RuntimeException("failed to write scan file");
   }
 
   chmod($tmp, 0644);
   if (!rename($tmp, $target)) {
     @unlink($tmp);
-    throw new RuntimeException("failed to save scan file for $ip");
+    throw new RuntimeException("failed to save scan file");
   }
 }
 

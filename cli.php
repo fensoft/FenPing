@@ -1,10 +1,10 @@
 <?php
-require __DIR__ . '/config.php';
-require __DIR__ . '/database.php';
-require __DIR__ . '/ping.php';
-require __DIR__ . '/hosts.php';
-require __DIR__ . '/scans.php';
-require __DIR__ . '/inventory.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/ping.php';
+require_once __DIR__ . '/hosts.php';
+require_once __DIR__ . '/scans.php';
+require_once __DIR__ . '/inventory.php';
 
 $command = $argv[1] ?? '';
 if ($command === 'ping') {

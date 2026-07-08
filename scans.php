@@ -4,17 +4,29 @@ const SCAN_DIR = __DIR__ . '/nmap';
 const SCAN_XSL_FROM = 'file:///usr/bin/../share/nmap/';
 const SCAN_XSL_LEGACY = '../res/xsl/';
 const SCAN_XSL_TO = '/res/xsl/';
+const SCAN_HISTORY_DAYS = 7;
 
-function scanXmlPath(string $ip): string {
+function scanXmlPath(string $ip, ?int $id = null): string {
+  if ($id !== null)
+    return SCAN_DIR . '/history/' . $ip . '/' . $id . '.xml';
   return SCAN_DIR . '/' . $ip . '.xml';
 }
 
-function scanXmlUrl(string $ip): string {
+function scanXmlUrl(string $ip, ?int $id = null): string {
+  if ($id !== null)
+    return '/api/scans/' . rawurlencode($ip) . '/' . $id . '.xml';
   return '/api/scans/' . rawurlencode($ip) . '.xml';
 }
 
-function scanReadXml(string $ip): ?string {
-  $path = scanXmlPath($ip);
+function scanReadXml(string $ip, ?array $metadata = null): ?string {
+  if ($metadata !== null && ($metadata['xml'] ?? '') !== '') {
+    if (!scanMetadataXmlUsable($metadata))
+      return null;
+    $path = $metadata['xml'];
+  } else {
+    $path = scanXmlPath($ip);
+  }
+
   if (!is_file($path) || !is_readable($path))
     return null;
 
@@ -31,6 +43,59 @@ function scanNormalizeXml(string $xml): string {
     array('href="' . SCAN_XSL_TO, 'href="' . SCAN_XSL_TO),
     $xml
   );
+}
+
+function scanXmlHash(string $xml, string $ip = ''): string {
+  $scan = scanParseXml($xml, array('ip' => $ip));
+  $signature = array(
+    'ip' => $scan['ip'] ?? $ip,
+    'status' => $scan['status'] ?? '',
+    'addresses' => $scan['addresses'] ?? array(),
+    'hostnames' => $scan['hostnames'] ?? array(),
+    'os' => $scan['os'] ?? array(),
+    'ports' => $scan['ports'] ?? array()
+  );
+  scanSortRecursive($signature);
+  return hash('sha256', json_encode($signature, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+}
+
+function scanSortRecursive(&$value): void {
+  if (!is_array($value))
+    return;
+
+  foreach ($value as &$item)
+    scanSortRecursive($item);
+  unset($item);
+
+  if (scanArrayIsList($value)) {
+    usort($value, function ($a, $b) {
+      return strcmp(json_encode($a), json_encode($b));
+    });
+  } else {
+    ksort($value);
+  }
+}
+
+function scanArrayIsList(array $array): bool {
+  $i = 0;
+  foreach (array_keys($array) as $key) {
+    if ($key !== $i++)
+      return false;
+  }
+  return true;
+}
+
+function scanMetadataXmlUsable(array $metadata): bool {
+  $ip = $metadata['ip'] ?? '';
+  $path = $metadata['xml'] ?? '';
+  if ($ip === '' || $path === '' || !is_file($path) || !is_readable($path))
+    return false;
+
+  if ($path !== scanXmlPath($ip))
+    return true;
+
+  $latest = scanMetadataLatest($ip);
+  return $latest !== null && (int)$latest['id'] === (int)($metadata['id'] ?? 0);
 }
 
 function scanParseXml(string $xml, ?array $metadata = null): array {
@@ -71,7 +136,7 @@ function scanParseXml(string $xml, ?array $metadata = null): array {
     }), 0, 5),
     'ports' => $ports,
     'metadata' => $metadata,
-    'xml' => isset($metadata['ip']) ? scanXmlUrl($metadata['ip']) : null
+    'xml' => isset($metadata['ip']) ? scanXmlUrl($metadata['ip'], $metadata['id'] ?? null) : null
   );
 }
 
@@ -153,7 +218,7 @@ function scanMetadataStart(string $ip, string $mode): int {
   return (int)db()->lastInsertId();
 }
 
-function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $duration, ?string $xml): void {
+function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $duration, ?string $xml, ?string $xmlHash): void {
   $stmt = db()->prepare("
     UPDATE scans
     SET state='complete',
@@ -162,6 +227,7 @@ function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $du
         duration=:duration,
         ports_count=:ports_count,
         xml=:xml,
+        xml_hash=:xml_hash,
         error=NULL
     WHERE id=:id
   ");
@@ -170,7 +236,8 @@ function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $du
     'status' => $status,
     'duration' => $duration,
     'ports_count' => $portsCount,
-    'xml' => $xml
+    'xml' => $xml,
+    'xml_hash' => $xmlHash
   ));
 }
 
@@ -187,7 +254,7 @@ function scanMetadataFailed(int $id, string $error): void {
 
 function scanMetadataLatest(string $ip): ?array {
   $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, error
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
     FROM scans
     WHERE ip=:ip
     ORDER BY id DESC
@@ -198,9 +265,43 @@ function scanMetadataLatest(string $ip): ?array {
   return $metadata === false ? null : scanNormalizeMetadata($metadata);
 }
 
+function scanMetadataById(string $ip, int $id): ?array {
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    FROM scans
+    WHERE ip=:ip AND id=:id
+    LIMIT 1
+  ");
+  $stmt->execute(array('ip' => $ip, 'id' => $id));
+  $metadata = $stmt->fetch(PDO::FETCH_ASSOC);
+  return $metadata === false ? null : scanNormalizeMetadata($metadata);
+}
+
+function scanMetadataHistory(string $ip, int $limit = 30): array {
+  $limit = max(1, min(100, $limit));
+  $days = SCAN_HISTORY_DAYS;
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    FROM scans
+    WHERE ip=:ip
+      AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+    ORDER BY id DESC
+    LIMIT $limit
+  ");
+  $stmt->execute(array('ip' => $ip));
+
+  $history = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $metadata = scanNormalizeMetadata($row);
+    if (scanMetadataXmlUsable($metadata))
+      $history[] = $metadata;
+  }
+  return $history;
+}
+
 function scanMetadataLatestByIp(): array {
   $stmt = db()->prepare("
-    SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.xml, s.error
+    SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.xml, s.xml_hash, s.error
     FROM scans s
     INNER JOIN (
       SELECT ip, MAX(id) id
@@ -220,5 +321,133 @@ function scanNormalizeMetadata(array $metadata): array {
   $metadata['id'] = isset($metadata['id']) ? (int)$metadata['id'] : null;
   $metadata['duration'] = isset($metadata['duration']) && $metadata['duration'] !== null ? (int)$metadata['duration'] : null;
   $metadata['ports_count'] = isset($metadata['ports_count']) ? (int)$metadata['ports_count'] : 0;
+  $metadata['xml_hash'] = $metadata['xml_hash'] ?? null;
   return $metadata;
+}
+
+function scanPruneHistory(string $ip): void {
+  scanPruneOldHistory($ip);
+  scanPruneUnusableLegacyHistory($ip);
+  scanPruneDuplicateHistory($ip);
+  scanRemoveEmptyHistoryDir($ip);
+}
+
+function scanPruneOldHistory(string $ip): void {
+  $days = SCAN_HISTORY_DAYS;
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    FROM scans
+    WHERE ip=:ip
+      AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) < DATE_SUB(NOW(), INTERVAL $days DAY)
+  ");
+  $stmt->execute(array('ip' => $ip));
+
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC))
+    scanDeleteMetadata(scanNormalizeMetadata($row));
+}
+
+function scanPruneDuplicateHistory(string $ip): void {
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    FROM scans
+    WHERE ip=:ip
+    ORDER BY id DESC
+  ");
+  $stmt->execute(array('ip' => $ip));
+
+  $seen = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $metadata = scanNormalizeMetadata($row);
+    $hash = scanMetadataHash($metadata);
+    if ($hash === null || $hash === '')
+      continue;
+
+    if (isset($seen[$hash])) {
+      scanDeleteMetadata($metadata);
+      continue;
+    }
+
+    $seen[$hash] = $metadata['id'];
+  }
+}
+
+function scanPruneUnusableLegacyHistory(string $ip): void {
+  $latest = scanMetadataLatest($ip);
+  if ($latest === null)
+    return;
+
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    FROM scans
+    WHERE ip=:ip
+      AND id<>:latest_id
+      AND xml=:latest_xml
+  ");
+  $stmt->execute(array(
+    'ip' => $ip,
+    'latest_id' => $latest['id'],
+    'latest_xml' => scanXmlPath($ip)
+  ));
+
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC))
+    scanDeleteMetadata(scanNormalizeMetadata($row));
+}
+
+function scanMetadataHash(array $metadata): ?string {
+  if (($metadata['xml_hash'] ?? '') !== '')
+    return $metadata['xml_hash'];
+
+  if ($metadata['id'] === null)
+    return null;
+
+  if (($metadata['xml'] ?? '') === '' && ($metadata['status'] ?? '') !== '') {
+    $hash = hash('sha256', json_encode(array(
+      'ip' => $metadata['ip'] ?? '',
+      'status' => $metadata['status'] ?? ''
+    ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    scanUpdateMetadataHash($metadata['id'], $hash);
+    return $hash;
+  }
+
+  $xml = scanReadXml($metadata['ip'], $metadata);
+  if ($xml === null)
+    return null;
+
+  $hash = scanXmlHash($xml, $metadata['ip']);
+  scanUpdateMetadataHash($metadata['id'], $hash);
+  return $hash;
+}
+
+function scanUpdateMetadataHash(int $id, string $hash): void {
+  $stmt = db()->prepare("UPDATE scans SET xml_hash=:xml_hash WHERE id=:id");
+  $stmt->execute(array('id' => $id, 'xml_hash' => $hash));
+}
+
+function scanDeleteMetadata(array $metadata): void {
+  $path = scanMetadataHistoryPath($metadata);
+  if ($path !== null && is_file($path))
+    @unlink($path);
+
+  if ($metadata['id'] !== null) {
+    $stmt = db()->prepare("DELETE FROM scans WHERE id=:id");
+    $stmt->execute(array('id' => $metadata['id']));
+  }
+}
+
+function scanMetadataHistoryPath(array $metadata): ?string {
+  if (($metadata['ip'] ?? '') === '' || ($metadata['id'] ?? null) === null)
+    return null;
+
+  $expected = scanXmlPath($metadata['ip'], (int)$metadata['id']);
+  return ($metadata['xml'] ?? '') === $expected ? $expected : null;
+}
+
+function scanRemoveEmptyHistoryDir(string $ip): void {
+  $dir = SCAN_DIR . '/history/' . $ip;
+  if (!is_dir($dir))
+    return;
+
+  $items = scandir($dir);
+  if ($items !== false && count(array_diff($items, array('.', '..'))) === 0)
+    @rmdir($dir);
 }

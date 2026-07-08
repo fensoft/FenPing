@@ -422,10 +422,22 @@
                     <div class="font-monospace scan-ip">{{ modal.ip }}</div>
                     <div class="text-secondary small">{{ modal.scan.started || modal.scan.args }}</div>
                   </div>
-                  <button class="btn btn-outline-secondary btn-sm" type="button" @click="toggleScanRaw">
-                    <i class="ti ti-code me-1"></i>
-                    XML
-                  </button>
+                  <div class="scan-actions">
+                    <select
+                      v-if="modal.history && modal.history.length > 1"
+                      class="form-select form-select-sm scan-history-select"
+                      :value="modal.selectedScanId || ''"
+                      @change="selectScanHistory($event.target.value)"
+                    >
+                      <option v-for="scan in modal.history" :key="scan.id" :value="scan.id">
+                        {{ scanHistoryLabel(scan) }}
+                      </option>
+                    </select>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" @click="toggleScanRaw">
+                      <i class="ti ti-code me-1"></i>
+                      XML
+                    </button>
+                  </div>
                 </div>
 
                 <div class="scan-summary">
@@ -843,12 +855,20 @@ function pulseRefresh() {
   });
 }
 
-function scanUrl(ip) {
+function scanUrl(ip, scanId = null) {
+  if (scanId)
+    return `/api/scans/${encodeURIComponent(ip)}/${encodeURIComponent(scanId)}.xml`;
   return `/api/scans/${encodeURIComponent(ip)}.xml`;
 }
 
-function scanJsonUrl(ip) {
+function scanJsonUrl(ip, scanId = null) {
+  if (scanId)
+    return `/api/scans/${encodeURIComponent(ip)}/${encodeURIComponent(scanId)}`;
   return `/api/scans/${encodeURIComponent(ip)}`;
+}
+
+function scanHistoryUrl(ip) {
+  return `/api/scans/${encodeURIComponent(ip)}/history`;
 }
 
 function scanStatusUrl(ip) {
@@ -1127,21 +1147,55 @@ async function openScan(ip) {
     loading: true,
     scan: null,
     raw: '',
-    showRaw: false
+    showRaw: false,
+    history: null,
+    selectedScanId: null
   };
 
   try {
-    const scan = await apiJson(scanJsonUrl(ip));
+    const [scan, history] = await Promise.all([
+      apiJson(scanJsonUrl(ip)),
+      apiJson(scanHistoryUrl(ip))
+    ]);
     if (modal.value && modal.value.type === 'scan' && modal.value.ip === ip) {
       modal.value.loading = false;
       modal.value.raw = '';
       modal.value.scan = scan;
+      modal.value.history = history || [];
+      modal.value.selectedScanId = scan.metadata?.id || null;
     }
   } catch (error) {
     if (modal.value && modal.value.type === 'scan' && modal.value.ip === ip) {
       modal.value.loading = false;
       modalError.value = error.message;
     }
+  }
+}
+
+async function selectScanHistory(scanId) {
+  if (!modal.value || modal.value.type !== 'scan')
+    return;
+
+  const id = Number(scanId || 0);
+  if (!id)
+    return;
+
+  modal.value.loading = true;
+  modal.value.raw = '';
+  modal.value.showRaw = false;
+  modalError.value = '';
+
+  try {
+    const scan = await apiJson(scanJsonUrl(modal.value.ip, id));
+    if (modal.value && modal.value.type === 'scan') {
+      modal.value.scan = scan;
+      modal.value.selectedScanId = scan.metadata?.id || id;
+    }
+  } catch (error) {
+    modalError.value = error.message;
+  } finally {
+    if (modal.value && modal.value.type === 'scan')
+      modal.value.loading = false;
   }
 }
 
@@ -1189,7 +1243,7 @@ async function toggleScanRaw() {
 
   if (modal.value.raw === '') {
     try {
-      modal.value.raw = await apiText(scanUrl(modal.value.ip));
+      modal.value.raw = await apiText(scanUrl(modal.value.ip, modal.value.selectedScanId));
     } catch (error) {
       modalError.value = error.message;
       return;
@@ -1197,6 +1251,13 @@ async function toggleScanRaw() {
   }
 
   modal.value.showRaw = true;
+}
+
+function scanHistoryLabel(scan) {
+  const date = scan.date_end || scan.date_begin || '';
+  const status = scan.status || scan.state || '-';
+  const ports = Number(scan.ports_count || 0);
+  return `${date} ${scan.mode} ${status} ${ports}p`;
 }
 
 async function submitCreate() {

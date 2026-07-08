@@ -314,6 +314,17 @@ body {
   margin-bottom: 0.75rem;
 }
 
+.scan-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.scan-history-select {
+  max-width: 24rem;
+}
+
 .scan-ip {
   font-size: 1rem;
   font-weight: 700;
@@ -545,6 +556,15 @@ html[data-bs-theme='dark'] .scan-state-filtered {
   .scan-topline {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .scan-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scan-history-select {
+    max-width: none;
   }
 
   .scan-summary {

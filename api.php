@@ -5,10 +5,10 @@ declare(strict_types=1);
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-require __DIR__ . '/config.php';
-require __DIR__ . '/database.php';
-require __DIR__ . '/functions.php';
-require __DIR__ . '/scans.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/scans.php';
 
 set_exception_handler(function (Throwable $e): void {
   jsonError(500, 'server error');
@@ -103,6 +103,19 @@ if ($method === 'POST' && count($segments) === 3 && $segments[0] === 'scans' && 
 if ($method === 'GET' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'status') {
   $ip = validateIp($segments[1]);
   scanStatus($ip);
+}
+
+if ($method === 'GET' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'history') {
+  $ip = validateIp($segments[1]);
+  scanHistory($ip);
+}
+
+if ($method === 'GET' && count($segments) === 3 && $segments[0] === 'scans') {
+  $ip = validateIp($segments[1]);
+  if (preg_match('/^(\d+)\.xml$/', $segments[2], $matches))
+    streamScanById($ip, validateId($matches[1]));
+  elseif (ctype_digit($segments[2]))
+    scanJson($ip, validateId($segments[2]));
 }
 
 if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'scans') {
@@ -236,12 +249,19 @@ function scanStatus(string $ip): void {
   ));
 }
 
-function scanJson(string $ip): void {
-  $xml = scanReadXml($ip);
+function scanHistory(string $ip): void {
+  jsonResponse(scanMetadataHistory($ip));
+}
+
+function scanJson(string $ip, ?int $id = null): void {
+  $metadata = $id === null ? scanMetadataLatest($ip) : scanMetadataById($ip, $id);
+  if ($id !== null && $metadata === null)
+    jsonError(404, 'scan not found');
+
+  $xml = scanReadXml($ip, $metadata);
   if ($xml === null)
     jsonError(404, 'scan not found');
 
-  $metadata = scanMetadataLatest($ip);
   $scan = scanParseXml($xml, $metadata ?: array('ip' => $ip));
   if ($metadata === null)
     $scan['metadata'] = null;
@@ -254,6 +274,20 @@ function streamScan(string $file): void {
 
   $ip = validateIp($matches[1]);
   $xml = scanReadXml($ip);
+  if ($xml === null)
+    jsonError(404, 'scan not found');
+
+  header('Content-Type: application/xml; charset=utf-8');
+  echo $xml;
+  exit;
+}
+
+function streamScanById(string $ip, int $id): void {
+  $metadata = scanMetadataById($ip, $id);
+  if ($metadata === null)
+    jsonError(404, 'scan not found');
+
+  $xml = scanReadXml($ip, $metadata);
   if ($xml === null)
     jsonError(404, 'scan not found');
 
