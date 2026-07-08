@@ -34,7 +34,7 @@ if ($method === 'POST' && $segments === array('ping', 'refresh')) {
 
 if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'history') {
   $ip = validateIp($segments[1]);
-  jsonResponse(get_history($ip));
+  jsonResponse(get_history_response($ip));
 }
 
 if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'hosts') {

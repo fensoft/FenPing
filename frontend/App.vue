@@ -68,9 +68,17 @@
           <div class="text-secondary small filter-count">{{ visibleHosts.length }}/{{ hosts.length }}</div>
         </div>
         <table class="table table-sm inventory-table">
+          <colgroup>
+            <col class="col-status" />
+            <col class="col-name" />
+            <col class="col-mac" />
+            <col class="col-vendor" />
+            <col class="col-ip" />
+            <col class="col-actions" />
+          </colgroup>
           <thead>
             <tr>
-              <th class="col-status" scope="col">
+              <th scope="col">
                 <button
                   class="btn btn-outline-secondary btn-sm icon-btn"
                   type="button"
@@ -80,20 +88,19 @@
                   <i class="ti ti-minus"></i>
                 </button>
               </th>
-              <th class="col-name" scope="col">Name</th>
-              <th class="col-mac" scope="col">MAC</th>
-              <th class="col-vendor" scope="col">Vendor</th>
-              <th class="col-stability" scope="col">Stability</th>
-              <th class="col-ip" scope="col">IP</th>
-              <th class="col-actions" scope="col">&nbsp;</th>
+              <th scope="col">Name</th>
+              <th scope="col">MAC</th>
+              <th scope="col">Vendor</th>
+              <th scope="col">IP</th>
+              <th scope="col">&nbsp;</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="inventoryLoading && tableRows.length === 0">
-              <td class="text-secondary text-center py-4" colspan="7">Loading</td>
+              <td class="text-secondary text-center py-4" colspan="6">Loading</td>
             </tr>
             <tr v-else-if="!inventoryLoading && tableRows.length === 0">
-              <td class="text-secondary text-center py-4" colspan="7">No hosts</td>
+              <td class="text-secondary text-center py-4" colspan="6">No hosts</td>
             </tr>
             <tr v-for="row in tableRows" :key="row.key" :class="rowClass(row)">
               <template v-if="row.type === 'category'">
@@ -107,7 +114,7 @@
                     <i :class="row.collapsed ? 'ti ti-plus' : 'ti ti-minus'"></i>
                   </button>
                 </td>
-                <td class="category-name" colspan="5">{{ row.name }}</td>
+                <td class="category-name" colspan="4">{{ row.name }}</td>
                 <td class="text-end">
                   <button
                     v-if="row.categoryIp"
@@ -127,6 +134,15 @@
                     <span :class="statusClass(row.host.status)" :title="statusTitle(row.host.status)" class="status-pill">
                       <i :class="statusIcon(row.host.status)"></i>
                     </span>
+                    <button
+                      v-if="showStability(row.host)"
+                      :class="stabilityClass(row.host.stability)"
+                      type="button"
+                      :title="stabilityTitle(row.host.stability)"
+                      @click="openHistory(row.host.ip)"
+                    >
+                      {{ stabilityLabel(row.host.stability) }}
+                    </button>
                     <i
                       v-if="isRouterRepeater(row.host)"
                       class="ti ti-wifi text-secondary host-role-icon"
@@ -151,28 +167,8 @@
                   <i v-if="row.host.via" class="ti ti-antenna-bars-5 ms-1 text-secondary" :title="row.host.via"></i>
                 </td>
                 <td class="text-truncate-cell" :title="row.host.vendor || ''">{{ row.host.vendor }}</td>
-                <td>
-                  <button
-                    v-if="Number(row.host.stats2 || 0) > 1"
-                    class="btn btn-link btn-sm p-0"
-                    type="button"
-                    :title="row.host.stats || ''"
-                    @click="openHistory(row.host.ip)"
-                  >
-                    {{ row.host.stats2 }}
-                  </button>
-                </td>
                 <td class="text-truncate-cell font-monospace" :title="row.host.ip || ''">
                   {{ row.host.ip }}
-                  <button
-                    v-if="row.host.xml"
-                    class="btn btn-outline-secondary btn-sm icon-btn ms-1"
-                    type="button"
-                    title="View scan XML"
-                    @click="openScan(row.host.ip)"
-                  >
-                    <i class="ti ti-file-search"></i>
-                  </button>
                 </td>
                 <td class="text-end action-cell">
                   <button
@@ -185,6 +181,15 @@
                     @click="quickScanHost(row.host)"
                   >
                     <i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i>
+                  </button>
+                  <button
+                    v-if="row.host.xml"
+                    class="btn btn-outline-secondary btn-sm icon-btn"
+                    type="button"
+                    title="View scan"
+                    @click="openScan(row.host.ip)"
+                  >
+                    <i class="ti ti-file-search"></i>
                   </button>
                   <button
                     v-if="row.host.id"
@@ -382,6 +387,24 @@
           <div v-else-if="modal.type === 'history'">
             <div class="modal-body p-0">
               <div v-if="modalError" class="alert alert-danger m-3">{{ modalError }}</div>
+              <div v-if="modal.summary" class="history-summary">
+                <div class="history-summary-item">
+                  <span>Uptime</span>
+                  <strong>{{ formatPercent(modal.summary.uptime_percent) }}</strong>
+                </div>
+                <div class="history-summary-item">
+                  <span>Changes</span>
+                  <strong>{{ modal.summary.transitions }}x</strong>
+                </div>
+                <div class="history-summary-item">
+                  <span>Longest Down</span>
+                  <strong>{{ formatDuration(modal.summary.longest_down_seconds) }}</strong>
+                </div>
+                <div class="history-summary-item">
+                  <span>Current</span>
+                  <strong>{{ modal.summary.current_status || '-' }} {{ formatDuration(modal.summary.current_seconds) }}</strong>
+                </div>
+              </div>
               <table class="table table-sm history-table">
                 <thead>
                   <tr>
@@ -1004,6 +1027,32 @@ function isRouterRepeater(host) {
   return toFlag(host?.repeater);
 }
 
+function showStability(host) {
+  return Boolean(host?.stability && !host.stability.stable);
+}
+
+function stabilityLabel(stability) {
+  if (!stability)
+    return '';
+  return stability.label || formatPercent(stability.uptime_percent);
+}
+
+function stabilityClass(stability) {
+  const level = stability?.level || 'warn';
+  return `stability-badge stability-${level}`;
+}
+
+function stabilityTitle(stability) {
+  if (!stability)
+    return '';
+  return [
+    `Uptime ${formatPercent(stability.uptime_percent)}`,
+    `${Number(stability.transitions || 0)} changes`,
+    `Longest down ${formatDuration(stability.longest_down_seconds)}`,
+    `Current ${stability.current_status || '-'} ${formatDuration(stability.current_seconds)}`
+  ].join(' | ');
+}
+
 function historyRowClass(item) {
   if (item.status === 'Up') return '';
   return Number(item.duration || 0) > 180 ? 'history-alert' : 'history-muted';
@@ -1015,18 +1064,18 @@ function formatMac(mac) {
 
 function formatDuration(value) {
   const seconds = Number(value || 0);
-  if (seconds < 60) return `${seconds} s`;
+  if (seconds < 60) return `${seconds}s`;
 
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
   const parts = [];
 
-  if (days > 0) parts.push(`${days} d`);
-  if (hours % 24 > 0) parts.push(`${hours % 24} h`);
-  if (minutes % 60 > 0 || parts.length === 0) parts.push(`${minutes % 60} m`);
+  if (days > 0) parts.push(`${days}d`);
+  if (hours % 24 > 0) parts.push(`${hours % 24}h`);
+  if (minutes % 60 > 0 || parts.length === 0) parts.push(`${minutes % 60}m`);
 
-  return parts.join(' ');
+  return parts.slice(0, 2).join(' ');
 }
 
 function formatScanDuration(value) {
@@ -1037,6 +1086,10 @@ function formatScanDuration(value) {
 
 function formatScanDate(value) {
   return value || '-';
+}
+
+function formatPercent(value) {
+  return `${Math.round(Number(value || 0))}%`;
 }
 
 function toShortIp(ip) {
@@ -1133,13 +1186,15 @@ async function openHistory(ip) {
   modal.value = {
     type: 'history',
     ip,
-    rows: null
+    rows: null,
+    summary: null
   };
 
   try {
-    const rows = await apiJson(`/api/history/${encodeURIComponent(ip)}`);
+    const payload = await apiJson(`/api/history/${encodeURIComponent(ip)}`);
     if (modal.value && modal.value.type === 'history' && modal.value.ip === ip) {
-      modal.value.rows = rows || [];
+      modal.value.rows = Array.isArray(payload) ? payload : payload?.rows || [];
+      modal.value.summary = Array.isArray(payload) ? null : payload?.summary || null;
     }
   } catch (error) {
     modalError.value = error.message;

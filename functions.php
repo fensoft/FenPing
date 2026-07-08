@@ -184,9 +184,9 @@ function getInventory() {
     $data["vendor"] = "";
     $data["vendor"] = getVendor($mac);
     if ($ip != "" && isset($stats[$ip])) {
-      $historyCount = count(get_history($ip));
-      $data["stats"] = $historyCount;
-      $data["stats2"] = $historyCount;
+      $data["stability"] = $stats[$ip];
+      $data["stats"] = $stats[$ip]["label"];
+      $data["stats2"] = $stats[$ip]["transitions"];
     }
     if ($ip != "" && file_exists(__DIR__ . "/nmap/" . $ip . ".xml")) {
       $data["xml"] = $ip;
@@ -272,23 +272,15 @@ function del($id) {
 }
 
 function get_stats() {
-  $stmt = getDb()->prepare("
-    select s.ip, count(s.ip) as cnt
-    from stats s
-    inner join (
-      select ip, max(id) as latest_id
-      from stats
-      group by ip
-    ) latest on latest.ip=s.ip
-    where s.date_end > date_sub(now(), interval 7 day)
-      and (s.nb_scan > 10 or s.id=latest.latest_id)
-    group by s.ip
-    having cnt > 1
-  ");
+  $stmt = getDb()->prepare("select distinct ip from stats where ip is not null and ip<>'' and date_end > date_sub(now(), interval 7 day)");
   $stmt->execute();
   $arr = array();
-  while ($i = $stmt->fetch(PDO::FETCH_ASSOC))
-    $arr[$i["ip"]] = $i["cnt"];
+  while ($i = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $history = get_history($i["ip"]);
+    $summary = get_history_summary($history);
+    if (!$summary["stable"])
+      $arr[$i["ip"]] = $summary;
+  }
   return $arr;
 }
 
@@ -302,10 +294,19 @@ function temps($val) {
   return intval($val / (60 * 60 * 24)) . " d";
 }
 
-function get_history($ip, $regroup = 10) {
+function get_history_response($ip) {
+  $rows = get_history($ip);
+  return array(
+    "summary" => get_history_summary($rows),
+    "rows" => $rows
+  );
+}
+
+function get_history($ip, $blipSeconds = 120) {
   $stmt = getDb()->prepare("select *, UNIX_TIMESTAMP(date_begin) as `begin`, UNIX_TIMESTAMP(date_end) as `end`, UNIX_TIMESTAMP(date_end)-UNIX_TIMESTAMP(date_begin) as duration from stats where ip=:ip and date_end > date_sub(now(), interval 7 day) order by id asc");
   $stmt->execute(array("ip" => $ip));
   $before = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  $cutoff = time() - 7 * 24 * 60 * 60;
   if (count($before) > 0) {
     $now = time();
     $lastIndex = count($before) - 1;
@@ -314,19 +315,117 @@ function get_history($ip, $regroup = 10) {
     $before[$lastIndex]["duration"] = max(0, $now - (int)$before[$lastIndex]["begin"]);
     $before[$lastIndex]["current"] = 1;
   }
+  foreach ($before as &$row) {
+    if ((int)$row["begin"] < $cutoff) {
+      $row["begin"] = $cutoff;
+      $row["date_begin"] = date("Y-m-d H:i:s", $cutoff);
+    }
+    $row["duration"] = max(0, (int)$row["end"] - (int)$row["begin"]);
+  }
+  unset($row);
+
   $after = array();
   $lastIndex = count($before) - 1;
   foreach ($before as $index => $i) {
-    if ($i["nb_scan"] >= $regroup || $index === $lastIndex) {
-      $index = count($after)-1;
-      if ($index >= 0 && $after[$index]["status"] == $i["status"]) {
-        $after[$index]["date_end"] = $i["date_end"];
-        $after[$index]["end"] = $i["end"];
-        $after[$index]["duration"] += $i["duration"];
-      } else {
-        array_push($after, $i);
+    $rowIndex = count($after)-1;
+    if ($rowIndex >= 0 && $after[$rowIndex]["status"] == $i["status"]) {
+      $after[$rowIndex]["date_end"] = $i["date_end"];
+      $after[$rowIndex]["end"] = $i["end"];
+      $after[$rowIndex]["duration"] += $i["duration"];
+      if (!empty($i["current"]))
+        $after[$rowIndex]["current"] = 1;
+    } else {
+      array_push($after, $i);
+    }
+  }
+  return merge_history_blips($after, $blipSeconds);
+}
+
+function merge_history_blips($rows, $blipSeconds) {
+  $changed = true;
+  while ($changed) {
+    $changed = false;
+    $count = count($rows);
+    for ($i = 0; $i < $count; $i++) {
+      if (!empty($rows[$i]["current"]) || (int)$rows[$i]["duration"] >= $blipSeconds)
+        continue;
+
+      if ($i > 0 && $i + 1 < $count && $rows[$i - 1]["status"] == $rows[$i + 1]["status"]) {
+        $rows[$i - 1]["date_end"] = $rows[$i + 1]["date_end"];
+        $rows[$i - 1]["end"] = $rows[$i + 1]["end"];
+        $rows[$i - 1]["duration"] += $rows[$i]["duration"] + $rows[$i + 1]["duration"];
+        if (!empty($rows[$i + 1]["current"]))
+          $rows[$i - 1]["current"] = 1;
+        array_splice($rows, $i, 2);
+        $changed = true;
+        break;
+      }
+
+      if ($i > 0) {
+        $rows[$i - 1]["date_end"] = $rows[$i]["date_end"];
+        $rows[$i - 1]["end"] = $rows[$i]["end"];
+        $rows[$i - 1]["duration"] += $rows[$i]["duration"];
+        array_splice($rows, $i, 1);
+        $changed = true;
+        break;
+      }
+
+      if ($i + 1 < $count) {
+        $rows[$i + 1]["date_begin"] = $rows[$i]["date_begin"];
+        $rows[$i + 1]["begin"] = $rows[$i]["begin"];
+        $rows[$i + 1]["duration"] += $rows[$i]["duration"];
+        array_splice($rows, $i, 1);
+        $changed = true;
+        break;
       }
     }
   }
-  return $after;
+  return array_values($rows);
+}
+
+function get_history_summary($rows) {
+  $observed = 0;
+  $up = 0;
+  $longestDown = 0;
+
+  foreach ($rows as $row) {
+    $duration = max(0, (int)($row["duration"] ?? 0));
+    $observed += $duration;
+    if (($row["status"] ?? "") == "Up")
+      $up += $duration;
+    else
+      $longestDown = max($longestDown, $duration);
+  }
+
+  $transitions = max(0, count($rows) - 1);
+  $uptime = $observed > 0 ? round(($up / $observed) * 100, 1) : 0;
+  $current = count($rows) > 0 ? $rows[count($rows) - 1] : null;
+  $stable = count($rows) <= 1 && $current !== null && ($current["status"] ?? "") == "Up" && $uptime >= 99.95;
+
+  return array(
+    "uptime_percent" => $uptime,
+    "observed_seconds" => $observed,
+    "up_seconds" => $up,
+    "transitions" => $transitions,
+    "longest_down_seconds" => $longestDown,
+    "current_status" => $current["status"] ?? "",
+    "current_seconds" => $current === null ? 0 : max(0, (int)($current["duration"] ?? 0)),
+    "stable" => $stable,
+    "level" => stability_level($uptime, $transitions, $longestDown, $current["status"] ?? ""),
+    "label" => stability_label($uptime)
+  );
+}
+
+function stability_label($uptime) {
+  return (int)round($uptime) . "%";
+}
+
+function stability_level($uptime, $transitions, $longestDown, $currentStatus) {
+  if ($currentStatus != "Up")
+    return "bad";
+  if ($uptime >= 99 && $transitions <= 1)
+    return "good";
+  if ($uptime >= 95 && $transitions <= 4 && $longestDown < 60 * 60)
+    return "warn";
+  return "bad";
 }
