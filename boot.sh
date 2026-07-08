@@ -17,6 +17,8 @@ chown mysql:mysql /var/run/mysqld
 mkdir -p /var/log/mysql
 chown mysql:mysql /var/log/mysql
 cd /var/www/html
+mkdir -p /var/www/html/netboot
+chown -R www-data:www-data /var/www/html/netboot
 mkdir -p /var/lib/mysql
 chown mysql:mysql -R /var/lib/mysql
 MYSQL_AUTH="-proot"

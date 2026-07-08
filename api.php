@@ -54,6 +54,32 @@ if ($method === 'GET' && $segments === array('notify')) {
   jsonResponse(get_notify());
 }
 
+if ($method === 'GET' && $segments === array('netboot', 'images')) {
+  requireAuth();
+  jsonResponse(array('images' => get_netboot_images()));
+}
+
+if ($method === 'POST' && $segments === array('netboot', 'images')) {
+  requireAuth();
+  try {
+    jsonResponse(create_netboot_image($_FILES['file'] ?? array(), $_POST['name'] ?? ''));
+  } catch (RuntimeException $e) {
+    jsonError(400, $e->getMessage());
+  }
+}
+
+if ($method === 'DELETE' && count($segments) === 3 && $segments[0] === 'netboot' && $segments[1] === 'images') {
+  requireAuth();
+  $id = validateId($segments[2]);
+  try {
+    delete_netboot_image($id);
+  } catch (InvalidArgumentException $e) {
+    jsonError(404, $e->getMessage());
+  }
+  $log = reloadDhcpHosts();
+  jsonResponse(array('deleted' => true, 'log' => $log));
+}
+
 if ($method === 'POST' && $segments === array('ping', 'refresh')) {
   requireAuth();
   refreshPing();
@@ -93,7 +119,8 @@ if ($method === 'PUT' && count($segments) === 2 && $segments[0] === 'hosts') {
     toDbFlag($body['important'] ?? null),
     toDbFlag($body['web'] ?? null),
     normalizeEmpty($body['router'] ?? null),
-    normalizeEmpty($body['dns'] ?? null)
+    normalizeEmpty($body['dns'] ?? null),
+    normalizeNetbootImageId($body['netboot_image_id'] ?? null)
   );
 
   $log = reloadDhcpHosts();
@@ -214,6 +241,25 @@ function toDbFlag($value): ?string {
   if ($value === true || $value === 1 || $value === '1')
     return '1';
   return null;
+}
+
+function normalizeNetbootImageId($value): ?int {
+  if ($value === null || $value === '' || $value === false)
+    return null;
+
+  if (is_int($value))
+    $id = $value;
+  else {
+    $value = trim((string)$value);
+    if (!ctype_digit($value))
+      jsonError(400, 'invalid netboot image');
+    $id = (int)$value;
+  }
+
+  if ($id <= 0 || !netboot_image_exists($id))
+    jsonError(400, 'invalid netboot image');
+
+  return $id;
 }
 
 function validateId(string $value): int {

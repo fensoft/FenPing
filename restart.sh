@@ -4,6 +4,7 @@ set -e
 DOCKER_BUILDKIT=1 docker build --progress=plain --network=host -t fensoft/fenping:$VERSION .
 . .env
 mkdir -p `pwd`/data/nmap
+mkdir -p `pwd`/data/netboot
 docker stop fenping || true
 docker rm fenping || true
 if [ "$DEV" ]; then
@@ -27,6 +28,7 @@ docker run -d \
   -e FENPING_NETWORK_MODE=host \
   -v `pwd`/data/dnsmasq:/var/lib/misc \
   -v `pwd`/data/nmap:/var/www/html/nmap \
+  -v `pwd`/data/netboot:/var/www/html/netboot \
   -v `pwd`/data/db:/var/lib/mysql \
   $EXTRA \
   --network host \

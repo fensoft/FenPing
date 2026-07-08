@@ -2,6 +2,7 @@ RewriteEngine On
 RewriteBase /
 
 RewriteRule ^api(?:/(.*))?$ api.php [QSA,L]
+RewriteRule ^netboot/ - [L]
 
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

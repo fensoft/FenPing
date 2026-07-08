@@ -41,14 +41,16 @@ function buildDnsmasqFiles(): array {
 
   $stmt = db()->query("
     SELECT
-      name,
-      IFNULL(mac, '') AS mac,
-      ip,
-      IFNULL(router, '') AS router,
-      IFNULL(dns, '') AS dns
+      ips.name AS name,
+      IFNULL(ips.mac, '') AS mac,
+      ips.ip AS ip,
+      IFNULL(ips.router, '') AS router,
+      IFNULL(ips.dns, '') AS dns,
+      IFNULL(ni.filename, '') AS netboot_filename
     FROM ips
-    WHERE ip IS NOT NULL
-      AND name IS NOT NULL
+    LEFT JOIN netboot_images ni ON ni.id=ips.netboot_image_id
+    WHERE ips.ip IS NOT NULL
+      AND ips.name IS NOT NULL
   ");
 
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -57,6 +59,7 @@ function buildDnsmasqFiles(): array {
     $ip = (string)($row['ip'] ?? '');
     $router = (string)($row['router'] ?? '');
     $dns = (string)($row['dns'] ?? '');
+    $netboot = (string)($row['netboot_filename'] ?? '');
     $tag = hostTag($ip);
 
     $dnsHosts[] = trim($ip . ' ' . dnsNames($name));
@@ -69,6 +72,11 @@ function buildDnsmasqFiles(): array {
 
     if ($dns !== '')
       $dhcpOptions[] = "tag:$tag,option:dns-server," . preg_replace('/[ ;]+/', ',', $dns);
+
+    if ($netboot !== '') {
+      $dhcpOptions[] = "tag:$tag,option:tftp-server,$myself";
+      $dhcpOptions[] = "tag:$tag,option:bootfile-name,$netboot";
+    }
   }
 
   for ($i = 1; $i <= 255; $i++)

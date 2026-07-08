@@ -8,10 +8,12 @@ CREATE TABLE IF NOT EXISTS `ips` (
   `web` tinyint(4) DEFAULT NULL,
   `router` tinyint(4) unsigned DEFAULT NULL,
   `dns` varchar(50) DEFAULT NULL,
+  `netboot_image_id` int(10) unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`),
   UNIQUE KEY `mac` (`mac`),
-  UNIQUE KEY `ip` (`ip`)
+  UNIQUE KEY `ip` (`ip`),
+  KEY `ips_netboot_image_id` (`netboot_image_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `leases` (
@@ -96,12 +98,25 @@ CREATE TABLE IF NOT EXISTS `vendors` (
   PRIMARY KEY (`mac`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+CREATE TABLE IF NOT EXISTS `netboot_images` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `filename` varchar(255) NOT NULL,
+  `original_name` varchar(255) DEFAULT NULL,
+  `size` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `netboot_images_filename` (`filename`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
+
 CREATE INDEX IF NOT EXISTS `leases_ip` ON `leases` (`ip`);
 CREATE INDEX IF NOT EXISTS `leases_hardware_ethernet` ON `leases` (`hardware-ethernet`);
 CREATE INDEX IF NOT EXISTS `leases_ends` ON `leases` (`ends`);
 CREATE INDEX IF NOT EXISTS `ping_mac` ON `ping` (`mac`);
 CREATE INDEX IF NOT EXISTS `range_ip_begin` ON `range` (`ip_begin`);
 CREATE INDEX IF NOT EXISTS `stats_ip_date_begin` ON `stats` (`ip`, `date_begin`);
+ALTER TABLE `ips` ADD COLUMN IF NOT EXISTS `netboot_image_id` int(10) unsigned DEFAULT NULL AFTER `dns`;
+CREATE INDEX IF NOT EXISTS `ips_netboot_image_id` ON `ips` (`netboot_image_id`);
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `xml_hash` char(64) DEFAULT NULL AFTER `xml`;
 CREATE INDEX IF NOT EXISTS `scans_ip_id` ON `scans` (`ip`, `id`);
 CREATE INDEX IF NOT EXISTS `scans_ip_xml_hash_id` ON `scans` (`ip`, `xml_hash`, `id`);

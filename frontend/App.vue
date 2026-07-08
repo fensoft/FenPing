@@ -9,7 +9,7 @@
         <div class="toolbar">
           <button
             class="btn btn-outline-secondary icon-btn"
-            :class="{ active: !isNotifyPage }"
+            :class="{ active: isInventoryPage }"
             type="button"
             title="Inventory"
             @click="navigate('/')"
@@ -24,6 +24,15 @@
             @click="navigate('/notify')"
           >
             <i class="ti ti-bell"></i>
+          </button>
+          <button
+            class="btn btn-outline-secondary icon-btn"
+            :class="{ active: isNetbootPage }"
+            type="button"
+            title="Netboot images"
+            @click="navigate('/netboot-images')"
+          >
+            <i class="ti ti-server"></i>
           </button>
           <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">
             {{ isAuthenticated ? 'Admin' : 'Guest' }}
@@ -48,10 +57,10 @@
           </button>
           <button
             class="btn btn-outline-primary icon-btn refresh-btn"
-            :class="{ 'is-spinning': scanning || notifyLoading, 'is-pulsing': refreshPulsing }"
+            :class="{ 'is-spinning': scanning || notifyLoading || netbootLoading, 'is-pulsing': refreshPulsing }"
             type="button"
-            :title="isNotifyPage ? 'Refresh notifications' : (isAuthenticated ? 'Refresh' : 'Login to refresh')"
-            :disabled="!isNotifyPage && !isAuthenticated"
+            :title="refreshTitle"
+            :disabled="refreshDisabled"
             @click="requestRefresh"
           >
             <i class="ti ti-refresh"></i>
@@ -146,6 +155,83 @@
             </tbody>
           </table>
         </div>
+      </template>
+
+      <template v-else-if="isNetbootPage">
+        <div v-if="netbootError" class="alert alert-danger mb-3" role="alert">{{ netbootError }}</div>
+
+        <div class="netboot-header">
+          <div>
+            <h2>Netboot Images</h2>
+            <div class="text-secondary small">Boot files served from /netboot</div>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="netbootLoading || !isAuthenticated" @click="loadNetbootImages">
+            <i class="ti ti-refresh me-1" :class="{ 'is-spinning': netbootLoading }"></i>
+            Refresh
+          </button>
+        </div>
+
+        <div v-if="!isAuthenticated" class="alert alert-info" role="alert">
+          Guest mode is read only.
+          <button class="btn btn-link p-0 ms-1" type="button" @click="openLogin">Login</button>
+        </div>
+
+        <template v-else>
+          <form class="netboot-upload" @submit.prevent="uploadNetbootImage">
+            <label class="form-label netboot-name-field">
+              Name
+              <input v-model.trim="netbootUpload.name" class="form-control form-control-sm" type="text" placeholder="Optional display name" />
+            </label>
+            <label class="form-label netboot-file-field">
+              File
+              <input ref="netbootFileInput" class="form-control form-control-sm" type="file" @change="onNetbootFile" />
+            </label>
+            <button class="btn btn-primary btn-sm" type="submit" :disabled="netbootUploading">
+              <i class="ti ti-upload me-1" :class="{ 'is-spinning': netbootUploading }"></i>
+              Upload
+            </button>
+          </form>
+
+          <div class="table-wrap">
+            <table class="table table-sm netboot-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>File</th>
+                  <th>Size</th>
+                  <th>Hosts</th>
+                  <th>Created</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="netbootLoading && netbootImages.length === 0">
+                  <td class="text-secondary text-center py-4" colspan="6">Loading</td>
+                </tr>
+                <tr v-else-if="!netbootLoading && netbootImages.length === 0">
+                  <td class="text-secondary text-center py-4" colspan="6">No images</td>
+                </tr>
+                <tr v-for="image in netbootImages" :key="image.id">
+                  <td class="text-truncate-cell" :title="image.name">
+                    <strong>{{ image.name }}</strong>
+                    <small v-if="image.original_name && image.original_name !== image.name" class="text-secondary">{{ image.original_name }}</small>
+                  </td>
+                  <td class="text-truncate-cell font-monospace" :title="image.filename">
+                    <a :href="image.url" target="_blank" rel="noopener noreferrer">{{ image.filename }}</a>
+                  </td>
+                  <td>{{ formatBytes(image.size) }}</td>
+                  <td>{{ image.hosts || 0 }}</td>
+                  <td class="text-nowrap">{{ image.created_at }}</td>
+                  <td class="text-end">
+                    <button class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete image" :disabled="netbootLoading" @click="deleteNetbootImage(image)">
+                      <i class="ti ti-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
       </template>
 
       <div v-else class="table-wrap">
@@ -393,6 +479,15 @@
                 <label class="form-label field-wide">
                   DNS
                   <input v-model.trim="modal.form.dns" class="form-control" name="dns" type="text" />
+                </label>
+                <label class="form-label field-wide">
+                  Netboot image
+                  <select v-model="modal.form.netboot_image_id" class="form-select" name="netboot_image_id">
+                    <option value="">None</option>
+                    <option v-for="image in netbootImages" :key="image.id" :value="String(image.id)">
+                      {{ image.name }} ({{ image.filename }})
+                    </option>
+                  </select>
                 </label>
                 <div class="modal-switch-grid field-wide">
                   <label class="form-check form-switch">
@@ -700,6 +795,12 @@ const inventoryError = ref('');
 const notify = ref({ hours: 24, summary: {}, changes: [] });
 const notifyLoading = ref(false);
 const notifyError = ref('');
+const netbootImages = ref([]);
+const netbootLoading = ref(false);
+const netbootUploading = ref(false);
+const netbootError = ref('');
+const netbootUpload = ref({ name: '', file: null });
+const netbootFileInput = ref(null);
 const notice = ref('');
 const scanning = ref(false);
 const scanningHosts = ref(new Set());
@@ -726,6 +827,8 @@ const collapsedCategories = ref(new Set(readJsonStorage('fenping_collapsed_categ
 
 const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
 const isNotifyPage = computed(() => routePath.value === '/notify');
+const isNetbootPage = computed(() => routePath.value === '/netboot-images');
+const isInventoryPage = computed(() => !isNotifyPage.value && !isNetbootPage.value);
 const notifyChanges = computed(() => notify.value?.changes || []);
 const notifySummary = computed(() => notify.value?.summary || {});
 const notifyStatusCounts = computed(() => {
@@ -737,10 +840,22 @@ const notifyStatusCounts = computed(() => {
 
 const refreshLabel = computed(() => {
   if (isNotifyPage.value) return notifyLoading.value ? 'Loading' : 'Notify';
+  if (isNetbootPage.value) return netbootLoading.value ? 'Loading' : 'Netboot';
   if (!isAuthenticated.value) return 'Read only';
   if (scanning.value && refreshQueued.value) return 'Queued';
   if (scanning.value) return 'Scanning';
   return 'Ready';
+});
+
+const refreshTitle = computed(() => {
+  if (isNotifyPage.value) return 'Refresh notifications';
+  if (isNetbootPage.value) return isAuthenticated.value ? 'Refresh netboot images' : 'Login to refresh';
+  return isAuthenticated.value ? 'Refresh' : 'Login to refresh';
+});
+
+const refreshDisabled = computed(() => {
+  if (isNotifyPage.value) return false;
+  return !isAuthenticated.value;
 });
 
 const modalTitle = computed(() => {
@@ -868,11 +983,15 @@ onUnmounted(() => {
 });
 
 function currentRoutePath() {
-  return window.location.pathname === '/notify' ? '/notify' : '/';
+  if (window.location.pathname === '/notify')
+    return '/notify';
+  if (window.location.pathname === '/netboot-images')
+    return '/netboot-images';
+  return '/';
 }
 
 function navigate(path) {
-  const next = path === '/notify' ? '/notify' : '/';
+  const next = path === '/notify' || path === '/netboot-images' ? path : '/';
   if (routePath.value === next)
     return;
 
@@ -889,6 +1008,12 @@ function handleRouteChange() {
 async function loadCurrentView(options = {}) {
   if (isNotifyPage.value) {
     await loadNotify();
+    return;
+  }
+
+  if (isNetbootPage.value) {
+    if (isAuthenticated.value)
+      await loadNetbootImages();
     return;
   }
 
@@ -976,7 +1101,7 @@ async function apiJson(path, options = {}) {
     ...(options.headers || {})
   };
 
-  if (options.body && !headers['Content-Type']) {
+  if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -1040,6 +1165,7 @@ async function logout() {
   authLoading.value = true;
   try {
     auth.value = await apiJson('/api/auth/logout', { method: 'POST' }) || { authenticated: false, configured: auth.value.configured };
+    netbootImages.value = [];
     notice.value = 'Logged out';
   } catch (error) {
     inventoryError.value = error.message;
@@ -1083,11 +1209,106 @@ async function loadNotify() {
   }
 }
 
+async function loadNetbootImages() {
+  if (!isAuthenticated.value) {
+    netbootImages.value = [];
+    return;
+  }
+
+  netbootLoading.value = true;
+  netbootError.value = '';
+  inventoryError.value = '';
+
+  try {
+    const data = await apiJson('/api/netboot/images');
+    netbootImages.value = data?.images || [];
+  } catch (error) {
+    netbootError.value = error.message;
+  } finally {
+    netbootLoading.value = false;
+  }
+}
+
+function onNetbootFile(event) {
+  netbootUpload.value.file = event.target.files?.[0] || null;
+}
+
+async function uploadNetbootImage() {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
+  if (!netbootUpload.value.file) {
+    netbootError.value = 'Choose a file to upload';
+    return;
+  }
+
+  netbootUploading.value = true;
+  netbootError.value = '';
+  clearMessages();
+
+  try {
+    const body = new FormData();
+    body.append('file', netbootUpload.value.file);
+    body.append('name', netbootUpload.value.name || '');
+    await apiJson('/api/netboot/images', {
+      method: 'POST',
+      body
+    });
+    notice.value = 'Image uploaded';
+    netbootUpload.value = { name: '', file: null };
+    if (netbootFileInput.value)
+      netbootFileInput.value.value = '';
+    await loadNetbootImages();
+  } catch (error) {
+    netbootError.value = error.message;
+  } finally {
+    netbootUploading.value = false;
+  }
+}
+
+async function deleteNetbootImage(image) {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
+  const label = image?.name || image?.filename || 'this image';
+  if (!window.confirm(`Delete ${label}?`))
+    return;
+
+  netbootLoading.value = true;
+  netbootError.value = '';
+  clearMessages();
+
+  try {
+    await apiJson(`/api/netboot/images/${encodeURIComponent(image.id)}`, {
+      method: 'DELETE'
+    });
+    notice.value = 'Image deleted';
+    await loadNetbootImages();
+  } catch (error) {
+    netbootError.value = error.message;
+  } finally {
+    netbootLoading.value = false;
+  }
+}
+
 function requestRefresh() {
   pulseRefresh();
 
   if (isNotifyPage.value) {
     loadNotify();
+    return;
+  }
+
+  if (isNetbootPage.value) {
+    if (!isAuthenticated.value) {
+      openLogin();
+      return;
+    }
+    loadNetbootImages();
     return;
   }
 
@@ -1339,6 +1560,22 @@ function formatDuration(value) {
   return parts.slice(0, 2).join(' ');
 }
 
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (bytes < 1024)
+    return `${bytes} B`;
+
+  const units = ['KB', 'MB', 'GB'];
+  let size = bytes / 1024;
+  let unit = units[0];
+  for (let i = 1; i < units.length && size >= 1024; i++) {
+    size = size / 1024;
+    unit = units[i];
+  }
+
+  return `${size >= 10 ? Math.round(size) : size.toFixed(1)} ${unit}`;
+}
+
 function formatScanDuration(value) {
   if (value === null || value === undefined || value === '')
     return '-';
@@ -1389,7 +1626,8 @@ function hostForm(data) {
     important: toFlag(data.important),
     repeater: toFlag(data.repeater),
     dns: data.dns || '',
-    web: toFlag(data.web)
+    web: toFlag(data.web),
+    netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : ''
   };
 }
 
@@ -1436,7 +1674,10 @@ async function openEdit(host) {
   modal.value = { type: 'loading' };
 
   try {
-    const data = await apiJson(`/api/hosts/${encodeURIComponent(host.id)}`);
+    const [data] = await Promise.all([
+      apiJson(`/api/hosts/${encodeURIComponent(host.id)}`),
+      loadNetbootImages()
+    ]);
     if (!data) throw new Error('Host not found');
     modal.value = {
       type: 'edit',
@@ -1654,7 +1895,8 @@ async function submitEdit() {
         important: form.important ? 1 : null,
         repeater: form.repeater ? 1 : null,
         dns: form.dns,
-        web: form.web ? 1 : null
+        web: form.web ? 1 : null,
+        netboot_image_id: form.netboot_image_id || null
       })
     });
     notice.value = 'Saved';

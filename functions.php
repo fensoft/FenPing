@@ -259,10 +259,10 @@ function create($ip, $mac) {
   return getDb()->lastInsertId();
 }
 
-function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns) {
+function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId = null) {
   $mac = strtolower(str_replace("-", ":", (string)$mac));
-  $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns WHERE id=:id");
-  if (!$stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "id" => $id)))
+  $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns, netboot_image_id=:netboot_image_id WHERE id=:id");
+  if (!$stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "netboot_image_id" => $netbootImageId, "id" => $id)))
     print_r($stmt->errorInfo());
 }
 
@@ -376,6 +376,127 @@ function get_notify($hours = 24) {
     ),
     "changes" => $changes
   );
+}
+
+function get_netboot_images() {
+  $stmt = getDb()->prepare("
+    SELECT id, name, filename, original_name, size, created_at,
+      (SELECT COUNT(*) FROM ips WHERE ips.netboot_image_id=netboot_images.id) AS hosts
+    FROM netboot_images
+    ORDER BY created_at DESC, id DESC
+  ");
+  $stmt->execute();
+
+  $images = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $row["id"] = (int)$row["id"];
+    $row["size"] = (int)$row["size"];
+    $row["hosts"] = (int)$row["hosts"];
+    $row["url"] = "/netboot/" . rawurlencode($row["filename"]);
+    $images[] = $row;
+  }
+  return $images;
+}
+
+function create_netboot_image(array $file, string $name = "") {
+  if (($file["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK)
+    throw new RuntimeException(netboot_upload_error((int)($file["error"] ?? UPLOAD_ERR_NO_FILE)));
+
+  $tmp = (string)($file["tmp_name"] ?? "");
+  if ($tmp === "" || !is_uploaded_file($tmp))
+    throw new RuntimeException("invalid upload");
+
+  ensure_netboot_dir();
+  $original = basename((string)($file["name"] ?? "netboot.img"));
+  $displayName = trim($name) !== "" ? trim($name) : $original;
+  $filename = unique_netboot_filename($original);
+  $target = netboot_dir() . "/" . $filename;
+
+  if (!move_uploaded_file($tmp, $target))
+    throw new RuntimeException("failed to save upload");
+
+  chmod($target, 0644);
+  $stmt = getDb()->prepare("
+    INSERT INTO netboot_images (name, filename, original_name, size)
+    VALUES (:name, :filename, :original_name, :size)
+  ");
+  $stmt->execute(array(
+    "name" => $displayName,
+    "filename" => $filename,
+    "original_name" => $original,
+    "size" => (int)($file["size"] ?? filesize($target))
+  ));
+
+  return get_netboot_image((int)getDb()->lastInsertId());
+}
+
+function delete_netboot_image(int $id): void {
+  $image = get_netboot_image($id);
+  if ($image === false)
+    throw new InvalidArgumentException("netboot image not found");
+
+  $stmt = getDb()->prepare("UPDATE ips SET netboot_image_id=NULL WHERE netboot_image_id=:id");
+  $stmt->execute(array("id" => $id));
+
+  $stmt = getDb()->prepare("DELETE FROM netboot_images WHERE id=:id");
+  $stmt->execute(array("id" => $id));
+
+  $path = netboot_dir() . "/" . basename($image["filename"]);
+  if (is_file($path))
+    @unlink($path);
+}
+
+function get_netboot_image(int $id) {
+  $stmt = getDb()->prepare("SELECT id, name, filename, original_name, size, created_at FROM netboot_images WHERE id=:id");
+  $stmt->execute(array("id" => $id));
+  $image = $stmt->fetch(PDO::FETCH_ASSOC);
+  if ($image === false)
+    return false;
+  $image["id"] = (int)$image["id"];
+  $image["size"] = (int)$image["size"];
+  $image["url"] = "/netboot/" . rawurlencode($image["filename"]);
+  return $image;
+}
+
+function netboot_image_exists($id): bool {
+  if ($id === null)
+    return true;
+  return get_netboot_image((int)$id) !== false;
+}
+
+function netboot_dir(): string {
+  return __DIR__ . "/netboot";
+}
+
+function ensure_netboot_dir(): void {
+  $dir = netboot_dir();
+  if (!is_dir($dir) && !mkdir($dir, 0755, true))
+    throw new RuntimeException("failed to create netboot directory");
+  if (!is_writable($dir))
+    throw new RuntimeException("netboot directory is not writable");
+}
+
+function unique_netboot_filename(string $original): string {
+  $safe = preg_replace('/[^A-Za-z0-9._-]+/', '-', basename($original));
+  $safe = trim($safe, '.-');
+  if ($safe === '')
+    $safe = 'image.bin';
+
+  $prefix = date('YmdHis') . '-' . bin2hex(random_bytes(4));
+  return $prefix . '-' . $safe;
+}
+
+function netboot_upload_error(int $code): string {
+  $errors = array(
+    UPLOAD_ERR_INI_SIZE => "upload is too large",
+    UPLOAD_ERR_FORM_SIZE => "upload is too large",
+    UPLOAD_ERR_PARTIAL => "upload was incomplete",
+    UPLOAD_ERR_NO_FILE => "no file uploaded",
+    UPLOAD_ERR_NO_TMP_DIR => "missing upload temp directory",
+    UPLOAD_ERR_CANT_WRITE => "failed to write upload",
+    UPLOAD_ERR_EXTENSION => "upload blocked by extension"
+  );
+  return $errors[$code] ?? "upload failed";
 }
 
 function get_history($ip, $blipSeconds = 120) {

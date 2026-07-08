@@ -133,6 +133,62 @@ body {
   line-height: 1.15;
 }
 
+.netboot-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+}
+
+.netboot-header h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.netboot-upload {
+  align-items: end;
+  border: 1px solid #dce1e7;
+  border-radius: 6px;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(10rem, 16rem) minmax(14rem, 1fr) auto;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem;
+}
+
+.netboot-upload .form-label {
+  margin: 0;
+}
+
+.netboot-table {
+  margin: 0;
+  table-layout: fixed;
+}
+
+.netboot-table th,
+.netboot-table td {
+  line-height: 1.15;
+  padding: 0.3rem 0.45rem;
+  vertical-align: middle;
+}
+
+.netboot-table th {
+  background: #f0f3f7;
+  color: #2f3b4a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.netboot-table small {
+  display: block;
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .inventory-table {
   border-collapse: collapse;
   border-spacing: 0 !important;
@@ -675,7 +731,16 @@ html[data-bs-theme='dark'] .notify-host span {
   color: #9aa8ba;
 }
 
+html[data-bs-theme='dark'] .netboot-upload {
+  border-color: #273444;
+}
+
 html[data-bs-theme='dark'] .notify-table th {
+  background: #202c3a;
+  color: #d7dee8;
+}
+
+html[data-bs-theme='dark'] .netboot-table th {
   background: #202c3a;
   color: #d7dee8;
 }
@@ -785,6 +850,16 @@ html[data-bs-theme='dark'] .scan-state-filtered {
   .filter-count {
     margin-left: 0;
     width: 100%;
+  }
+
+  .netboot-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .netboot-upload {
+    grid-template-columns: 1fr;
   }
 
   .modal-body-grid {
