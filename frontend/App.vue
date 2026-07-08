@@ -57,9 +57,6 @@
             <i class="ti ti-refresh"></i>
           </button>
           <span class="text-secondary small">{{ refreshLabel }}</span>
-          <button v-if="!isNotifyPage && isAuthenticated" class="btn btn-primary icon-btn" type="button" title="Add category" @click="openAddCategory">
-            <i class="ti ti-folder-plus"></i>
-          </button>
         </div>
       </div>
     </header>
@@ -207,7 +204,17 @@
               <th scope="col">MAC</th>
               <th scope="col">Vendor</th>
               <th scope="col">IP</th>
-              <th scope="col">&nbsp;</th>
+              <th scope="col" class="text-end">
+                <button
+                  v-if="isAuthenticated"
+                  class="btn btn-outline-primary btn-sm icon-btn"
+                  type="button"
+                  title="Add category"
+                  @click="openAddCategory"
+                >
+                  <i class="ti ti-folder-plus"></i>
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
