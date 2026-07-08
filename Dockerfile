@@ -18,7 +18,7 @@ COPY --from=frontend /app/dist/ /var/www/html/
 COPY .htaccess /var/www/html/.htaccess
 COPY routes /var/www/html/routes/
 COPY res/xsl /var/www/html/res/xsl/
-COPY favicon.ico favicon-32x32.png functions.php api.php auth.php cli.php database.php hosts.php health.php scans.php inventory.php dnsmasq.conf.template ping.php config.php.template dnsmasq.leases.php db.sql /var/www/html/
+COPY favicon.ico favicon-32x32.png functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php scans.php inventory.php dnsmasq.conf.template ping.php config.php.template dnsmasq.leases.php db.sql /var/www/html/
 RUN mkdir -p /var/lib/mysql /var/www/html/netboot && chown -R www-data:www-data /var/www/html && chown -R mysql:mysql /var/lib/mysql
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php hosts' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php ping' >> /etc/sudoers

@@ -17,3 +17,4 @@ $interface = fenping_env('IFACE', fenping_env('INTERFACE', fenping_env('HOST_INT
 $myself = fenping_env('ME', fenping_env('IP', '192.168.0.100'));
 $password = fenping_env('PASSWORD', '');
 $secret = fenping_env('SECRET', 'token');
+$discord_webhook_url = fenping_env('DISCORD_WEBHOOK_URL', '');

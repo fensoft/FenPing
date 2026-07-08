@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/discord.php';
 require_once __DIR__ . '/ping.php';
 require_once __DIR__ . '/hosts.php';
 require_once __DIR__ . '/scans.php';
@@ -19,9 +20,14 @@ if ($command === 'inventory') {
   exit(runInventoryCommand(array_slice($argv, 2)));
 }
 
+if ($command === 'discord-restart') {
+  exit(runDiscordRestartCommand());
+}
+
 fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
 fwrite(STDERR, "       php cli.php inventory [--quick] [1-254|IPv4]" . PHP_EOL);
+fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
 exit(2);
 
 function runPingCommand($args) {
@@ -46,15 +52,25 @@ function runPingCommand($args) {
   for ($i = $from; $i <= $to; $i++)
     $targets[$i] = $network . "." . $i;
 
+  $notifyAfterId = discordNotificationsEnabled() ? statsMaxId() : null;
   $hosts = pingHosts($targets, $interface ?? '', array_filter(array_unique(array(
     getenv('IP') ?: '',
     $myself ?? ''
   ))));
+  sendDiscordStatusChangesSince($notifyAfterId);
 
   if ($debug) {
     foreach ($hosts as $host)
       echo $host["ip"] . " " . $host["status"] . PHP_EOL;
   }
 
+  return 0;
+}
+
+function runDiscordRestartCommand() {
+  if (sendDiscordRestartNotification())
+    echo "discord restart notification sent" . PHP_EOL;
+  else
+    echo "discord restart notification skipped" . PHP_EOL;
   return 0;
 }

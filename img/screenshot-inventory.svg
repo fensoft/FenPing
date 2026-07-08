@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="FenPing inventory screenshot">
+  <rect width="1280" height="720" fill="#111820"/>
+  <rect x="0" y="0" width="1280" height="68" fill="#182433"/>
+  <text x="48" y="31" fill="#f8fafc" font-family="Arial, sans-serif" font-size="23" font-weight="700">FenPing</text>
+  <text x="48" y="52" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14">10.10.10</text>
+  <rect x="742" y="18" width="34" height="34" rx="6" fill="#1f2d3d" stroke="#41536a"/>
+  <text x="755" y="41" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="17">L</text>
+  <rect x="784" y="18" width="34" height="34" rx="6" fill="#1f2d3d" stroke="#41536a"/>
+  <text x="796" y="41" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="17">B</text>
+  <rect x="826" y="18" width="34" height="34" rx="6" fill="#1f2d3d" stroke="#41536a"/>
+  <text x="838" y="41" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="17">S</text>
+  <rect x="878" y="18" width="72" height="34" rx="17" fill="#143a2a"/>
+  <text x="895" y="40" fill="#86efac" font-family="Arial, sans-serif" font-size="14" font-weight="700">Admin</text>
+  <rect x="966" y="18" width="92" height="34" rx="6" fill="#1e3a8a"/>
+  <text x="991" y="40" fill="#dbeafe" font-family="Arial, sans-serif" font-size="14" font-weight="700">Logout</text>
+  <rect x="1070" y="18" width="34" height="34" rx="6" fill="#1f2d3d" stroke="#41536a"/>
+  <text x="1082" y="41" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="17">D</text>
+  <rect x="1114" y="18" width="34" height="34" rx="6" fill="#1d4ed8"/>
+  <text x="1126" y="41" fill="#dbeafe" font-family="Arial, sans-serif" font-size="17">R</text>
+  <text x="1158" y="40" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14">Ready</text>
+
+  <rect x="48" y="96" width="1184" height="536" rx="8" fill="#17212d" stroke="#334155"/>
+  <rect x="64" y="112" width="420" height="42" rx="6" fill="#0f172a" stroke="#334155"/>
+  <text x="93" y="139" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="15">Search</text>
+  <rect x="520" y="120" width="36" height="22" rx="11" fill="#1e293b"/>
+  <circle cx="532" cy="131" r="8" fill="#64748b"/>
+  <text x="566" y="137" fill="#f8fafc" font-family="Arial, sans-serif" font-size="15" font-weight="700">Down</text>
+  <rect x="640" y="120" width="36" height="22" rx="11" fill="#1e293b"/>
+  <circle cx="652" cy="131" r="8" fill="#64748b"/>
+  <text x="686" y="137" fill="#f8fafc" font-family="Arial, sans-serif" font-size="15" font-weight="700">Important</text>
+  <text x="1138" y="139" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14">6/6</text>
+
+  <rect x="48" y="170" width="1184" height="31" fill="#233044"/>
+  <text x="82" y="192" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="13" font-weight="700">-</text>
+  <text x="258" y="192" fill="#f8fafc" font-family="Arial, sans-serif" font-size="13" font-weight="700">NAME</text>
+  <text x="682" y="192" fill="#f8fafc" font-family="Arial, sans-serif" font-size="13" font-weight="700">MAC</text>
+  <text x="904" y="192" fill="#f8fafc" font-family="Arial, sans-serif" font-size="13" font-weight="700">VENDOR</text>
+  <text x="1122" y="192" fill="#f8fafc" font-family="Arial, sans-serif" font-size="13" font-weight="700">IP</text>
+
+  <rect x="48" y="201" width="1184" height="31" fill="#26364d"/>
+  <text x="82" y="222" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="13">-</text>
+  <text x="258" y="222" fill="#f8fafc" font-family="Arial, sans-serif" font-size="16" font-weight="700">Infrastructure</text>
+
+  <g font-family="Arial, sans-serif" font-size="15">
+    <rect x="48" y="232" width="1184" height="35" fill="#17212d"/>
+    <circle cx="82" cy="249" r="13" fill="#16a34a"/><text x="78" y="254" fill="#fff" font-size="15">v</text>
+    <rect x="104" y="237" width="54" height="23" rx="12" fill="#dcfce7"/><text x="114" y="254" fill="#15803d" font-size="13" font-weight="700">100%</text>
+    <text x="258" y="254" fill="#f8fafc" font-weight="700">gateway</text>
+    <text x="682" y="254" fill="#f8fafc" font-family="monospace">00:e0:4d:6c:ad:09</text>
+    <text x="904" y="254" fill="#cbd5e1">INTERNET INITIATIVE</text>
+    <text x="1122" y="254" fill="#cbd5e1" font-family="monospace">10.10.10.1</text>
+
+    <rect x="48" y="267" width="1184" height="35" fill="#3e2428"/>
+    <circle cx="82" cy="284" r="13" fill="#dc2626"/><text x="78" y="289" fill="#fff" font-size="15">x</text>
+    <rect x="104" y="272" width="48" height="23" rx="12" fill="#fee2e2"/><text x="116" y="289" fill="#dc2626" font-size="13" font-weight="700">0%</text>
+    <text x="258" y="289" fill="#60a5fa">camera-east</text>
+    <text x="682" y="289" fill="#f8fafc" font-family="monospace">aa:bb:cc:dd:ee:ff</text>
+    <text x="904" y="289" fill="#cbd5e1">Unknown</text>
+    <text x="1122" y="289" fill="#cbd5e1" font-family="monospace">10.10.10.44</text>
+
+    <rect x="48" y="302" width="1184" height="31" fill="#26364d"/>
+    <text x="82" y="323" fill="#cbd5e1" font-size="13">-</text>
+    <text x="258" y="323" fill="#f8fafc" font-weight="700">Office</text>
+
+    <rect x="48" y="333" width="1184" height="35" fill="#17212d"/>
+    <circle cx="82" cy="350" r="13" fill="#16a34a"/><text x="78" y="355" fill="#fff" font-size="15">v</text>
+    <rect x="104" y="338" width="48" height="23" rx="12" fill="#fee2e2"/><text x="116" y="355" fill="#dc2626" font-size="13" font-weight="700">95%</text>
+    <text x="166" y="355" fill="#94a3b8">wifi</text>
+    <text x="258" y="355" fill="#f8fafc">laptop</text>
+    <text x="682" y="355" fill="#f8fafc" font-family="monospace">a8:5a:f3:28:a1:f5</text>
+    <text x="904" y="355" fill="#cbd5e1">Intel Corporate</text>
+    <text x="1122" y="355" fill="#cbd5e1" font-family="monospace">10.10.10.23</text>
+
+    <rect x="48" y="368" width="1184" height="35" fill="#17212d"/>
+    <circle cx="82" cy="385" r="13" fill="#2563eb"/><text x="75" y="390" fill="#fff" font-size="13">arp</text>
+    <text x="258" y="390" fill="#f8fafc">tablet</text>
+    <text x="682" y="390" fill="#f8fafc" font-family="monospace">10:22:33:44:55:66</text>
+    <text x="904" y="390" fill="#cbd5e1">Apple</text>
+    <text x="1122" y="390" fill="#cbd5e1" font-family="monospace">10.10.10.32</text>
+  </g>
+</svg>

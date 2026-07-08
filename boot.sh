@@ -49,6 +49,7 @@ export IFACE
 export ME
 export PASSWORD
 export SECRET
+export DISCORD_WEBHOOK_URL
 mkdir -p /etc/dnsmasq.d
 cp dnsmasq.conf.template /etc/dnsmasq.d/fenping.conf
 for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sort -r -n -s | cut -d" " -f2-` IFACE ME; do
@@ -75,12 +76,14 @@ DB_NAME=$DB_NAME
 NETWORK=$NETWORK
 IFACE=$IFACE
 ME=$ME
+DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
 
 0 * * * * root flock -n /tmp/inv.lck -c "php /var/www/html/cli.php inventory"
 */15 * * * * root flock -n /tmp/ping.lck -c "php /var/www/html/cli.php ping"
 * * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /var/www/html/dnsmasq.leases.php"
 EOF
 chmod 0644 /etc/cron.d/fenping
+php /var/www/html/cli.php discord-restart || true
 php /var/www/html/cli.php hosts
 cron
 exec apachectl -D FOREGROUND
