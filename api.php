@@ -8,6 +8,7 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/health.php';
 require_once __DIR__ . '/scans.php';
 
 set_exception_handler(function (Throwable $e): void {
@@ -19,6 +20,10 @@ $segments = routeSegments();
 
 if (count($segments) === 0) {
   jsonError(404, 'not found');
+}
+
+if ($method === 'GET' && $segments === array('health')) {
+  jsonResponse(getHealth());
 }
 
 if ($method === 'GET' && $segments === array('inventory')) {
