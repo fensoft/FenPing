@@ -106,6 +106,13 @@ ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `xml_hash` char(64) DEFAULT NULL AF
 CREATE INDEX IF NOT EXISTS `scans_ip_id` ON `scans` (`ip`, `id`);
 CREATE INDEX IF NOT EXISTS `scans_ip_xml_hash_id` ON `scans` (`ip`, `xml_hash`, `id`);
 
+UPDATE scans
+SET state='cancelled',
+    date_end=COALESCE(date_end, CURRENT_TIMESTAMP),
+    duration=COALESCE(duration, IF(date_begin IS NULL, 0, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP)))),
+    error=COALESCE(NULLIF(error, ''), 'cancelled at boot')
+WHERE state='running';
+
 UPDATE ping SET status='Down' WHERE status IS NULL OR status='';
 UPDATE stats SET status='Down' WHERE status IS NULL OR status='';
 

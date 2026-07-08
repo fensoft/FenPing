@@ -184,8 +184,9 @@ function getInventory() {
     $data["vendor"] = "";
     $data["vendor"] = getVendor($mac);
     if ($ip != "" && isset($stats[$ip])) {
-      $data["stats"] = $stats[$ip];
-      $data["stats2"] = count(get_history($ip));
+      $historyCount = count(get_history($ip));
+      $data["stats"] = $historyCount;
+      $data["stats2"] = $historyCount;
     }
     if ($ip != "" && file_exists(__DIR__ . "/nmap/" . $ip . ".xml")) {
       $data["xml"] = $ip;
@@ -271,7 +272,19 @@ function del($id) {
 }
 
 function get_stats() {
-  $stmt = getDb()->prepare("select ip, count(ip) as cnt from stats where date_begin > date_sub(now(), interval 1 day) and nb_scan > 10 group by ip");
+  $stmt = getDb()->prepare("
+    select s.ip, count(s.ip) as cnt
+    from stats s
+    inner join (
+      select ip, max(id) as latest_id
+      from stats
+      group by ip
+    ) latest on latest.ip=s.ip
+    where s.date_end > date_sub(now(), interval 7 day)
+      and (s.nb_scan > 10 or s.id=latest.latest_id)
+    group by s.ip
+    having cnt > 1
+  ");
   $stmt->execute();
   $arr = array();
   while ($i = $stmt->fetch(PDO::FETCH_ASSOC))
@@ -286,16 +299,25 @@ function temps($val) {
     return intval($val / 60) . " m";
   if ($val < 60 * 60 * 24)
     return intval($val / (60 * 60)) . " h";
-  return intval($val / (60 * 60 * 24)) . " j";
+  return intval($val / (60 * 60 * 24)) . " d";
 }
 
 function get_history($ip, $regroup = 10) {
   $stmt = getDb()->prepare("select *, UNIX_TIMESTAMP(date_begin) as `begin`, UNIX_TIMESTAMP(date_end) as `end`, UNIX_TIMESTAMP(date_end)-UNIX_TIMESTAMP(date_begin) as duration from stats where ip=:ip and date_end > date_sub(now(), interval 7 day) order by id asc");
   $stmt->execute(array("ip" => $ip));
   $before = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  if (count($before) > 0) {
+    $now = time();
+    $lastIndex = count($before) - 1;
+    $before[$lastIndex]["end"] = $now;
+    $before[$lastIndex]["date_end"] = date("Y-m-d H:i:s", $now);
+    $before[$lastIndex]["duration"] = max(0, $now - (int)$before[$lastIndex]["begin"]);
+    $before[$lastIndex]["current"] = 1;
+  }
   $after = array();
-  foreach ($before as $i) {
-    if ($i["nb_scan"] >= $regroup) {
+  $lastIndex = count($before) - 1;
+  foreach ($before as $index => $i) {
+    if ($i["nb_scan"] >= $regroup || $index === $lastIndex) {
       $index = count($after)-1;
       if ($index >= 0 && $after[$index]["status"] == $i["status"]) {
         $after[$index]["date_end"] = $i["date_end"];

@@ -1016,9 +1016,17 @@ function formatMac(mac) {
 function formatDuration(value) {
   const seconds = Number(value || 0);
   if (seconds < 60) return `${seconds} s`;
-  if (seconds < 60 * 60) return `${Math.floor(seconds / 60)} m`;
-  if (seconds < 60 * 60 * 24) return `${Math.floor(seconds / (60 * 60))} h`;
-  return `${Math.floor(seconds / (60 * 60 * 24))} j`;
+
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const parts = [];
+
+  if (days > 0) parts.push(`${days} d`);
+  if (hours % 24 > 0) parts.push(`${hours % 24} h`);
+  if (minutes % 60 > 0 || parts.length === 0) parts.push(`${minutes % 60} m`);
+
+  return parts.join(' ');
 }
 
 function formatScanDuration(value) {
