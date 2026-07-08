@@ -87,6 +87,52 @@ body {
   white-space: nowrap;
 }
 
+.notify-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+}
+
+.notify-header h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.notify-summary {
+  border: 1px solid #dce1e7;
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.notify-summary-item {
+  border-right: 1px solid #dce1e7;
+  min-width: 6.25rem;
+  padding: 0.45rem 0.65rem;
+}
+
+.notify-summary-item:last-child {
+  border-right: 0;
+}
+
+.notify-summary-item span {
+  color: #667085;
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.notify-summary-item strong {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
 .inventory-table {
   border-collapse: collapse;
   border-spacing: 0 !important;
@@ -309,11 +355,64 @@ body {
   width: 1rem;
 }
 
+.notify-table {
+  margin: 0;
+}
+
+.notify-table th,
+.notify-table td {
+  line-height: 1.15;
+  padding: 0.28rem 0.45rem;
+  vertical-align: middle;
+}
+
+.notify-table th {
+  background: #f0f3f7;
+  color: #2f3b4a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.notify-time,
+.notify-duration {
+  white-space: nowrap;
+}
+
+.notify-time small,
+.notify-host span {
+  color: #667085;
+  display: block;
+  font-size: 0.75rem;
+}
+
+.notify-host-name {
+  font-weight: 700;
+  line-height: 1.1;
+  max-width: 18rem;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.notify-change {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
 .refresh-btn .ti {
   transform-origin: center;
 }
 
 .refresh-btn.is-spinning .ti {
+  animation: spin 0.8s linear infinite;
+}
+
+.ti.is-spinning {
   animation: spin 0.8s linear infinite;
 }
 
@@ -560,6 +659,25 @@ html[data-bs-theme='dark'] .table-wrap {
 
 html[data-bs-theme='dark'] .table-toolbar {
   border-bottom-color: #273444;
+}
+
+html[data-bs-theme='dark'] .notify-summary {
+  border-color: #273444;
+}
+
+html[data-bs-theme='dark'] .notify-summary-item {
+  border-right-color: #273444;
+}
+
+html[data-bs-theme='dark'] .notify-summary-item span,
+html[data-bs-theme='dark'] .notify-time small,
+html[data-bs-theme='dark'] .notify-host span {
+  color: #9aa8ba;
+}
+
+html[data-bs-theme='dark'] .notify-table th {
+  background: #202c3a;
+  color: #d7dee8;
 }
 
 html[data-bs-theme='dark'] .inventory-table th {

@@ -4,6 +4,7 @@ JSON='Content-Type: application/json'
 COOKIE=/tmp/fenping-cookie.txt
 echo inventory: `curl -s -w "%{http_code}" "${SITE}/api/inventory" -o /tmp/fenping-inventory.json`
 echo inventory bytes: `wc -c < /tmp/fenping-inventory.json`
+echo notify: `curl -s -w "%{http_code}" "${SITE}/api/notify" -o /tmp/fenping-notify.json`
 echo login: `curl -s -w "%{http_code}" -c "$COOKIE" -X POST -H "$JSON" -d "{\"password\":\"$PASS\"}" "${SITE}/api/auth/login" -o /tmp/fenping-login.json`
 echo refresh: `curl -s -w "%{http_code}" -b "$COOKIE" -X POST "${SITE}/api/ping/refresh" -o /tmp/fenping-refresh.json`
 echo bad category: `curl -s -w "%{http_code}" -X POST -H "$JSON" -d '{"ip":"10.68.69.2","name":"a","password":"bad"}' "${SITE}/api/categories"`

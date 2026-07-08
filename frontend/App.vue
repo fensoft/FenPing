@@ -7,6 +7,24 @@
           <div class="text-secondary small">{{ network || 'Network' }}</div>
         </div>
         <div class="toolbar">
+          <button
+            class="btn btn-outline-secondary icon-btn"
+            :class="{ active: !isNotifyPage }"
+            type="button"
+            title="Inventory"
+            @click="navigate('/')"
+          >
+            <i class="ti ti-list-details"></i>
+          </button>
+          <button
+            class="btn btn-outline-secondary icon-btn"
+            :class="{ active: isNotifyPage }"
+            type="button"
+            title="Notify"
+            @click="navigate('/notify')"
+          >
+            <i class="ti ti-bell"></i>
+          </button>
           <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">
             {{ isAuthenticated ? 'Admin' : 'Guest' }}
           </span>
@@ -30,16 +48,16 @@
           </button>
           <button
             class="btn btn-outline-primary icon-btn refresh-btn"
-            :class="{ 'is-spinning': scanning, 'is-pulsing': refreshPulsing }"
+            :class="{ 'is-spinning': scanning || notifyLoading, 'is-pulsing': refreshPulsing }"
             type="button"
-            :title="isAuthenticated ? 'Refresh' : 'Login to refresh'"
-            :disabled="!isAuthenticated"
+            :title="isNotifyPage ? 'Refresh notifications' : (isAuthenticated ? 'Refresh' : 'Login to refresh')"
+            :disabled="!isNotifyPage && !isAuthenticated"
             @click="requestRefresh"
           >
             <i class="ti ti-refresh"></i>
           </button>
           <span class="text-secondary small">{{ refreshLabel }}</span>
-          <button v-if="isAuthenticated" class="btn btn-primary icon-btn" type="button" title="Add category" @click="openAddCategory">
+          <button v-if="!isNotifyPage && isAuthenticated" class="btn btn-primary icon-btn" type="button" title="Add category" @click="openAddCategory">
             <i class="ti ti-folder-plus"></i>
           </button>
         </div>
@@ -50,7 +68,90 @@
       <div v-if="inventoryError" class="alert alert-danger mb-3" role="alert">{{ inventoryError }}</div>
       <div v-if="notice" class="alert alert-success mb-3" role="alert">{{ notice }}</div>
 
-      <div class="table-wrap">
+      <template v-if="isNotifyPage">
+        <div v-if="notifyError" class="alert alert-danger mb-3" role="alert">{{ notifyError }}</div>
+
+        <div class="notify-header">
+          <div>
+            <h2>Notify</h2>
+            <div class="text-secondary small">Last {{ notify.hours || 24 }}h of status changes</div>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="notifyLoading" @click="loadNotify">
+            <i class="ti ti-refresh me-1" :class="{ 'is-spinning': notifyLoading }"></i>
+            Refresh
+          </button>
+        </div>
+
+        <div class="notify-summary">
+          <div class="notify-summary-item">
+            <span>Total</span>
+            <strong>{{ notifySummary.total || 0 }}</strong>
+          </div>
+          <div class="notify-summary-item">
+            <span>Hosts</span>
+            <strong>{{ notifySummary.hosts || 0 }}</strong>
+          </div>
+          <div v-for="item in notifyStatusCounts" :key="item.status" class="notify-summary-item">
+            <span>{{ item.status || 'Unknown' }}</span>
+            <strong>{{ item.count }}</strong>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table table-sm notify-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Host</th>
+                <th>Change</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="notifyLoading && notifyChanges.length === 0">
+                <td class="text-secondary text-center py-4" colspan="4">Loading</td>
+              </tr>
+              <tr v-else-if="!notifyLoading && notifyChanges.length === 0">
+                <td class="text-secondary text-center py-4" colspan="4">No changes in the last {{ notify.hours || 24 }}h</td>
+              </tr>
+              <tr v-for="change in notifyChanges" :key="change.id" :class="{ 'important-down': change.important == 1 && change.status !== 'Up' }">
+                <td class="notify-time">
+                  <span>{{ formatNotifyDate(change.date_begin) }}</span>
+                  <small>{{ formatRelativeAge(change.begin) }}</small>
+                </td>
+                <td class="notify-host">
+                  <button class="btn btn-link btn-sm p-0 notify-host-name" type="button" @click="openHistory(change.ip)">
+                    {{ notifyHostName(change) }}
+                  </button>
+                  <span class="font-monospace">{{ change.ip }}</span>
+                  <span class="font-monospace text-secondary">{{ formatMac(change.mac) }}</span>
+                </td>
+                <td>
+                  <div class="notify-change">
+                    <span v-if="change.previous_status" :class="statusClass(change.previous_status)" :title="statusTitle(change.previous_status)">
+                      <i :class="statusIcon(change.previous_status)"></i>
+                    </span>
+                    <span v-else class="status-pill status-unknown" title="new">
+                      <i class="ti ti-point"></i>
+                    </span>
+                    <i class="ti ti-arrow-right text-secondary"></i>
+                    <span :class="statusClass(change.status)" :title="statusTitle(change.status)">
+                      <i :class="statusIcon(change.status)"></i>
+                    </span>
+                    <strong>{{ change.status || 'Unknown' }}</strong>
+                  </div>
+                </td>
+                <td class="notify-duration">
+                  {{ formatDuration(change.duration) }}
+                  <span v-if="change.current == 1" class="badge bg-blue-lt text-blue ms-1">current</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <div v-else class="table-wrap">
         <div class="table-toolbar">
           <div class="input-icon filter-search">
             <span class="input-icon-addon">
@@ -583,12 +684,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const network = ref('');
 const hosts = ref([]);
 const inventoryLoading = ref(false);
 const inventoryError = ref('');
+const notify = ref({ hours: 24, summary: {}, changes: [] });
+const notifyLoading = ref(false);
+const notifyError = ref('');
 const notice = ref('');
 const scanning = ref(false);
 const scanningHosts = ref(new Set());
@@ -600,6 +704,7 @@ const saving = ref(false);
 const auth = ref({ authenticated: false, configured: false });
 const authLoading = ref(false);
 const darkMode = ref(readCookie('fenping_theme') === 'dark');
+const routePath = ref(currentRoutePath());
 const filterDefaults = {
   search: '',
   onlyDown: false,
@@ -613,8 +718,18 @@ const filters = ref({
 const collapsedCategories = ref(new Set(readJsonStorage('fenping_collapsed_categories', [])));
 
 const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
+const isNotifyPage = computed(() => routePath.value === '/notify');
+const notifyChanges = computed(() => notify.value?.changes || []);
+const notifySummary = computed(() => notify.value?.summary || {});
+const notifyStatusCounts = computed(() => {
+  const counts = notifySummary.value.status_counts || {};
+  return Object.keys(counts)
+    .sort((a, b) => String(a).localeCompare(String(b)))
+    .map((status) => ({ status, count: counts[status] }));
+});
 
 const refreshLabel = computed(() => {
+  if (isNotifyPage.value) return notifyLoading.value ? 'Loading' : 'Notify';
   if (!isAuthenticated.value) return 'Read only';
   if (scanning.value && refreshQueued.value) return 'Queued';
   if (scanning.value) return 'Scanning';
@@ -736,11 +851,44 @@ function closeAllCategories() {
 
 onMounted(async () => {
   applyTheme();
+  window.addEventListener('popstate', handleRouteChange);
   await loadSession();
-  await loadInventory();
-  if (isAuthenticated.value)
-    refreshScan();
+  await loadCurrentView({ scan: true });
 });
+
+onUnmounted(() => {
+  window.removeEventListener('popstate', handleRouteChange);
+});
+
+function currentRoutePath() {
+  return window.location.pathname === '/notify' ? '/notify' : '/';
+}
+
+function navigate(path) {
+  const next = path === '/notify' ? '/notify' : '/';
+  if (routePath.value === next)
+    return;
+
+  window.history.pushState({}, '', next);
+  routePath.value = next;
+  loadCurrentView();
+}
+
+function handleRouteChange() {
+  routePath.value = currentRoutePath();
+  loadCurrentView();
+}
+
+async function loadCurrentView(options = {}) {
+  if (isNotifyPage.value) {
+    await loadNotify();
+    return;
+  }
+
+  await loadInventory();
+  if (options.scan && isAuthenticated.value)
+    refreshScan();
+}
 
 function toggleDarkMode() {
   darkMode.value = !darkMode.value;
@@ -876,8 +1024,7 @@ async function submitLogin() {
     }) || { authenticated: true, configured: auth.value.configured };
     notice.value = 'Logged in';
     closeModal();
-    await loadInventory();
-    refreshScan();
+    await loadCurrentView({ scan: true });
   });
 }
 
@@ -909,13 +1056,39 @@ async function loadInventory() {
   }
 }
 
+async function loadNotify() {
+  notifyLoading.value = true;
+  notifyError.value = '';
+  inventoryError.value = '';
+
+  try {
+    const data = await apiJson('/api/notify');
+    network.value = data.network || network.value || '';
+    notify.value = {
+      hours: data.hours || 24,
+      summary: data.summary || {},
+      changes: data.changes || []
+    };
+  } catch (error) {
+    notifyError.value = error.message;
+  } finally {
+    notifyLoading.value = false;
+  }
+}
+
 function requestRefresh() {
+  pulseRefresh();
+
+  if (isNotifyPage.value) {
+    loadNotify();
+    return;
+  }
+
   if (!isAuthenticated.value) {
     openLogin();
     return;
   }
 
-  pulseRefresh();
   if (scanning.value) {
     refreshQueued.value = true;
     return;
@@ -1169,8 +1342,24 @@ function formatScanDate(value) {
   return value || '-';
 }
 
+function formatNotifyDate(value) {
+  return value || '-';
+}
+
+function formatRelativeAge(value) {
+  const timestamp = Number(value || 0);
+  if (!timestamp)
+    return '';
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
+  return `${formatDuration(seconds)} ago`;
+}
+
 function formatPercent(value) {
   return `${Math.round(Number(value || 0))}%`;
+}
+
+function notifyHostName(change) {
+  return change?.name || change?.ip || formatMac(change?.mac) || 'Unknown';
 }
 
 function toShortIp(ip) {

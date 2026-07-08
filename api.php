@@ -50,6 +50,10 @@ if ($method === 'GET' && $segments === array('inventory')) {
   ));
 }
 
+if ($method === 'GET' && $segments === array('notify')) {
+  jsonResponse(get_notify());
+}
+
 if ($method === 'POST' && $segments === array('ping', 'refresh')) {
   requireAuth();
   refreshPing();

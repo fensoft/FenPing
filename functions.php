@@ -302,6 +302,82 @@ function get_history_response($ip) {
   );
 }
 
+function get_notify($hours = 24) {
+  global $network;
+  $hours = max(1, min(168, (int)$hours));
+  $stmt = getDb()->prepare("
+    SELECT
+      s.id,
+      s.ip,
+      s.mac,
+      s.status,
+      s.date_begin,
+      s.date_end,
+      UNIX_TIMESTAMP(s.date_begin) AS `begin`,
+      UNIX_TIMESTAMP(CASE
+        WHEN s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip) THEN NOW()
+        ELSE COALESCE(s.date_end, NOW())
+      END) AS `end`,
+      GREATEST(0, UNIX_TIMESTAMP(CASE
+        WHEN s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip) THEN NOW()
+        ELSE COALESCE(s.date_end, NOW())
+      END) - UNIX_TIMESTAMP(s.date_begin)) AS duration,
+      IF(s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip), 1, 0) AS current,
+      (SELECT prev.status FROM stats prev WHERE prev.ip=s.ip AND prev.id<s.id ORDER BY prev.id DESC LIMIT 1) AS previous_status,
+      COALESCE((
+        SELECT i.name
+        FROM ips i
+        WHERE i.ip=s.ip OR LOWER(i.mac) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
+        ORDER BY IF(i.ip=s.ip, 0, 1), i.id DESC
+        LIMIT 1
+      ), '') AS name,
+      COALESCE((
+        SELECT i.important
+        FROM ips i
+        WHERE i.ip=s.ip OR LOWER(i.mac) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
+        ORDER BY IF(i.ip=s.ip, 0, 1), i.id DESC
+        LIMIT 1
+      ), 0) AS important
+    FROM stats s
+    WHERE s.ip IS NOT NULL
+      AND s.ip<>''
+      AND s.date_begin >= DATE_SUB(NOW(), INTERVAL $hours HOUR)
+      AND EXISTS (SELECT 1 FROM stats prev_exists WHERE prev_exists.ip=s.ip AND prev_exists.id<s.id)
+    ORDER BY s.date_begin DESC, s.id DESC
+  ");
+  $stmt->execute();
+
+  $changes = array();
+  $statusCounts = array();
+  $hosts = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $status = (string)($row["status"] ?? "");
+    $ip = (string)($row["ip"] ?? "");
+    $statusCounts[$status] = ($statusCounts[$status] ?? 0) + 1;
+    if ($ip !== "")
+      $hosts[$ip] = true;
+
+    $row["id"] = (int)$row["id"];
+    $row["duration"] = (int)$row["duration"];
+    $row["current"] = (int)$row["current"];
+    $row["important"] = (int)$row["important"];
+    $row["previous_status"] = ($row["previous_status"] ?? "") === "" ? null : $row["previous_status"];
+    $changes[] = $row;
+  }
+
+  return array(
+    "network" => $network,
+    "since" => date("Y-m-d H:i:s", time() - $hours * 60 * 60),
+    "hours" => $hours,
+    "summary" => array(
+      "total" => count($changes),
+      "hosts" => count($hosts),
+      "status_counts" => $statusCounts
+    ),
+    "changes" => $changes
+  );
+}
+
 function get_history($ip, $blipSeconds = 120) {
   $stmt = getDb()->prepare("select *, UNIX_TIMESTAMP(date_begin) as `begin`, UNIX_TIMESTAMP(date_end) as `end`, UNIX_TIMESTAMP(date_end)-UNIX_TIMESTAMP(date_begin) as duration from stats where ip=:ip and date_end > date_sub(now(), interval 7 day) order by id asc");
   $stmt->execute(array("ip" => $ip));
