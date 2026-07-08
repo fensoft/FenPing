@@ -282,22 +282,24 @@
                   Name
                   <input v-model.trim="modal.form.name" class="form-control" name="name" type="text" />
                 </label>
-                <label class="form-label">
+                <label class="form-label field-wide">
                   DNS
                   <input v-model.trim="modal.form.dns" class="form-control" name="dns" type="text" />
                 </label>
-                <label class="form-check form-switch">
-                  <input v-model="modal.form.important" class="form-check-input" type="checkbox" />
-                  <span class="form-check-label">Important</span>
-                </label>
-                <label class="form-check form-switch">
-                  <input v-model="modal.form.repeater" class="form-check-input" type="checkbox" />
-                  <span class="form-check-label">Router/repeater</span>
-                </label>
-                <label class="form-check form-switch">
-                  <input v-model="modal.form.web" class="form-check-input" type="checkbox" />
-                  <span class="form-check-label">Web</span>
-                </label>
+                <div class="modal-switch-grid field-wide">
+                  <label class="form-check form-switch">
+                    <input v-model="modal.form.important" class="form-check-input" type="checkbox" />
+                    <span class="form-check-label">Important</span>
+                  </label>
+                  <label class="form-check form-switch">
+                    <input v-model="modal.form.repeater" class="form-check-input" type="checkbox" />
+                    <span class="form-check-label">Router/repeater</span>
+                  </label>
+                  <label class="form-check form-switch">
+                    <input v-model="modal.form.web" class="form-check-input" type="checkbox" />
+                    <span class="form-check-label">Web</span>
+                  </label>
+                </div>
               </div>
             </div>
             <div class="modal-footer justify-content-between">
