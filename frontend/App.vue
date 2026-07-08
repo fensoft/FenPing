@@ -131,16 +131,15 @@
                 </td>
                 <td class="text-truncate-cell font-monospace" :title="row.host.ip || ''">
                   {{ row.host.ip }}
-                  <a
+                  <button
                     v-if="row.host.xml"
                     class="btn btn-outline-secondary btn-sm icon-btn ms-1"
-                    :href="scanUrl(row.host.ip)"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    type="button"
                     title="View scan XML"
+                    @click="openScan(row.host.ip)"
                   >
                     <i class="ti ti-file-search"></i>
-                  </a>
+                  </button>
                 </td>
                 <td class="text-end action-cell">
                   <button
@@ -181,7 +180,7 @@
     </main>
 
     <div v-if="modal" class="modal modal-blur show d-block" tabindex="-1" role="dialog" @click.self="closeModal">
-      <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+      <div class="modal-dialog modal-dialog-centered" :class="modalDialogClass" role="document">
         <div class="modal-content">
           <div class="modal-header">
             <h2 class="modal-title">{{ modalTitle }}</h2>
@@ -379,6 +378,108 @@
             </div>
           </div>
 
+          <div v-else-if="modal.type === 'scan'">
+            <div class="modal-body scan-body">
+              <div v-if="modalError" class="alert alert-danger">{{ modalError }}</div>
+              <div v-if="modal.loading" class="text-secondary py-4 text-center">Loading</div>
+
+              <template v-else-if="modal.scan">
+                <div class="scan-topline">
+                  <div>
+                    <div class="font-monospace scan-ip">{{ modal.ip }}</div>
+                    <div class="text-secondary small">{{ modal.scan.started || modal.scan.args }}</div>
+                  </div>
+                  <button class="btn btn-outline-secondary btn-sm" type="button" @click="toggleScanRaw">
+                    <i class="ti ti-code me-1"></i>
+                    XML
+                  </button>
+                </div>
+
+                <div class="scan-summary">
+                  <div class="scan-fact">
+                    <span>Status</span>
+                    <strong>{{ modal.scan.status || '-' }}</strong>
+                  </div>
+                  <div class="scan-fact">
+                    <span>Ports</span>
+                    <strong>{{ modal.scan.ports.length }}</strong>
+                  </div>
+                  <div class="scan-fact">
+                    <span>Hostnames</span>
+                    <strong>{{ modal.scan.hostnames.length }}</strong>
+                  </div>
+                </div>
+
+                <div class="scan-section" v-if="modal.scan.addresses.length">
+                  <h3>Addresses</h3>
+                  <table class="table table-sm scan-table">
+                    <tbody>
+                      <tr v-for="address in modal.scan.addresses" :key="`${address.type}-${address.addr}`">
+                        <td class="scan-type">{{ address.type }}</td>
+                        <td class="font-monospace">{{ address.addr }}</td>
+                        <td class="text-truncate-cell">{{ address.vendor }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="scan-section" v-if="modal.scan.hostnames.length">
+                  <h3>Hostnames</h3>
+                  <table class="table table-sm scan-table">
+                    <tbody>
+                      <tr v-for="hostname in modal.scan.hostnames" :key="`${hostname.name}-${hostname.type}`">
+                        <td>{{ hostname.name }}</td>
+                        <td class="scan-type">{{ hostname.type }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="scan-section" v-if="modal.scan.os.length">
+                  <h3>OS</h3>
+                  <table class="table table-sm scan-table">
+                    <tbody>
+                      <tr v-for="os in modal.scan.os" :key="os.name">
+                        <td>{{ os.name }}</td>
+                        <td class="scan-type">{{ os.accuracy }}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="scan-section">
+                  <h3>Ports</h3>
+                  <table v-if="modal.scan.ports.length" class="table table-sm scan-table">
+                    <thead>
+                      <tr>
+                        <th>Port</th>
+                        <th>State</th>
+                        <th>Service</th>
+                        <th>Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="port in modal.scan.ports" :key="`${port.protocol}-${port.port}`">
+                        <td class="font-monospace">{{ port.port }}/{{ port.protocol }}</td>
+                        <td>
+                          <span :class="scanStateClass(port.state)">{{ port.state || '-' }}</span>
+                        </td>
+                        <td>{{ port.service || '-' }}</td>
+                        <td class="text-truncate-cell" :title="port.details">{{ port.details }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-else class="text-secondary small">No ports found</div>
+                </div>
+
+                <pre v-if="modal.showRaw" class="scan-raw">{{ modal.raw }}</pre>
+              </template>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-primary" type="button" @click="closeModal">Close</button>
+            </div>
+          </div>
+
           <div v-else class="modal-body">
             <div class="text-secondary">Loading</div>
           </div>
@@ -421,9 +522,14 @@ const modalTitle = computed(() => {
     deleteHost: 'Delete host',
     deleteCategory: 'Delete category',
     history: `History ${modal.value.ip || ''}`,
+    scan: `Scan ${modal.value.ip || ''}`,
     loading: 'Loading'
   };
   return titles[modal.value.type] || '';
+});
+
+const modalDialogClass = computed(() => {
+  return modal.value?.type === 'scan' ? 'modal-xl scan-modal-dialog' : 'modal-lg';
 });
 
 const tableRows = computed(() => {
@@ -792,6 +898,129 @@ async function openHistory(ip) {
   } catch (error) {
     modalError.value = error.message;
   }
+}
+
+async function openScan(ip) {
+  if (!ip) return;
+  clearMessages();
+  modal.value = {
+    type: 'scan',
+    ip,
+    loading: true,
+    scan: null,
+    raw: '',
+    showRaw: false
+  };
+
+  try {
+    const raw = await apiText(scanUrl(ip));
+    const scan = parseScanXml(raw);
+    if (modal.value && modal.value.type === 'scan' && modal.value.ip === ip) {
+      modal.value.loading = false;
+      modal.value.raw = raw;
+      modal.value.scan = scan;
+    }
+  } catch (error) {
+    if (modal.value && modal.value.type === 'scan' && modal.value.ip === ip) {
+      modal.value.loading = false;
+      modalError.value = error.message;
+    }
+  }
+}
+
+async function apiText(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      Accept: 'application/xml,text/plain,application/json',
+      ...(options.headers || {})
+    }
+  });
+  const text = await response.text();
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const payload = JSON.parse(text);
+      if (payload && payload.error)
+        message = payload.error;
+    } catch {
+      if (text.trim() !== '')
+        message = text.trim();
+    }
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+
+  return text;
+}
+
+function parseScanXml(raw) {
+  const document = new DOMParser().parseFromString(raw, 'application/xml');
+  if (document.querySelector('parsererror'))
+    throw new Error('Invalid scan XML');
+
+  const nmap = document.querySelector('nmaprun');
+  const host = document.querySelector('host');
+  if (!host)
+    throw new Error('No host data in scan');
+
+  const status = host.querySelector('status');
+  const uptime = host.querySelector('uptime');
+
+  return {
+    args: xmlAttr(nmap, 'args'),
+    started: xmlAttr(nmap, 'startstr'),
+    status: xmlAttr(status, 'state'),
+    uptime: xmlAttr(uptime, 'lastboot'),
+    addresses: Array.from(host.querySelectorAll('address')).map((address) => ({
+      addr: xmlAttr(address, 'addr'),
+      type: xmlAttr(address, 'addrtype'),
+      vendor: xmlAttr(address, 'vendor')
+    })),
+    hostnames: Array.from(host.querySelectorAll('hostnames hostname')).map((hostname) => ({
+      name: xmlAttr(hostname, 'name'),
+      type: xmlAttr(hostname, 'type')
+    })),
+    os: Array.from(host.querySelectorAll('os osmatch')).slice(0, 5).map((os) => ({
+      name: xmlAttr(os, 'name'),
+      accuracy: xmlAttr(os, 'accuracy')
+    })),
+    ports: Array.from(host.querySelectorAll('ports port')).map(parseScanPort)
+  };
+}
+
+function parseScanPort(port) {
+  const state = port.querySelector('state');
+  const service = port.querySelector('service');
+  const details = [
+    xmlAttr(service, 'product'),
+    xmlAttr(service, 'version'),
+    xmlAttr(service, 'extrainfo')
+  ].filter(Boolean).join(' ');
+
+  return {
+    protocol: xmlAttr(port, 'protocol'),
+    port: xmlAttr(port, 'portid'),
+    state: xmlAttr(state, 'state'),
+    service: xmlAttr(service, 'name'),
+    details
+  };
+}
+
+function xmlAttr(node, name) {
+  return node ? node.getAttribute(name) || '' : '';
+}
+
+function scanStateClass(state) {
+  if (state === 'open') return 'scan-state scan-state-open';
+  if (state === 'closed') return 'scan-state scan-state-closed';
+  if (state === 'filtered') return 'scan-state scan-state-filtered';
+  return 'scan-state';
+}
+
+function toggleScanRaw() {
+  if (modal.value && modal.value.type === 'scan')
+    modal.value.showRaw = !modal.value.showRaw;
 }
 
 async function submitCreate() {
