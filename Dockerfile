@@ -16,6 +16,7 @@ RUN PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')" 
 RUN a2enmod rewrite && sed -ri 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf && echo 'ServerName 127.0.0.1' >> /etc/apache2/apache2.conf
 COPY --from=frontend /app/dist/ /var/www/html/
 COPY .htaccess /var/www/html/.htaccess
+COPY routes /var/www/html/routes/
 COPY res/xsl /var/www/html/res/xsl/
 COPY favicon.ico favicon-32x32.png functions.php api.php auth.php cli.php database.php hosts.php health.php scans.php inventory.php dnsmasq.conf.template ping.php config.php.template dnsmasq.leases.php db.sql /var/www/html/
 RUN mkdir -p /var/lib/mysql /var/www/html/netboot && chown -R www-data:www-data /var/www/html && chown -R mysql:mysql /var/lib/mysql

@@ -12,7 +12,7 @@
             :class="{ active: isInventoryPage }"
             type="button"
             title="Inventory"
-            @click="navigate('/')"
+            @click="navigate(appRoutes.inventory)"
           >
             <i class="ti ti-list-details"></i>
           </button>
@@ -21,7 +21,7 @@
             :class="{ active: isNotifyPage }"
             type="button"
             title="Notify"
-            @click="navigate('/notify')"
+            @click="navigate(appRoutes.notify)"
           >
             <i class="ti ti-bell"></i>
           </button>
@@ -30,7 +30,7 @@
             :class="{ active: isNetbootPage }"
             type="button"
             title="Netboot images"
-            @click="navigate('/netboot-images')"
+            @click="navigate(appRoutes.netboot)"
           >
             <i class="ti ti-server"></i>
           </button>
@@ -812,6 +812,12 @@ const saving = ref(false);
 const auth = ref({ authenticated: false, configured: false });
 const authLoading = ref(false);
 const darkMode = ref(readCookie('fenping_theme') === 'dark');
+const appRoutes = {
+  inventory: '/',
+  notify: '/notify',
+  netboot: '/netboot-images'
+};
+const appRoutePaths = new Set(Object.values(appRoutes));
 const routePath = ref(currentRoutePath());
 const filterDefaults = {
   search: '',
@@ -983,15 +989,11 @@ onUnmounted(() => {
 });
 
 function currentRoutePath() {
-  if (window.location.pathname === '/notify')
-    return '/notify';
-  if (window.location.pathname === '/netboot-images')
-    return '/netboot-images';
-  return '/';
+  return normalizeRoutePath(window.location.pathname);
 }
 
 function navigate(path) {
-  const next = path === '/notify' || path === '/netboot-images' ? path : '/';
+  const next = normalizeRoutePath(path);
   if (routePath.value === next)
     return;
 
@@ -1003,6 +1005,10 @@ function navigate(path) {
 function handleRouteChange() {
   routePath.value = currentRoutePath();
   loadCurrentView();
+}
+
+function normalizeRoutePath(path) {
+  return appRoutePaths.has(path) ? path : appRoutes.inventory;
 }
 
 async function loadCurrentView(options = {}) {
@@ -1357,13 +1363,13 @@ function pulseRefresh() {
 
 function scanUrl(ip, scanId = null) {
   if (scanId)
-    return `/api/scans/${encodeURIComponent(ip)}/${encodeURIComponent(scanId)}.xml`;
-  return `/api/scans/${encodeURIComponent(ip)}.xml`;
+    return `/api/scans/${encodeURIComponent(ip)}/history/${encodeURIComponent(scanId)}/xml`;
+  return `/api/scans/${encodeURIComponent(ip)}/xml`;
 }
 
 function scanJsonUrl(ip, scanId = null) {
   if (scanId)
-    return `/api/scans/${encodeURIComponent(ip)}/${encodeURIComponent(scanId)}`;
+    return `/api/scans/${encodeURIComponent(ip)}/history/${encodeURIComponent(scanId)}`;
   return `/api/scans/${encodeURIComponent(ip)}`;
 }
 

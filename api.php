@@ -11,176 +11,74 @@ require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/health.php';
 require_once __DIR__ . '/scans.php';
+require_once __DIR__ . '/routes/auth.php';
+require_once __DIR__ . '/routes/system.php';
+require_once __DIR__ . '/routes/hosts.php';
+require_once __DIR__ . '/routes/netboot.php';
+require_once __DIR__ . '/routes/scans.php';
 
 set_exception_handler(function (Throwable $e): void {
   jsonError(500, 'server error');
 });
 
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$segments = routeSegments();
+dispatchRequest();
 
-if (count($segments) === 0) {
+function dispatchRequest(): void {
+  $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+  $segments = routeSegments();
+
+  if (count($segments) === 0)
+    jsonError(404, 'not found');
+
+  $methodAllowed = false;
+  $invalidError = null;
+
+  foreach (apiRoutes() as $route) {
+    $match = matchRoutePath($route['pattern'], $segments);
+
+    if (!$match['matched']) {
+      if ($match['invalid'] && $route['method'] === $method && $invalidError === null)
+        $invalidError = $match['error'];
+      continue;
+    }
+
+    if ($route['method'] !== $method) {
+      $methodAllowed = true;
+      continue;
+    }
+
+    authorizeRoute($route);
+    $result = call_user_func($route['handler'], $match['params']);
+    jsonResponse($result);
+  }
+
+  if ($methodAllowed)
+    jsonError(405, 'method not allowed');
+
+  if ($invalidError !== null)
+    jsonError(400, $invalidError);
+
   jsonError(404, 'not found');
 }
 
-if ($method === 'GET' && $segments === array('health')) {
-  jsonResponse(getHealth());
-}
-
-if ($method === 'GET' && $segments === array('auth', 'session')) {
-  jsonResponse(authSession());
-}
-
-if ($method === 'POST' && $segments === array('auth', 'login')) {
-  $body = requestBody();
-  if (!authLogin($body['password'] ?? ''))
-    jsonError(403, 'wrong password');
-  jsonResponse(authSession());
-}
-
-if ($method === 'POST' && $segments === array('auth', 'logout')) {
-  authLogout();
-  jsonResponse(authGuestSession());
-}
-
-if ($method === 'GET' && $segments === array('inventory')) {
-  jsonResponse(array(
-    'network' => $GLOBALS['network'] ?? '',
-    'hosts' => getInventory()
-  ));
-}
-
-if ($method === 'GET' && $segments === array('notify')) {
-  jsonResponse(get_notify());
-}
-
-if ($method === 'GET' && $segments === array('netboot', 'images')) {
-  requireAuth();
-  jsonResponse(array('images' => get_netboot_images()));
-}
-
-if ($method === 'POST' && $segments === array('netboot', 'images')) {
-  requireAuth();
-  try {
-    jsonResponse(create_netboot_image($_FILES['file'] ?? array(), $_POST['name'] ?? ''));
-  } catch (RuntimeException $e) {
-    jsonError(400, $e->getMessage());
-  }
-}
-
-if ($method === 'DELETE' && count($segments) === 3 && $segments[0] === 'netboot' && $segments[1] === 'images') {
-  requireAuth();
-  $id = validateId($segments[2]);
-  try {
-    delete_netboot_image($id);
-  } catch (InvalidArgumentException $e) {
-    jsonError(404, $e->getMessage());
-  }
-  $log = reloadDhcpHosts();
-  jsonResponse(array('deleted' => true, 'log' => $log));
-}
-
-if ($method === 'POST' && $segments === array('ping', 'refresh')) {
-  requireAuth();
-  refreshPing();
-}
-
-if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'history') {
-  $ip = validateIp($segments[1]);
-  jsonResponse(get_history_response($ip));
-}
-
-if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'hosts') {
-  $id = validateId($segments[1]);
-  $host = getId($id);
-  if ($host === false)
-    jsonError(404, 'host not found');
-  jsonResponse($host);
-}
-
-if ($method === 'POST' && $segments === array('hosts')) {
-  $body = requestBody();
-  requireAuth($body);
-  $id = create(normalizeHostIp($body['ip'] ?? null), $body['mac'] ?? '');
-  jsonResponse(array('id' => (int)$id));
-}
-
-if ($method === 'PUT' && count($segments) === 2 && $segments[0] === 'hosts') {
-  $id = validateId($segments[1]);
-  $body = requestBody();
-  requireAuth($body);
-
-  edit(
-    $id,
-    normalizeHostIp($body['ip'] ?? null),
-    $body['mac'] ?? '',
-    $body['name'] ?? '',
-    toDbFlag($body['repeater'] ?? null),
-    toDbFlag($body['important'] ?? null),
-    toDbFlag($body['web'] ?? null),
-    normalizeEmpty($body['router'] ?? null),
-    normalizeEmpty($body['dns'] ?? null),
-    normalizeNetbootImageId($body['netboot_image_id'] ?? null)
+function apiRoutes(): array {
+  return array_merge(
+    authApiRoutes(),
+    systemApiRoutes(),
+    hostsApiRoutes(),
+    netbootApiRoutes(),
+    scansApiRoutes()
   );
-
-  $log = reloadDhcpHosts();
-  jsonResponse(array('log' => $log));
 }
 
-if ($method === 'DELETE' && count($segments) === 2 && $segments[0] === 'hosts') {
-  $id = validateId($segments[1]);
-  $body = requestBody();
-  requireAuth($body);
-  del($id);
-  jsonResponse(array('deleted' => true));
+function apiRoute(string $method, string $pattern, string $handler, $auth = false, array $options = array()): array {
+  return array_merge(array(
+    'method' => strtoupper($method),
+    'pattern' => $pattern,
+    'handler' => $handler,
+    'auth' => $auth
+  ), $options);
 }
-
-if ($method === 'POST' && $segments === array('categories')) {
-  $body = requestBody();
-  requireAuth($body);
-  addCategory($body['ip'] ?? '', $body['name'] ?? '');
-  jsonResponse(array('created' => true));
-}
-
-if ($method === 'DELETE' && $segments === array('categories')) {
-  $body = requestBody();
-  requireAuth($body);
-  delCategory($body['ip'] ?? '');
-  jsonResponse(array('deleted' => true));
-}
-
-if ($method === 'POST' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'quick') {
-  requireAuth();
-  $ip = validateIp($segments[1]);
-  quickScan($ip);
-}
-
-if ($method === 'GET' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'status') {
-  $ip = validateIp($segments[1]);
-  scanStatus($ip);
-}
-
-if ($method === 'GET' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'history') {
-  $ip = validateIp($segments[1]);
-  scanHistory($ip);
-}
-
-if ($method === 'GET' && count($segments) === 3 && $segments[0] === 'scans') {
-  $ip = validateIp($segments[1]);
-  if (preg_match('/^(\d+)\.xml$/', $segments[2], $matches))
-    streamScanById($ip, validateId($matches[1]));
-  elseif (ctype_digit($segments[2]))
-    scanJson($ip, validateId($segments[2]));
-}
-
-if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'scans') {
-  if (str_ends_with($segments[1], '.xml'))
-    streamScan($segments[1]);
-  else
-    scanJson(validateIp($segments[1]));
-}
-
-jsonError(404, 'not found');
 
 function routeSegments(): array {
   $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -199,16 +97,112 @@ function routeSegments(): array {
   return array_values(array_filter(explode('/', $path), fn($part) => $part !== ''));
 }
 
+function matchRoutePath(string $pattern, array $segments): array {
+  $pattern = trim($pattern, '/');
+  $parts = $pattern === '' ? array() : explode('/', $pattern);
+
+  if (count($parts) !== count($segments))
+    return routeNoMatch();
+
+  $params = array();
+  foreach ($parts as $index => $part) {
+    $segment = $segments[$index];
+    if (preg_match('/^\{([A-Za-z_][A-Za-z0-9_]*)(?::([A-Za-z][A-Za-z0-9_]*))?\}$/', $part, $matches)) {
+      $type = $matches[2] ?? 'string';
+      $converted = convertRouteParam($type, $segment);
+      if (!$converted['ok'])
+        return routeInvalid($converted['error']);
+      $params[$matches[1]] = $converted['value'];
+      continue;
+    }
+
+    if ($part !== $segment)
+      return routeNoMatch();
+  }
+
+  return array('matched' => true, 'invalid' => false, 'params' => $params, 'error' => null);
+}
+
+function routeNoMatch(): array {
+  return array('matched' => false, 'invalid' => false, 'params' => array(), 'error' => null);
+}
+
+function routeInvalid(string $error): array {
+  return array('matched' => false, 'invalid' => true, 'params' => array(), 'error' => $error);
+}
+
+function convertRouteParam(string $type, string $value): array {
+  if ($type === 'int') {
+    if (!ctype_digit($value))
+      return routeParamError('invalid id');
+    return routeParamValue((int)$value);
+  }
+
+  if ($type === 'ipv4') {
+    if (filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
+      return routeParamError('invalid ip');
+    return routeParamValue($value);
+  }
+
+  if ($type === 'scanXml') {
+    if (!preg_match('/^(\d{1,3}(?:\.\d{1,3}){3})\.xml$/', $value, $matches))
+      return routeParamError('invalid scan file');
+    if (filter_var($matches[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
+      return routeParamError('invalid ip');
+    return routeParamValue($value);
+  }
+
+  if ($type === 'scanIdXml') {
+    if (!preg_match('/^\d+\.xml$/', $value))
+      return routeParamError('invalid scan id');
+    return routeParamValue($value);
+  }
+
+  if ($value === '')
+    return routeParamError('invalid value');
+
+  return routeParamValue($value);
+}
+
+function routeParamValue($value): array {
+  return array('ok' => true, 'value' => $value, 'error' => null);
+}
+
+function routeParamError(string $error): array {
+  return array('ok' => false, 'value' => null, 'error' => $error);
+}
+
+function authorizeRoute(array $route): void {
+  $auth = $route['auth'] ?? false;
+  if ($auth === false)
+    return;
+
+  if ($auth === 'body') {
+    requireAuth(requestBody());
+    return;
+  }
+
+  requireAuth();
+}
+
 function requestBody(): array {
+  static $body = null;
+
+  if ($body !== null)
+    return $body;
+
   $raw = file_get_contents('php://input');
-  if ($raw === false || trim($raw) === '')
-    return $_POST;
+  if ($raw === false || trim($raw) === '') {
+    $body = $_POST;
+    return $body;
+  }
 
   $data = json_decode($raw, true);
   if (!is_array($data))
     jsonError(400, 'invalid json');
 
-  return $data;
+  $body = $data;
+  return $body;
 }
 
 function requireAuth(?array $body = null): void {
@@ -262,30 +256,6 @@ function normalizeNetbootImageId($value): ?int {
   return $id;
 }
 
-function validateId(string $value): int {
-  if (!ctype_digit($value))
-    jsonError(400, 'invalid id');
-  return (int)$value;
-}
-
-function validateIp(string $value): string {
-  if (filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
-    jsonError(400, 'invalid ip');
-  return $value;
-}
-
-function refreshPing(): void {
-  $command = 'flock -n /tmp/ping.lck -c ' . escapeshellarg('/usr/bin/sudo /usr/bin/php ' . __DIR__ . '/cli.php ping');
-  $output = array();
-  $code = 0;
-  exec($command . ' 2>&1', $output, $code);
-
-  if ($code !== 0)
-    jsonError(409, trim(implode("\n", $output)) ?: 'scan already running');
-
-  jsonResponse(array('status' => 'complete'));
-}
-
 function reloadDhcpHosts(): string {
   $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' hosts';
   $output = array();
@@ -294,83 +264,6 @@ function reloadDhcpHosts(): string {
   if ($code !== 0)
     jsonError(500, trim(implode("\n", $output)) ?: 'dhcp reload failed');
   return implode("\n", $output);
-}
-
-function quickScan(string $ip): void {
-  $lock = '/tmp/inv-' . preg_replace('/[^A-Za-z0-9_.-]/', '_', $ip) . '.lck';
-  $scan = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' inventory --quick ' . escapeshellarg($ip);
-  $command = 'flock -n ' . escapeshellarg($lock) . ' -c ' . escapeshellarg($scan);
-  $output = array();
-  $code = 0;
-  exec($command . ' 2>&1', $output, $code);
-
-  if ($code !== 0) {
-    $message = trim(implode("\n", $output));
-    jsonError($message === '' ? 409 : 500, $message ?: 'scan already running');
-  }
-
-  $log = implode("\n", $output);
-  jsonResponse(array(
-    'saved' => strpos("\n" . $log . "\n", "\n" . $ip . " saved\n") !== false,
-    'log' => $log,
-    'metadata' => scanMetadataLatest($ip),
-    'xml' => '/api/scans/' . rawurlencode($ip) . '.xml'
-  ));
-}
-
-function scanStatus(string $ip): void {
-  jsonResponse(scanMetadataLatest($ip) ?: array(
-    'ip' => $ip,
-    'state' => 'none',
-    'ports_count' => 0
-  ));
-}
-
-function scanHistory(string $ip): void {
-  jsonResponse(scanMetadataHistory($ip));
-}
-
-function scanJson(string $ip, ?int $id = null): void {
-  $metadata = $id === null ? scanMetadataLatest($ip) : scanMetadataById($ip, $id);
-  if ($id !== null && $metadata === null)
-    jsonError(404, 'scan not found');
-
-  $xml = scanReadXml($ip, $metadata);
-  if ($xml === null)
-    jsonError(404, 'scan not found');
-
-  $scan = scanParseXml($xml, $metadata ?: array('ip' => $ip));
-  if ($metadata === null)
-    $scan['metadata'] = null;
-  jsonResponse($scan);
-}
-
-function streamScan(string $file): void {
-  if (!preg_match('/^(\d{1,3}(?:\.\d{1,3}){3})\.xml$/', $file, $matches))
-    jsonError(404, 'scan not found');
-
-  $ip = validateIp($matches[1]);
-  $xml = scanReadXml($ip);
-  if ($xml === null)
-    jsonError(404, 'scan not found');
-
-  header('Content-Type: application/xml; charset=utf-8');
-  echo $xml;
-  exit;
-}
-
-function streamScanById(string $ip, int $id): void {
-  $metadata = scanMetadataById($ip, $id);
-  if ($metadata === null)
-    jsonError(404, 'scan not found');
-
-  $xml = scanReadXml($ip, $metadata);
-  if ($xml === null)
-    jsonError(404, 'scan not found');
-
-  header('Content-Type: application/xml; charset=utf-8');
-  echo $xml;
-  exit;
 }
 
 function jsonResponse($data, int $status = 200): void {
