@@ -6,6 +6,7 @@ ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/health.php';
@@ -26,6 +27,22 @@ if ($method === 'GET' && $segments === array('health')) {
   jsonResponse(getHealth());
 }
 
+if ($method === 'GET' && $segments === array('auth', 'session')) {
+  jsonResponse(authSession());
+}
+
+if ($method === 'POST' && $segments === array('auth', 'login')) {
+  $body = requestBody();
+  if (!authLogin($body['password'] ?? ''))
+    jsonError(403, 'wrong password');
+  jsonResponse(authSession());
+}
+
+if ($method === 'POST' && $segments === array('auth', 'logout')) {
+  authLogout();
+  jsonResponse(authGuestSession());
+}
+
 if ($method === 'GET' && $segments === array('inventory')) {
   jsonResponse(array(
     'network' => $GLOBALS['network'] ?? '',
@@ -34,6 +51,7 @@ if ($method === 'GET' && $segments === array('inventory')) {
 }
 
 if ($method === 'POST' && $segments === array('ping', 'refresh')) {
+  requireAuth();
   refreshPing();
 }
 
@@ -52,7 +70,7 @@ if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'hosts') {
 
 if ($method === 'POST' && $segments === array('hosts')) {
   $body = requestBody();
-  requirePassword($body);
+  requireAuth($body);
   $id = create(normalizeHostIp($body['ip'] ?? null), $body['mac'] ?? '');
   jsonResponse(array('id' => (int)$id));
 }
@@ -60,7 +78,7 @@ if ($method === 'POST' && $segments === array('hosts')) {
 if ($method === 'PUT' && count($segments) === 2 && $segments[0] === 'hosts') {
   $id = validateId($segments[1]);
   $body = requestBody();
-  requirePassword($body);
+  requireAuth($body);
 
   edit(
     $id,
@@ -81,26 +99,27 @@ if ($method === 'PUT' && count($segments) === 2 && $segments[0] === 'hosts') {
 if ($method === 'DELETE' && count($segments) === 2 && $segments[0] === 'hosts') {
   $id = validateId($segments[1]);
   $body = requestBody();
-  requirePassword($body);
+  requireAuth($body);
   del($id);
   jsonResponse(array('deleted' => true));
 }
 
 if ($method === 'POST' && $segments === array('categories')) {
   $body = requestBody();
-  requirePassword($body);
+  requireAuth($body);
   addCategory($body['ip'] ?? '', $body['name'] ?? '');
   jsonResponse(array('created' => true));
 }
 
 if ($method === 'DELETE' && $segments === array('categories')) {
   $body = requestBody();
-  requirePassword($body);
+  requireAuth($body);
   delCategory($body['ip'] ?? '');
   jsonResponse(array('deleted' => true));
 }
 
 if ($method === 'POST' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'quick') {
+  requireAuth();
   $ip = validateIp($segments[1]);
   quickScan($ip);
 }
@@ -161,11 +180,14 @@ function requestBody(): array {
   return $data;
 }
 
-function requirePassword(array $body): void {
-  $expected = (string)($GLOBALS['password'] ?? '');
-  $given = (string)($body['password'] ?? '');
-  if ($given !== $expected)
-    jsonError(403, 'wrong password');
+function requireAuth(?array $body = null): void {
+  if (authIsAuthenticated())
+    return;
+
+  if ($body !== null && array_key_exists('password', $body) && authLogin($body['password']))
+    return;
+
+  jsonError(403, 'login required');
 }
 
 function normalizeHostIp($ip): ?string {

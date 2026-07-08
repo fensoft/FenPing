@@ -1,12 +1,25 @@
 <template>
   <div class="app-shell">
     <header class="app-header py-2">
-      <div class="container-xl d-flex justify-content-between">
+      <div class="container-xl d-flex align-items-center justify-content-between gap-2">
         <div>
           <h1 class="app-title">FenPing</h1>
           <div class="text-secondary small">{{ network || 'Network' }}</div>
         </div>
         <div class="toolbar">
+          <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">
+            {{ isAuthenticated ? 'Admin' : 'Guest' }}
+          </span>
+          <button
+            class="btn btn-outline-primary auth-button"
+            type="button"
+            :disabled="authLoading"
+            :title="isAuthenticated ? 'Logout' : 'Login'"
+            @click="isAuthenticated ? logout() : openLogin()"
+          >
+            <i :class="isAuthenticated ? 'ti ti-logout' : 'ti ti-login'"></i>
+            <span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span>
+          </button>
           <button
             class="btn btn-outline-secondary icon-btn"
             type="button"
@@ -19,13 +32,14 @@
             class="btn btn-outline-primary icon-btn refresh-btn"
             :class="{ 'is-spinning': scanning, 'is-pulsing': refreshPulsing }"
             type="button"
-            title="Refresh"
+            :title="isAuthenticated ? 'Refresh' : 'Login to refresh'"
+            :disabled="!isAuthenticated"
             @click="requestRefresh"
           >
             <i class="ti ti-refresh"></i>
           </button>
           <span class="text-secondary small">{{ refreshLabel }}</span>
-          <button class="btn btn-primary icon-btn" type="button" title="Add category" @click="openAddCategory">
+          <button v-if="isAuthenticated" class="btn btn-primary icon-btn" type="button" title="Add category" @click="openAddCategory">
             <i class="ti ti-folder-plus"></i>
           </button>
         </div>
@@ -117,7 +131,7 @@
                 <td class="category-name" colspan="4">{{ row.name }}</td>
                 <td class="text-end">
                   <button
-                    v-if="row.categoryIp"
+                    v-if="isAuthenticated && row.categoryIp"
                     class="btn btn-outline-danger btn-sm icon-btn"
                     type="button"
                     title="Delete category"
@@ -172,7 +186,7 @@
                 </td>
                 <td class="text-end action-cell">
                   <button
-                    v-if="row.host.ip"
+                    v-if="isAuthenticated && row.host.ip"
                     class="btn btn-sm icon-btn"
                     :class="scanActionClass(row.host)"
                     type="button"
@@ -192,7 +206,7 @@
                     <i class="ti ti-file-search"></i>
                   </button>
                   <button
-                    v-if="row.host.id"
+                    v-if="isAuthenticated && row.host.id"
                     class="btn btn-outline-secondary btn-sm icon-btn"
                     type="button"
                     title="Edit host"
@@ -201,7 +215,7 @@
                     <i class="ti ti-edit"></i>
                   </button>
                   <button
-                    v-else-if="row.host.mac"
+                    v-else-if="isAuthenticated && row.host.mac"
                     class="btn btn-outline-primary btn-sm icon-btn"
                     type="button"
                     title="Create host"
@@ -225,7 +239,24 @@
             <button class="btn-close" type="button" aria-label="Close" @click="closeModal"></button>
           </div>
 
-          <form v-if="modal.type === 'edit'" @submit.prevent="submitEdit">
+          <form v-if="modal.type === 'login'" @submit.prevent="submitLogin">
+            <div class="modal-body">
+              <div v-if="modalError" class="alert alert-danger">{{ modalError }}</div>
+              <label class="form-label">
+                Password
+                <input v-model="modal.password" class="form-control" type="password" autocomplete="current-password" autofocus />
+              </label>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-link" type="button" @click="closeModal">Cancel</button>
+              <button class="btn btn-primary" type="submit" :disabled="saving">
+                <i class="ti ti-login me-1"></i>
+                Login
+              </button>
+            </div>
+          </form>
+
+          <form v-else-if="modal.type === 'edit'" @submit.prevent="submitEdit">
             <div class="modal-body">
               <div v-if="modalError" class="alert alert-danger">{{ modalError }}</div>
               <div class="modal-body-grid">
@@ -254,10 +285,6 @@
                 <label class="form-label">
                   DNS
                   <input v-model.trim="modal.form.dns" class="form-control" name="dns" type="text" />
-                </label>
-                <label class="form-label">
-                  Password
-                  <input v-model="modal.form.password" class="form-control" name="password" type="password" />
                 </label>
                 <label class="form-check form-switch">
                   <input v-model="modal.form.important" class="form-check-input" type="checkbox" />
@@ -303,10 +330,6 @@
                     <input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" />
                   </div>
                 </label>
-                <label class="form-label field-wide">
-                  Password
-                  <input v-model="modal.form.password" class="form-control" name="password" type="password" />
-                </label>
               </div>
             </div>
             <div class="modal-footer">
@@ -333,10 +356,6 @@
                   Name
                   <input v-model.trim="modal.form.name" class="form-control" name="name" type="text" />
                 </label>
-                <label class="form-label field-wide">
-                  Password
-                  <input v-model="modal.form.password" class="form-control" name="password" type="password" />
-                </label>
               </div>
             </div>
             <div class="modal-footer">
@@ -352,10 +371,6 @@
             <div class="modal-body">
               <div v-if="modalError" class="alert alert-danger">{{ modalError }}</div>
               <p class="mb-3">{{ modal.name || modal.mac || modal.id }}</p>
-              <label class="form-label">
-                Password
-                <input v-model="modal.password" class="form-control" type="password" />
-              </label>
             </div>
             <div class="modal-footer">
               <button class="btn btn-link" type="button" @click="closeModal">Cancel</button>
@@ -370,10 +385,6 @@
             <div class="modal-body">
               <div v-if="modalError" class="alert alert-danger">{{ modalError }}</div>
               <p class="mb-3">{{ modal.name || modal.ip }}</p>
-              <label class="form-label">
-                Password
-                <input v-model="modal.password" class="form-control" type="password" />
-              </label>
             </div>
             <div class="modal-footer">
               <button class="btn btn-link" type="button" @click="closeModal">Cancel</button>
@@ -584,6 +595,8 @@ const refreshPulsing = ref(false);
 const modal = ref(null);
 const modalError = ref('');
 const saving = ref(false);
+const auth = ref({ authenticated: false, configured: false });
+const authLoading = ref(false);
 const darkMode = ref(readCookie('fenping_theme') === 'dark');
 const filterDefaults = {
   search: '',
@@ -597,7 +610,10 @@ const filters = ref({
 });
 const collapsedCategories = ref(new Set(readJsonStorage('fenping_collapsed_categories', [])));
 
+const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
+
 const refreshLabel = computed(() => {
+  if (!isAuthenticated.value) return 'Read only';
   if (scanning.value && refreshQueued.value) return 'Queued';
   if (scanning.value) return 'Scanning';
   return 'Ready';
@@ -606,6 +622,7 @@ const refreshLabel = computed(() => {
 const modalTitle = computed(() => {
   if (!modal.value) return '';
   const titles = {
+    login: 'Login',
     edit: 'Edit host',
     create: 'Create host',
     category: 'Add category',
@@ -619,6 +636,7 @@ const modalTitle = computed(() => {
 });
 
 const modalDialogClass = computed(() => {
+  if (modal.value?.type === 'login') return 'modal-sm';
   return modal.value?.type === 'scan' ? 'modal-xl scan-modal-dialog' : 'modal-lg';
 });
 
@@ -714,10 +732,12 @@ function closeAllCategories() {
   collapsedCategories.value = next;
 }
 
-onMounted(() => {
+onMounted(async () => {
   applyTheme();
-  loadInventory();
-  refreshScan();
+  await loadSession();
+  await loadInventory();
+  if (isAuthenticated.value)
+    refreshScan();
 });
 
 function toggleDarkMode() {
@@ -805,6 +825,7 @@ async function apiJson(path, options = {}) {
 
   const response = await fetch(path, {
     ...options,
+    credentials: 'same-origin',
     headers
   });
   const text = await response.text();
@@ -826,6 +847,51 @@ async function apiJson(path, options = {}) {
   return payload;
 }
 
+async function loadSession() {
+  authLoading.value = true;
+  try {
+    auth.value = await apiJson('/api/auth/session') || { authenticated: false, configured: false };
+  } catch {
+    auth.value = { authenticated: false, configured: false };
+  } finally {
+    authLoading.value = false;
+  }
+}
+
+function openLogin() {
+  clearMessages();
+  modal.value = {
+    type: 'login',
+    password: ''
+  };
+}
+
+async function submitLogin() {
+  await saveModal(async () => {
+    auth.value = await apiJson('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password: modal.value.password })
+    }) || { authenticated: true, configured: auth.value.configured };
+    notice.value = 'Logged in';
+    closeModal();
+    await loadInventory();
+    refreshScan();
+  });
+}
+
+async function logout() {
+  clearMessages();
+  authLoading.value = true;
+  try {
+    auth.value = await apiJson('/api/auth/logout', { method: 'POST' }) || { authenticated: false, configured: auth.value.configured };
+    notice.value = 'Logged out';
+  } catch (error) {
+    inventoryError.value = error.message;
+  } finally {
+    authLoading.value = false;
+  }
+}
+
 async function loadInventory() {
   inventoryLoading.value = true;
   inventoryError.value = '';
@@ -842,6 +908,11 @@ async function loadInventory() {
 }
 
 function requestRefresh() {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
   pulseRefresh();
   if (scanning.value) {
     refreshQueued.value = true;
@@ -851,6 +922,9 @@ function requestRefresh() {
 }
 
 async function refreshScan() {
+  if (!isAuthenticated.value)
+    return;
+
   scanning.value = true;
   inventoryError.value = '';
 
@@ -943,6 +1017,11 @@ function setHostScanning(host, value) {
 }
 
 async function quickScanHost(host) {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
   if (!host?.ip || isHostScanning(host)) return;
   clearMessages();
   setHostScanning(host, true);
@@ -1112,36 +1191,48 @@ function hostForm(data) {
     important: toFlag(data.important),
     repeater: toFlag(data.repeater),
     dns: data.dns || '',
-    web: toFlag(data.web),
-    password: ''
+    web: toFlag(data.web)
   };
 }
 
 function openAddCategory() {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
   clearMessages();
   modal.value = {
     type: 'category',
     form: {
       ip: '',
-      name: '',
-      password: ''
+      name: ''
     }
   };
 }
 
 function openCreate(host) {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
   clearMessages();
   modal.value = {
     type: 'create',
     form: {
       mac: formatMac(host.mac),
-      ip: toShortIp(host.ip || ''),
-      password: ''
+      ip: toShortIp(host.ip || '')
     }
   };
 }
 
 async function openEdit(host) {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
   if (!host.id) return;
   clearMessages();
   modal.value = { type: 'loading' };
@@ -1160,23 +1251,31 @@ async function openEdit(host) {
 }
 
 function openDeleteHost(form) {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
   clearMessages();
   modal.value = {
     type: 'deleteHost',
     id: form.id,
     name: form.name,
-    mac: form.mac,
-    password: ''
+    mac: form.mac
   };
 }
 
 function openDeleteCategory(row) {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
   clearMessages();
   modal.value = {
     type: 'deleteCategory',
     name: row.name,
-    ip: row.categoryIp,
-    password: ''
+    ip: row.categoryIp
   };
 }
 
@@ -1265,6 +1364,7 @@ async function selectScanHistory(scanId) {
 async function apiText(path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    credentials: 'same-origin',
     headers: {
       Accept: 'application/xml,text/plain,application/json',
       ...(options.headers || {})
@@ -1330,8 +1430,7 @@ async function submitCreate() {
       method: 'POST',
       body: JSON.stringify({
         mac: form.mac,
-        ip: form.ip,
-        password: form.password
+        ip: form.ip
       })
     });
     notice.value = 'Created';
@@ -1357,8 +1456,7 @@ async function submitEdit() {
         important: form.important ? 1 : null,
         repeater: form.repeater ? 1 : null,
         dns: form.dns,
-        web: form.web ? 1 : null,
-        password: form.password
+        web: form.web ? 1 : null
       })
     });
     notice.value = 'Saved';
@@ -1370,8 +1468,7 @@ async function submitEdit() {
 async function submitDeleteHost() {
   await saveModal(async () => {
     await apiJson(`/api/hosts/${encodeURIComponent(modal.value.id)}`, {
-      method: 'DELETE',
-      body: JSON.stringify({ password: modal.value.password })
+      method: 'DELETE'
     });
     notice.value = 'Deleted';
     closeModal();
@@ -1386,8 +1483,7 @@ async function submitCategory() {
       method: 'POST',
       body: JSON.stringify({
         ip: form.ip,
-        name: form.name,
-        password: form.password
+        name: form.name
       })
     });
     notice.value = 'Category added';
@@ -1401,8 +1497,7 @@ async function submitDeleteCategory() {
     await apiJson('/api/categories', {
       method: 'DELETE',
       body: JSON.stringify({
-        ip: modal.value.ip,
-        password: modal.value.password
+        ip: modal.value.ip
       })
     });
     notice.value = 'Category deleted';
