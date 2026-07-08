@@ -16,11 +16,12 @@ RUN a2enmod rewrite && sed -ri 's/AllowOverride None/AllowOverride All/g' /etc/a
 COPY --from=frontend /app/dist/ /var/www/html/
 COPY .htaccess /var/www/html/.htaccess
 COPY res/xsl /var/www/html/res/xsl/
-COPY favicon.ico favicon-32x32.png functions.php api.php cli.php database.php hosts.php dnsmasq.conf.template ping.php config.php.template dnsmasq.leases.php network_inventory.sh db.sql /var/www/html/
+COPY favicon.ico favicon-32x32.png functions.php api.php cli.php database.php hosts.php inventory.php dnsmasq.conf.template ping.php config.php.template dnsmasq.leases.php db.sql /var/www/html/
 RUN mkdir -p /var/lib/mysql && chown -R www-data:www-data /var/www/html && chown -R mysql:mysql /var/lib/mysql
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php hosts' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php ping' >> /etc/sudoers
-RUN echo '0 * * * * root flock -n /tmp/inv.lck -c "/var/www/html/network_inventory.sh"\n*/15 * * * * root flock -n /tmp/ping.lck -c "php /var/www/html/cli.php ping"\n* * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /var/www/html/dnsmasq.leases.php"' >> /etc/crontab
+RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php inventory --quick *' >> /etc/sudoers
+RUN echo '0 * * * * root flock -n /tmp/inv.lck -c "php /var/www/html/cli.php inventory"\n*/15 * * * * root flock -n /tmp/ping.lck -c "php /var/www/html/cli.php ping"\n* * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /var/www/html/dnsmasq.leases.php"' >> /etc/crontab
 RUN mkdir -p /etc/dnsmasq.d /var/lib/misc && touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts /var/lib/misc/dnsmasq.leases
 COPY boot.sh /.boot
 EXPOSE 80

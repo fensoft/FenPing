@@ -93,6 +93,11 @@ if ($method === 'DELETE' && $segments === array('categories')) {
   jsonResponse(array('deleted' => true));
 }
 
+if ($method === 'POST' && count($segments) === 3 && $segments[0] === 'scans' && $segments[2] === 'quick') {
+  $ip = validateIp($segments[1]);
+  quickScan($ip);
+}
+
 if ($method === 'GET' && count($segments) === 2 && $segments[0] === 'scans') {
   streamScan($segments[1]);
 }
@@ -191,6 +196,27 @@ function reloadDhcpHosts(): string {
   return implode("\n", $output);
 }
 
+function quickScan(string $ip): void {
+  $lock = '/tmp/inv-' . preg_replace('/[^A-Za-z0-9_.-]/', '_', $ip) . '.lck';
+  $scan = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' inventory --quick ' . escapeshellarg($ip);
+  $command = 'flock -n ' . escapeshellarg($lock) . ' -c ' . escapeshellarg($scan);
+  $output = array();
+  $code = 0;
+  exec($command . ' 2>&1', $output, $code);
+
+  if ($code !== 0) {
+    $message = trim(implode("\n", $output));
+    jsonError($message === '' ? 409 : 500, $message ?: 'scan already running');
+  }
+
+  $log = implode("\n", $output);
+  jsonResponse(array(
+    'saved' => strpos("\n" . $log . "\n", "\n" . $ip . " saved\n") !== false,
+    'log' => $log,
+    'xml' => '/api/scans/' . rawurlencode($ip) . '.xml'
+  ));
+}
+
 function streamScan(string $file): void {
   if (!preg_match('/^(\d{1,3}(?:\.\d{1,3}){3})\.xml$/', $file, $matches))
     jsonError(404, 'scan not found');
@@ -200,8 +226,16 @@ function streamScan(string $file): void {
   if (!is_file($path) || !is_readable($path))
     jsonError(404, 'scan not found');
 
+  $xml = file_get_contents($path);
+  if ($xml === false)
+    jsonError(500, 'scan read failed');
+
   header('Content-Type: application/xml; charset=utf-8');
-  readfile($path);
+  echo str_replace(
+    array('href="../res/xsl/', 'href="file:///usr/bin/../share/nmap/'),
+    array('href="/res/xsl/', 'href="/res/xsl/'),
+    $xml
+  );
   exit;
 }
 

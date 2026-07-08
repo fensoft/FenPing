@@ -134,14 +134,26 @@
                   <a
                     v-if="row.host.xml"
                     class="btn btn-outline-secondary btn-sm icon-btn ms-1"
-                    :href="`/api/scans/${row.host.ip}.xml`"
+                    :href="scanUrl(row.host.ip)"
                     target="_blank"
-                    title="Scan"
+                    rel="noopener noreferrer"
+                    title="View scan XML"
                   >
-                    <i class="ti ti-info-circle"></i>
+                    <i class="ti ti-file-search"></i>
                   </a>
                 </td>
-                <td class="text-end">
+                <td class="text-end action-cell">
+                  <button
+                    v-if="row.host.ip"
+                    class="btn btn-outline-secondary btn-sm icon-btn"
+                    :class="{ 'is-spinning': isHostScanning(row.host) }"
+                    type="button"
+                    :title="isHostScanning(row.host) ? 'Scanning' : 'Quick scan'"
+                    :disabled="isHostScanning(row.host)"
+                    @click="quickScanHost(row.host)"
+                  >
+                    <i :class="isHostScanning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i>
+                  </button>
                   <button
                     v-if="row.host.id"
                     class="btn btn-outline-secondary btn-sm icon-btn"
@@ -385,6 +397,7 @@ const inventoryLoading = ref(false);
 const inventoryError = ref('');
 const notice = ref('');
 const scanning = ref(false);
+const scanningHosts = ref(new Set());
 const refreshQueued = ref(false);
 const refreshPulsing = ref(false);
 const modal = ref(null);
@@ -580,6 +593,47 @@ function pulseRefresh() {
       refreshPulsing.value = false;
     }, 350);
   });
+}
+
+function scanUrl(ip) {
+  return `/api/scans/${encodeURIComponent(ip)}.xml`;
+}
+
+function hostScanKey(host) {
+  return String(host?.ip || host?.id || host?.mac || '');
+}
+
+function isHostScanning(host) {
+  const key = hostScanKey(host);
+  return key !== '' && scanningHosts.value.has(key);
+}
+
+function setHostScanning(host, value) {
+  const key = hostScanKey(host);
+  if (key === '') return;
+
+  const next = new Set(scanningHosts.value);
+  if (value)
+    next.add(key);
+  else
+    next.delete(key);
+  scanningHosts.value = next;
+}
+
+async function quickScanHost(host) {
+  if (!host?.ip || isHostScanning(host)) return;
+  clearMessages();
+  setHostScanning(host, true);
+
+  try {
+    const result = await apiJson(`/api/scans/${encodeURIComponent(host.ip)}/quick`, { method: 'POST' });
+    notice.value = result && result.saved ? 'Scan saved' : 'Scan complete';
+    await loadInventory();
+  } catch (error) {
+    inventoryError.value = error.message;
+  } finally {
+    setHostScanning(host, false);
+  }
 }
 
 function rowClass(row) {

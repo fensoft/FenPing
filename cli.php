@@ -3,6 +3,7 @@ require __DIR__ . '/config.php';
 require __DIR__ . '/database.php';
 require __DIR__ . '/ping.php';
 require __DIR__ . '/hosts.php';
+require __DIR__ . '/inventory.php';
 
 $command = $argv[1] ?? '';
 if ($command === 'ping') {
@@ -13,8 +14,13 @@ if ($command === 'hosts') {
   exit(runHostsCommand());
 }
 
+if ($command === 'inventory') {
+  exit(runInventoryCommand(array_slice($argv, 2)));
+}
+
 fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
+fwrite(STDERR, "       php cli.php inventory [--quick] [1-254|IPv4]" . PHP_EOL);
 exit(2);
 
 function runPingCommand($args) {
