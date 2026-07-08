@@ -22,36 +22,44 @@ function sendDiscordStatusChangesSince(?int $afterId): void {
   if (count($changes) === 0)
     return;
 
-  foreach (discordNotificationMessages($changes) as $message)
-    discordPost($message);
+  foreach (discordNotificationPayloads($changes) as $payload)
+    discordPostPayload($payload);
 }
 
 function sendDiscordRestartNotification(): bool {
   if (!discordNotificationsEnabled())
     return false;
 
-  return discordPost(discordRestartMessage());
+  return discordPostPayload(discordRestartPayload());
 }
 
-function discordRestartMessage(): string {
+function discordRestartPayload(): array {
   global $network, $myself;
 
   $host = gethostname();
   if ($host === false || $host === '')
     $host = 'fenping';
 
-  $lines = array(
-    'FenPing restarted',
-    '- Time: ' . date('Y-m-d H:i:s T'),
-    '- Host: ' . $host
+  $fields = array(
+    discordEmbedField('Host', $host, true),
+    discordEmbedField('Time', date('Y-m-d H:i:s T'), true)
   );
 
   if (($network ?? '') !== '')
-    $lines[] = '- Network: ' . $network . '.0/24';
+    $fields[] = discordEmbedField('Network', $network . '.0/24', true);
   if (($myself ?? '') !== '')
-    $lines[] = '- Address: ' . $myself;
+    $fields[] = discordEmbedField('Address', $myself, true);
 
-  return implode(PHP_EOL, $lines);
+  return array(
+    'username' => 'FenPing',
+    'embeds' => array(array(
+      'title' => 'FenPing restarted',
+      'description' => 'The LAN appliance boot sequence completed.',
+      'color' => 0x2563eb,
+      'fields' => $fields,
+      'timestamp' => date(DATE_ATOM)
+    ))
+  );
 }
 
 function discordStatusChangesSince(int $afterId): array {
@@ -96,56 +104,101 @@ function discordStatusChangesSince(int $afterId): array {
   return $changes;
 }
 
-function discordNotificationMessages(array $changes): array {
-  $header = 'FenPing status changes';
-  $messages = array();
-  $current = $header;
+function discordNotificationPayloads(array $changes): array {
+  $payloads = array();
+  foreach (array_chunk($changes, 10) as $chunk) {
+    $embeds = array();
+    foreach ($chunk as $change)
+      $embeds[] = discordChangeEmbed($change);
 
-  foreach ($changes as $change) {
-    $line = discordChangeLine($change);
-    if (strlen($current) + strlen($line) + 1 > 1800) {
-      $messages[] = $current;
-      $current = $header;
-    }
-    $current .= PHP_EOL . $line;
+    $payloads[] = array(
+      'username' => 'FenPing',
+      'embeds' => $embeds
+    );
   }
-
-  if ($current !== $header)
-    $messages[] = $current;
-
-  return $messages;
+  return $payloads;
 }
 
-function discordChangeLine(array $change): string {
+function discordChangeEmbed(array $change): array {
   $name = trim((string)($change['name'] ?? ''));
   $ip = (string)($change['ip'] ?? '');
   $mac = strtolower((string)($change['mac'] ?? ''));
   $previous = (string)($change['previous_status'] ?? 'Unknown');
   $status = (string)($change['status'] ?? 'Unknown');
   $date = (string)($change['date_begin'] ?? '');
-  $important = (int)($change['important'] ?? 0) === 1 ? ' important' : '';
-  $label = $name !== '' ? "$name ($ip)" : $ip;
-  $macPart = $mac !== '' ? " $mac" : '';
+  $important = (int)($change['important'] ?? 0) === 1;
+  $label = $name !== '' ? $name : ($ip !== '' ? $ip : 'Unknown host');
+  $description = $important ? 'Important host changed state.' : 'Host changed state.';
+  $timestamp = strtotime($date);
 
-  return "- [$date]$important $label$macPart: $previous -> $status";
+  $embed = array(
+    'title' => $label . ' is now ' . ($status !== '' ? $status : 'Unknown'),
+    'description' => $description,
+    'color' => discordStatusColor($status),
+    'fields' => array(
+      discordEmbedField('Host', $label, true),
+      discordEmbedField('IP', $ip, true),
+      discordEmbedField('MAC', $mac, true),
+      discordEmbedField('Previous', $previous, true),
+      discordEmbedField('Current', $status, true),
+      discordEmbedField('Important', $important ? 'Yes' : 'No', true),
+      discordEmbedField('Time', $date, false)
+    )
+  );
+
+  if ($timestamp !== false)
+    $embed['timestamp'] = date(DATE_ATOM, $timestamp);
+
+  return $embed;
+}
+
+function discordStatusColor(string $status): int {
+  if ($status === 'Up')
+    return 0x16a34a;
+  if ($status === 'Down')
+    return 0xdc2626;
+  if ($status === 'arp')
+    return 0x2563eb;
+  if ($status === 'arp-down')
+    return 0xf59e0b;
+  return 0x64748b;
+}
+
+function discordEmbedField(string $name, string $value, bool $inline): array {
+  $value = trim($value);
+  if ($value === '')
+    $value = '-';
+
+  if (strlen($value) > 1000)
+    $value = substr($value, 0, 997) . '...';
+
+  return array(
+    'name' => $name,
+    'value' => $value,
+    'inline' => $inline
+  );
 }
 
 function discordPost(string $message): bool {
+  return discordPostPayload(array(
+    'username' => 'FenPing',
+    'content' => $message
+  ));
+}
+
+function discordPostPayload(array $payload): bool {
   $url = discordWebhookUrl();
   if ($url === '')
     return false;
 
-  $payload = json_encode(array(
-    'username' => 'FenPing',
-    'content' => $message
-  ));
-  if ($payload === false)
+  $json = json_encode($payload);
+  if ($json === false)
     return false;
 
   $ch = curl_init($url);
   curl_setopt($ch, CURLOPT_POST, true);
   curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
-  curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
   curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
   curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
   curl_setopt($ch, CURLOPT_TIMEOUT, 8);

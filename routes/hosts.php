@@ -3,6 +3,7 @@
 function hostsApiRoutes(): array {
   return array(
     apiRoute('GET', '/history/{ip:ipv4}', 'handleHostHistory'),
+    apiRoute('GET', '/hosts/{id:int}/detail', 'handleHostDetail'),
     apiRoute('GET', '/hosts/{id:int}', 'handleHostGet'),
     apiRoute('POST', '/hosts', 'handleHostCreate', 'body'),
     apiRoute('PUT', '/hosts/{id:int}', 'handleHostEdit', 'body'),
@@ -21,6 +22,38 @@ function handleHostGet(array $params): array {
   if ($host === false)
     jsonError(404, 'host not found');
   return $host;
+}
+
+function handleHostDetail(array $params): array {
+  $host = getId($params['id']);
+  if ($host === false)
+    jsonError(404, 'host not found');
+
+  $host = normalizeHostDetail($host);
+  $ip = (string)($host['ip'] ?? '');
+
+  $history = $ip !== '' ? get_history_response($ip) : array('summary' => null, 'rows' => array());
+  $scans = $ip !== '' ? scanMetadataForIp($ip, 50) : array();
+  $latestScan = $ip !== '' ? scanMetadataLatest($ip) : null;
+  if ($latestScan !== null) {
+    $latestScan['xml_usable'] = scanMetadataXmlUsable($latestScan);
+    $latestScan['xml_url'] = $latestScan['xml_usable'] ? scanXmlUrl($latestScan['ip'], $latestScan['id']) : null;
+  }
+  $netbootImage = null;
+
+  if (!empty($host['netboot_image_id'])) {
+    $netbootImage = get_netboot_image((int)$host['netboot_image_id']);
+    if ($netbootImage === false)
+      $netbootImage = null;
+  }
+
+  return array(
+    'host' => $host,
+    'history' => $history,
+    'scans' => $scans,
+    'latest_scan' => $latestScan,
+    'netboot_image' => $netbootImage
+  );
 }
 
 function handleHostCreate(array $params): array {
@@ -63,4 +96,52 @@ function handleCategoryDelete(array $params): array {
   $body = requestBody();
   delCategory($body['ip'] ?? '');
   return array('deleted' => true);
+}
+
+function normalizeHostDetail(array $host): array {
+  $host['id'] = (int)$host['id'];
+  $host['important'] = (int)($host['important'] ?? 0);
+  $host['repeater'] = (int)($host['repeater'] ?? 0);
+  $host['web'] = (int)($host['web'] ?? 0);
+  $host['netboot_image_id'] = $host['netboot_image_id'] === null ? null : (int)$host['netboot_image_id'];
+  $host['mac'] = strtolower((string)($host['mac'] ?? ''));
+  $host['vendor'] = hostVendorFromCache($host['mac']);
+  $ping = hostPingState($host);
+  $host['status'] = $ping['status'];
+  $host['date'] = $ping['date'];
+  return $host;
+}
+
+function hostVendorFromCache(string $mac): string {
+  if ($mac === '')
+    return '';
+
+  $stmt = getDb()->prepare("SELECT vendors FROM vendors WHERE mac=:mac LIMIT 1");
+  $stmt->execute(array('mac' => $mac));
+  $vendor = $stmt->fetchColumn();
+  return $vendor === false ? '' : (string)$vendor;
+}
+
+function hostPingState(array $host): array {
+  $ip = (string)($host['ip'] ?? '');
+  $mac = strtolower((string)($host['mac'] ?? ''));
+  if ($ip === '' && $mac === '')
+    return array('status' => '', 'date' => null);
+
+  $stmt = getDb()->prepare("
+    SELECT status, date
+    FROM ping
+    WHERE (:ip<>'' AND ip=:ip)
+       OR (:mac<>'' AND LOWER(mac) COLLATE latin1_general_ci=:mac)
+    ORDER BY IF(ip=:ip, 0, 1), date DESC
+    LIMIT 1
+  ");
+  $stmt->execute(array('ip' => $ip, 'mac' => $mac));
+  $row = $stmt->fetch(PDO::FETCH_ASSOC);
+  if ($row === false)
+    return array('status' => '', 'date' => null);
+  return array(
+    'status' => $row['status'] ?? '',
+    'date' => $row['date'] ?? null
+  );
 }

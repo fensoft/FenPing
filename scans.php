@@ -299,6 +299,74 @@ function scanMetadataHistory(string $ip, int $limit = 30): array {
   return $history;
 }
 
+function scanMetadataForIp(string $ip, int $limit = 50): array {
+  $limit = max(1, min(100, $limit));
+  $days = SCAN_HISTORY_DAYS;
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    FROM scans
+    WHERE ip=:ip
+      AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+    ORDER BY id DESC
+    LIMIT $limit
+  ");
+  $stmt->execute(array('ip' => $ip));
+
+  $scans = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $metadata = scanNormalizeMetadata($row);
+    $metadata['xml_usable'] = scanMetadataXmlUsable($metadata);
+    $metadata['xml_url'] = $metadata['xml_usable'] ? scanXmlUrl($metadata['ip'], $metadata['id']) : null;
+    $scans[] = $metadata;
+  }
+  return $scans;
+}
+
+function scanMetadataQueue(int $limit = 100): array {
+  $limit = max(1, min(200, $limit));
+  $stmt = db()->prepare("
+    SELECT
+      s.id,
+      s.ip,
+      s.mode,
+      s.state,
+      s.status,
+      s.date_begin,
+      s.date_end,
+      s.duration,
+      s.ports_count,
+      s.xml,
+      s.xml_hash,
+      s.error,
+      i.id AS host_id,
+      COALESCE(i.name, '') AS name,
+      COALESCE(i.mac, '') AS mac,
+      COALESCE(i.important, 0) AS important
+    FROM scans s
+    LEFT JOIN ips i ON i.ip=s.ip
+    ORDER BY
+      CASE WHEN s.state='running' THEN 0 ELSE 1 END,
+      COALESCE(s.date_end, s.date_begin) DESC,
+      s.id DESC
+    LIMIT $limit
+  ");
+  $stmt->execute();
+
+  $queue = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $metadata = scanNormalizeMetadata($row);
+    $metadata['host_id'] = $row['host_id'] === null ? null : (int)$row['host_id'];
+    $metadata['name'] = $row['name'] ?? '';
+    $metadata['mac'] = strtolower((string)($row['mac'] ?? ''));
+    $metadata['important'] = (int)($row['important'] ?? 0);
+    $metadata['xml_usable'] = scanMetadataXmlUsable($metadata);
+    $metadata['xml_url'] = $metadata['xml_usable'] ? scanXmlUrl($metadata['ip'], $metadata['id']) : null;
+    $queue[] = $metadata;
+  }
+
+  return $queue;
+}
+
 function scanMetadataLatestByIp(): array {
   $stmt = db()->prepare("
     SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.xml, s.xml_hash, s.error

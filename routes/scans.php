@@ -2,6 +2,7 @@
 
 function scansApiRoutes(): array {
   return array(
+    apiRoute('GET', '/scans', 'handleScansQueue'),
     apiRoute('POST', '/scans/{ip:ipv4}/quick', 'handleScanQuick', 'session'),
     apiRoute('GET', '/scans/{ip:ipv4}/status', 'handleScanStatus'),
     apiRoute('GET', '/scans/{ip:ipv4}/history', 'handleScanHistory'),
@@ -14,6 +15,10 @@ function scansApiRoutes(): array {
     apiRoute('GET', '/scans/{ip:ipv4}/{id:int}', 'handleScanHistoryJson'),
     apiRoute('GET', '/scans/{ip:ipv4}/{file:scanIdXml}', 'handleLegacyScanHistoryXml')
   );
+}
+
+function handleScansQueue(array $params): array {
+  return array('scans' => scanMetadataQueue());
 }
 
 function handleScanQuick(array $params): array {

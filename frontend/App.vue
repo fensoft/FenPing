@@ -9,7 +9,7 @@
         <div class="toolbar">
           <button
             class="btn btn-outline-secondary icon-btn"
-            :class="{ active: isInventoryPage }"
+            :class="{ active: isInventoryPage || isHostPage }"
             type="button"
             title="Inventory"
             @click="navigate(appRoutes.inventory)"
@@ -24,6 +24,15 @@
             @click="navigate(appRoutes.notify)"
           >
             <i class="ti ti-bell"></i>
+          </button>
+          <button
+            class="btn btn-outline-secondary icon-btn"
+            :class="{ active: isScansPage }"
+            type="button"
+            title="Scans"
+            @click="navigate(appRoutes.scans)"
+          >
+            <i class="ti ti-radar"></i>
           </button>
           <button
             class="btn btn-outline-secondary icon-btn"
@@ -57,7 +66,7 @@
           </button>
           <button
             class="btn btn-outline-primary icon-btn refresh-btn"
-            :class="{ 'is-spinning': scanning || notifyLoading || netbootLoading, 'is-pulsing': refreshPulsing }"
+            :class="{ 'is-spinning': scanning || notifyLoading || scanQueueLoading || hostDetailLoading || netbootLoading, 'is-pulsing': refreshPulsing }"
             type="button"
             :title="refreshTitle"
             :disabled="refreshDisabled"
@@ -155,6 +164,317 @@
             </tbody>
           </table>
         </div>
+      </template>
+
+      <template v-else-if="isScansPage">
+        <div v-if="scanQueueError" class="alert alert-danger mb-3" role="alert">{{ scanQueueError }}</div>
+
+        <div class="page-header">
+          <div>
+            <h2>Scans</h2>
+            <div class="text-secondary small">Running and recent inventory scans</div>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="scanQueueLoading" @click="loadScanQueue">
+            <i class="ti ti-refresh me-1" :class="{ 'is-spinning': scanQueueLoading }"></i>
+            Refresh
+          </button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table table-sm scan-queue-table">
+            <thead>
+              <tr>
+                <th>State</th>
+                <th>Host</th>
+                <th>Mode</th>
+                <th>Status</th>
+                <th>Ports</th>
+                <th>Started</th>
+                <th>Ended</th>
+                <th>Error</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="scanQueueLoading && scanQueue.length === 0">
+                <td class="text-secondary text-center py-4" colspan="9">Loading</td>
+              </tr>
+              <tr v-else-if="!scanQueueLoading && scanQueue.length === 0">
+                <td class="text-secondary text-center py-4" colspan="9">No scans</td>
+              </tr>
+              <tr v-for="scan in scanQueue" :key="scan.id" :class="scanQueueRowClass(scan)">
+                <td>
+                  <span :class="scanRunStateClass(scan.state)">
+                    <i :class="scan.state === 'running' ? 'ti ti-loader-2 is-spinning' : scanRunStateIcon(scan.state)"></i>
+                    {{ scan.state || '-' }}
+                  </span>
+                </td>
+                <td class="scan-queue-host">
+                  <button
+                    v-if="scan.host_id"
+                    class="btn btn-link btn-sm p-0 scan-queue-host-name"
+                    type="button"
+                    @click="navigateHostDetail(scan.host_id)"
+                  >
+                    {{ scanDisplayName(scan) }}
+                  </button>
+                  <strong v-else>{{ scanDisplayName(scan) }}</strong>
+                  <small class="font-monospace">{{ scan.ip }}</small>
+                </td>
+                <td>{{ scan.mode || '-' }}</td>
+                <td>{{ scan.status || '-' }}</td>
+                <td>{{ Number(scan.ports_count || 0) }}</td>
+                <td class="text-nowrap">{{ formatScanDate(scan.date_begin) }}</td>
+                <td class="text-nowrap">
+                  <span v-if="scan.date_end">{{ formatScanDate(scan.date_end) }}</span>
+                  <span v-else>{{ formatScanDuration(activeScanDuration(scan)) }}</span>
+                </td>
+                <td class="text-truncate-cell" :title="scan.error || ''">{{ scan.error || '-' }}</td>
+                <td class="text-end action-cell">
+                  <button
+                    v-if="isAuthenticated && scan.ip"
+                    class="btn btn-outline-secondary btn-sm icon-btn"
+                    :class="{ 'is-spinning': isHostScanning(scan) || scan.state === 'running' }"
+                    type="button"
+                    :disabled="isHostScanning(scan) || scan.state === 'running'"
+                    title="Quick scan"
+                    @click="quickScanHost(scan)"
+                  >
+                    <i :class="isHostScanning(scan) || scan.state === 'running' ? 'ti ti-loader-2' : 'ti ti-search'"></i>
+                  </button>
+                  <button
+                    class="btn btn-outline-secondary btn-sm icon-btn"
+                    type="button"
+                    title="View scan"
+                    :disabled="!scan.xml_usable"
+                    @click="openScan(scan.ip, scan.id)"
+                  >
+                    <i class="ti ti-file-search"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <template v-else-if="isHostPage">
+        <div v-if="hostDetailError" class="alert alert-danger mb-3" role="alert">{{ hostDetailError }}</div>
+
+        <div class="page-header">
+          <div>
+            <button class="btn btn-link btn-sm p-0 mb-1" type="button" @click="navigate(appRoutes.inventory)">
+              <i class="ti ti-arrow-left me-1"></i>
+              Inventory
+            </button>
+            <h2>{{ hostDetailTitle }}</h2>
+            <div class="text-secondary small font-monospace">{{ hostDetailHost.ip || 'No IP' }}</div>
+          </div>
+          <div class="page-actions">
+            <button
+              v-if="hostDetailHost.ip"
+              class="btn btn-outline-secondary btn-sm"
+              type="button"
+              :disabled="!hostDetailLatestScan || !scanHasXml(hostDetailLatestScan)"
+              @click="openScan(hostDetailHost.ip, hostDetailLatestScan?.id)"
+            >
+              <i class="ti ti-file-search me-1"></i>
+              View scan
+            </button>
+            <button
+              v-if="isAuthenticated && hostDetailHost.ip"
+              class="btn btn-outline-primary btn-sm"
+              type="button"
+              :disabled="isHostScanning(hostDetailHost)"
+              @click="quickScanHost(hostDetailHost)"
+            >
+              <i :class="isHostScanning(hostDetailHost) ? 'ti ti-loader-2 is-spinning me-1' : 'ti ti-search me-1'"></i>
+              Quick scan
+            </button>
+            <button
+              v-if="isAuthenticated && hostDetailHost.id"
+              class="btn btn-primary btn-sm"
+              type="button"
+              @click="openEdit(hostDetailHost)"
+            >
+              <i class="ti ti-edit me-1"></i>
+              Edit
+            </button>
+          </div>
+        </div>
+
+        <div v-if="hostDetailLoading" class="table-wrap detail-empty">
+          <div class="text-secondary text-center py-4">Loading</div>
+        </div>
+
+        <template v-else-if="hostDetail">
+          <div class="detail-summary">
+            <div class="detail-fact">
+              <span>Status</span>
+              <strong>
+                <span :class="statusClass(hostDetailHost.status)" class="status-pill">
+                  <i :class="statusIcon(hostDetailHost.status)"></i>
+                </span>
+                {{ hostDetailHost.status || '-' }}
+              </strong>
+            </div>
+            <div class="detail-fact">
+              <span>MAC</span>
+              <strong class="font-monospace">{{ formatMac(hostDetailHost.mac) || '-' }}</strong>
+            </div>
+            <div class="detail-fact">
+              <span>Vendor</span>
+              <strong>{{ hostDetailHost.vendor || '-' }}</strong>
+            </div>
+            <div class="detail-fact">
+              <span>Netboot</span>
+              <strong>{{ hostDetailNetbootName }}</strong>
+            </div>
+          </div>
+
+          <div class="detail-grid">
+            <section class="detail-panel">
+              <h3>Configuration</h3>
+              <dl class="detail-list">
+                <div>
+                  <dt>Name</dt>
+                  <dd>{{ hostDetailHost.name || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>IP</dt>
+                  <dd class="font-monospace">{{ hostDetailHost.ip || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>Router</dt>
+                  <dd>{{ hostDetailHost.router || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>DNS</dt>
+                  <dd>{{ hostDetailHost.dns || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>Flags</dt>
+                  <dd>
+                    <span v-if="toFlag(hostDetailHost.important)" class="badge bg-red-lt text-red me-1">Important</span>
+                    <span v-if="toFlag(hostDetailHost.repeater)" class="badge bg-blue-lt text-blue me-1">Router/repeater</span>
+                    <span v-if="toFlag(hostDetailHost.web)" class="badge bg-green-lt text-green me-1">Web</span>
+                    <span v-if="!toFlag(hostDetailHost.important) && !toFlag(hostDetailHost.repeater) && !toFlag(hostDetailHost.web)">-</span>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="detail-panel">
+              <h3>Latest Scan</h3>
+              <dl class="detail-list">
+                <div>
+                  <dt>State</dt>
+                  <dd>{{ hostDetailLatestScan?.state || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{{ hostDetailLatestScan?.status || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>Mode</dt>
+                  <dd>{{ hostDetailLatestScan?.mode || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>Ports</dt>
+                  <dd>{{ hostDetailLatestScan?.ports_count ?? 0 }}</dd>
+                </div>
+                <div>
+                  <dt>Last</dt>
+                  <dd>{{ formatScanDate(hostDetailLatestScan?.date_end || hostDetailLatestScan?.date_begin) }}</dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-section-heading">
+              <h3>History</h3>
+              <span class="text-secondary small">{{ hostDetailHistoryRows.length }} rows</span>
+            </div>
+            <div class="table-wrap">
+              <table class="table table-sm detail-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>MAC</th>
+                    <th>Started</th>
+                    <th>Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="hostDetailHistoryRows.length === 0">
+                    <td class="text-secondary text-center py-4" colspan="4">No history</td>
+                  </tr>
+                  <tr v-for="item in hostDetailHistoryRows" :key="item.id" :class="historyRowClass(item)">
+                    <td>
+                      <span :class="statusClass(item.status)" :title="statusTitle(item.status)" class="status-pill">
+                        <i :class="statusIcon(item.status)"></i>
+                      </span>
+                      {{ item.status || '-' }}
+                    </td>
+                    <td class="font-monospace">{{ formatMac(item.mac) }}</td>
+                    <td>{{ item.date_begin }}</td>
+                    <td>{{ formatDuration(item.duration) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-section-heading">
+              <h3>Scan History</h3>
+              <span class="text-secondary small">{{ hostDetailScans.length }} scans</span>
+            </div>
+            <div class="table-wrap">
+              <table class="table table-sm detail-table">
+                <thead>
+                  <tr>
+                    <th>State</th>
+                    <th>Mode</th>
+                    <th>Status</th>
+                    <th>Ports</th>
+                    <th>Ended</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="hostDetailScans.length === 0">
+                    <td class="text-secondary text-center py-4" colspan="6">No scans</td>
+                  </tr>
+                  <tr v-for="scan in hostDetailScans" :key="scan.id">
+                    <td>
+                      <span :class="scanRunStateClass(scan.state)">
+                        <i :class="scan.state === 'running' ? 'ti ti-loader-2 is-spinning' : scanRunStateIcon(scan.state)"></i>
+                        {{ scan.state || '-' }}
+                      </span>
+                    </td>
+                    <td>{{ scan.mode || '-' }}</td>
+                    <td>{{ scan.status || '-' }}</td>
+                    <td>{{ Number(scan.ports_count || 0) }}</td>
+                    <td>{{ formatScanDate(scan.date_end || scan.date_begin) }}</td>
+                    <td class="text-end">
+                      <button
+                        class="btn btn-outline-secondary btn-sm icon-btn"
+                        type="button"
+                        title="View scan"
+                        :disabled="!scanHasXml(scan)"
+                        @click="openScan(hostDetailHost.ip, scan.id)"
+                      >
+                        <i class="ti ti-file-search"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
       </template>
 
       <template v-else-if="isNetbootPage">
@@ -379,6 +699,15 @@
                   {{ row.host.ip }}
                 </td>
                 <td class="text-end action-cell">
+                  <button
+                    v-if="row.host.id"
+                    class="btn btn-outline-secondary btn-sm icon-btn"
+                    type="button"
+                    title="Host detail"
+                    @click="navigateHostDetail(row.host.id)"
+                  >
+                    <i class="ti ti-info-circle"></i>
+                  </button>
                   <button
                     v-if="isAuthenticated && row.host.ip"
                     class="btn btn-sm icon-btn"
@@ -801,6 +1130,12 @@ const netbootUploading = ref(false);
 const netbootError = ref('');
 const netbootUpload = ref({ name: '', file: null });
 const netbootFileInput = ref(null);
+const scanQueue = ref([]);
+const scanQueueLoading = ref(false);
+const scanQueueError = ref('');
+const hostDetail = ref(null);
+const hostDetailLoading = ref(false);
+const hostDetailError = ref('');
 const notice = ref('');
 const scanning = ref(false);
 const scanningHosts = ref(new Set());
@@ -815,9 +1150,11 @@ const darkMode = ref(readCookie('fenping_theme') === 'dark');
 const appRoutes = {
   inventory: '/',
   notify: '/notify',
+  scans: '/scans',
   netboot: '/netboot-images'
 };
 const appRoutePaths = new Set(Object.values(appRoutes));
+const hostRoutePattern = /^\/hosts\/(\d+)$/;
 const routePath = ref(currentRoutePath());
 const filterDefaults = {
   search: '',
@@ -833,8 +1170,14 @@ const collapsedCategories = ref(new Set(readJsonStorage('fenping_collapsed_categ
 
 const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
 const isNotifyPage = computed(() => routePath.value === '/notify');
+const isScansPage = computed(() => routePath.value === '/scans');
 const isNetbootPage = computed(() => routePath.value === '/netboot-images');
-const isInventoryPage = computed(() => !isNotifyPage.value && !isNetbootPage.value);
+const routeHostId = computed(() => {
+  const match = routePath.value.match(hostRoutePattern);
+  return match ? Number(match[1]) : null;
+});
+const isHostPage = computed(() => routeHostId.value !== null);
+const isInventoryPage = computed(() => routePath.value === appRoutes.inventory);
 const notifyChanges = computed(() => notify.value?.changes || []);
 const notifySummary = computed(() => notify.value?.summary || {});
 const notifyStatusCounts = computed(() => {
@@ -843,9 +1186,22 @@ const notifyStatusCounts = computed(() => {
     .sort((a, b) => String(a).localeCompare(String(b)))
     .map((status) => ({ status, count: counts[status] }));
 });
+const hostDetailHost = computed(() => hostDetail.value?.host || {});
+const hostDetailLatestScan = computed(() => hostDetail.value?.latest_scan || null);
+const hostDetailScans = computed(() => hostDetail.value?.scans || []);
+const hostDetailHistoryRows = computed(() => hostDetail.value?.history?.rows || []);
+const hostDetailTitle = computed(() => hostDetailHost.value.name || hostDetailHost.value.ip || 'Host detail');
+const hostDetailNetbootName = computed(() => {
+  const image = hostDetail.value?.netboot_image;
+  if (!image)
+    return '-';
+  return image.name || image.filename || '-';
+});
 
 const refreshLabel = computed(() => {
   if (isNotifyPage.value) return notifyLoading.value ? 'Loading' : 'Notify';
+  if (isScansPage.value) return scanQueueLoading.value ? 'Loading' : 'Scans';
+  if (isHostPage.value) return hostDetailLoading.value ? 'Loading' : 'Device';
   if (isNetbootPage.value) return netbootLoading.value ? 'Loading' : 'Netboot';
   if (!isAuthenticated.value) return 'Read only';
   if (scanning.value && refreshQueued.value) return 'Queued';
@@ -855,12 +1211,16 @@ const refreshLabel = computed(() => {
 
 const refreshTitle = computed(() => {
   if (isNotifyPage.value) return 'Refresh notifications';
+  if (isScansPage.value) return 'Refresh scans';
+  if (isHostPage.value) return 'Refresh host';
   if (isNetbootPage.value) return isAuthenticated.value ? 'Refresh netboot images' : 'Login to refresh';
   return isAuthenticated.value ? 'Refresh' : 'Login to refresh';
 });
 
 const refreshDisabled = computed(() => {
   if (isNotifyPage.value) return false;
+  if (isScansPage.value) return false;
+  if (isHostPage.value) return false;
   return !isAuthenticated.value;
 });
 
@@ -1002,18 +1362,34 @@ function navigate(path) {
   loadCurrentView();
 }
 
+function navigateHostDetail(id) {
+  if (!id)
+    return;
+  navigate(`/hosts/${encodeURIComponent(id)}`);
+}
+
 function handleRouteChange() {
   routePath.value = currentRoutePath();
   loadCurrentView();
 }
 
 function normalizeRoutePath(path) {
-  return appRoutePaths.has(path) ? path : appRoutes.inventory;
+  return appRoutePaths.has(path) || hostRoutePattern.test(path) ? path : appRoutes.inventory;
 }
 
 async function loadCurrentView(options = {}) {
   if (isNotifyPage.value) {
     await loadNotify();
+    return;
+  }
+
+  if (isScansPage.value) {
+    await loadScanQueue();
+    return;
+  }
+
+  if (isHostPage.value) {
+    await loadHostDetail(routeHostId.value);
     return;
   }
 
@@ -1215,6 +1591,39 @@ async function loadNotify() {
   }
 }
 
+async function loadScanQueue() {
+  scanQueueLoading.value = true;
+  scanQueueError.value = '';
+  inventoryError.value = '';
+
+  try {
+    const data = await apiJson('/api/scans');
+    scanQueue.value = data?.scans || [];
+  } catch (error) {
+    scanQueueError.value = error.message;
+  } finally {
+    scanQueueLoading.value = false;
+  }
+}
+
+async function loadHostDetail(id) {
+  if (!id)
+    return;
+
+  hostDetailLoading.value = true;
+  hostDetailError.value = '';
+  inventoryError.value = '';
+
+  try {
+    hostDetail.value = await apiJson(`/api/hosts/${encodeURIComponent(id)}/detail`);
+  } catch (error) {
+    hostDetail.value = null;
+    hostDetailError.value = error.message;
+  } finally {
+    hostDetailLoading.value = false;
+  }
+}
+
 async function loadNetbootImages() {
   if (!isAuthenticated.value) {
     netbootImages.value = [];
@@ -1306,6 +1715,16 @@ function requestRefresh() {
 
   if (isNotifyPage.value) {
     loadNotify();
+    return;
+  }
+
+  if (isScansPage.value) {
+    loadScanQueue();
+    return;
+  }
+
+  if (isHostPage.value) {
+    loadHostDetail(routeHostId.value);
     return;
   }
 
@@ -1441,9 +1860,18 @@ async function quickScanHost(host) {
     if (result?.metadata)
       updateHostScan(host.ip, result.metadata, result.saved);
     notice.value = result && result.saved ? 'Scan saved' : 'Scan complete';
-    await loadInventory();
+    if (isScansPage.value)
+      await loadScanQueue();
+    else if (isHostPage.value)
+      await loadHostDetail(routeHostId.value);
+    else
+      await loadInventory();
   } catch (error) {
     inventoryError.value = error.message;
+    if (isScansPage.value)
+      scanQueueError.value = error.message;
+    if (isHostPage.value)
+      hostDetailError.value = error.message;
   } finally {
     setHostScanning(host, false);
   }
@@ -1479,6 +1907,54 @@ function updateHostScan(ip, metadata, saved) {
       xml: saved || metadata?.xml ? ip : host.xml
     };
   });
+}
+
+function scanHasXml(scan) {
+  if (!scan)
+    return false;
+  if (Object.prototype.hasOwnProperty.call(scan, 'xml_usable'))
+    return Boolean(scan.xml_usable);
+  return Boolean(scan.xml || scan.xml_url);
+}
+
+function scanDisplayName(scan) {
+  return scan?.name || scan?.ip || 'Unknown';
+}
+
+function scanRunStateClass(state) {
+  if (state === 'running') return 'scan-run-state scan-run-running';
+  if (state === 'complete') return 'scan-run-state scan-run-complete';
+  if (state === 'failed') return 'scan-run-state scan-run-failed';
+  if (state === 'cancelled') return 'scan-run-state scan-run-cancelled';
+  return 'scan-run-state';
+}
+
+function scanRunStateIcon(state) {
+  if (state === 'complete') return 'ti ti-check';
+  if (state === 'failed') return 'ti ti-alert-triangle';
+  if (state === 'cancelled') return 'ti ti-ban';
+  return 'ti ti-point';
+}
+
+function scanQueueRowClass(scan) {
+  if (scan?.state === 'running') return 'scan-row-running';
+  if (scan?.state === 'failed') return 'scan-row-failed';
+  if (scan?.important == 1 && scan?.status !== 'up') return 'important-down';
+  return '';
+}
+
+function activeScanDuration(scan) {
+  if (!scan)
+    return null;
+  if (scan.duration !== null && scan.duration !== undefined)
+    return scan.duration;
+  if (!scan.date_begin)
+    return null;
+
+  const started = Date.parse(String(scan.date_begin).replace(' ', 'T'));
+  if (Number.isNaN(started))
+    return null;
+  return Math.max(0, Math.floor((Date.now() - started) / 1000));
 }
 
 function rowClass(row) {
@@ -1691,7 +2167,10 @@ async function openEdit(host) {
     };
   } catch (error) {
     modal.value = null;
-    inventoryError.value = error.message;
+    if (isHostPage.value)
+      hostDetailError.value = error.message;
+    else
+      inventoryError.value = error.message;
   }
 }
 
@@ -1745,7 +2224,7 @@ async function openHistory(ip) {
   }
 }
 
-async function openScan(ip) {
+async function openScan(ip, scanId = null) {
   if (!ip) return;
   clearMessages();
   modal.value = {
@@ -1756,12 +2235,12 @@ async function openScan(ip) {
     raw: '',
     showRaw: false,
     history: null,
-    selectedScanId: null
+    selectedScanId: scanId
   };
 
   try {
     const [scan, history] = await Promise.all([
-      apiJson(scanJsonUrl(ip)),
+      apiJson(scanJsonUrl(ip, scanId)),
       apiJson(scanHistoryUrl(ip))
     ]);
     if (modal.value && modal.value.type === 'scan' && modal.value.ip === ip) {
@@ -1769,7 +2248,7 @@ async function openScan(ip) {
       modal.value.raw = '';
       modal.value.scan = scan;
       modal.value.history = history || [];
-      modal.value.selectedScanId = scan.metadata?.id || null;
+      modal.value.selectedScanId = scan.metadata?.id || scanId || null;
     }
   } catch (error) {
     if (modal.value && modal.value.type === 'scan' && modal.value.ip === ip) {
@@ -1907,7 +2386,10 @@ async function submitEdit() {
     });
     notice.value = 'Saved';
     closeModal();
-    await loadInventory();
+    if (isHostPage.value)
+      await loadHostDetail(routeHostId.value);
+    else
+      await loadInventory();
   });
 }
 
@@ -1918,7 +2400,10 @@ async function submitDeleteHost() {
     });
     notice.value = 'Deleted';
     closeModal();
-    await loadInventory();
+    if (isHostPage.value)
+      navigate(appRoutes.inventory);
+    else
+      await loadInventory();
   });
 }
 
@@ -1973,6 +2458,10 @@ function closeModal() {
 function clearMessages() {
   modalError.value = '';
   inventoryError.value = '';
+  notifyError.value = '';
+  scanQueueError.value = '';
+  hostDetailError.value = '';
+  netbootError.value = '';
   notice.value = '';
 }
 </script>
