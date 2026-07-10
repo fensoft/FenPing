@@ -30,19 +30,35 @@ It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, Maria
 
 ### Inventory
 
-![Inventory](img/screenshot-inventory.svg)
+![Inventory](img/screenshot-inventory.png)
+
+### Services
+
+![Services](img/screenshot-services.png)
 
 ### Notify
 
-![Notify](img/screenshot-notify.svg)
+![Notify](img/screenshot-notify.png)
+
+### IPAM
+
+![IPAM](img/screenshot-ipam.png)
+
+### Scans
+
+![Scans](img/screenshot-scans.png)
 
 ### Netboot Images
 
-![Netboot Images](img/screenshot-netboot.svg)
+![Netboot Images](img/screenshot-netboot.png)
+
+### Host Detail
+
+![Host Detail](img/screenshot-host.png)
 
 ### Scan Details
 
-![Scan Details](img/screenshot-scan.svg)
+![Scan Details](img/screenshot-scan.png)
 
 ## Runtime Layout
 
@@ -158,6 +174,16 @@ Managed hosts have an automatic scan profile and cadence. The default remains De
 At boot, `scan-port-backfill` replays stored snapshots in chronological order and inserts any missing service-change events using their original scan timestamps. The replay is idempotent, so it can also be run manually after restoring older scan history.
 
 ## Backup And Restore
+
+### Screenshot demo
+
+The versioned `demo/` source contains a synthetic network with inventory, IPAM, history, notifications, services, scans, and netboot examples. To rebuild its backup, preserve the current state, and restore the demo:
+
+```bash
+./restart.sh demo
+```
+
+The generated archive is `data/backups/fenping-demo.tgz`. Before restoring it, the command creates a timestamped `data/backups/fenping-before-demo-*.tgz` containing the current database and netboot files. Demo timestamps shift to the restore time so recent activity remains suitable for screenshots.
 
 Create a full backup archive before upgrades:
 

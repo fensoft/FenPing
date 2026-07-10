@@ -259,7 +259,7 @@ function backupMysqlArgs(): array {
   global $db_host, $db_port, $db_user;
 
   $args = array('--user=' . $db_user);
-  if (($db_host ?? '') === 'localhost' && is_file('/var/run/mysqld/mysqld.sock'))
+  if (($db_host ?? '') === 'localhost' && file_exists('/var/run/mysqld/mysqld.sock'))
     $args[] = '--socket=/var/run/mysqld/mysqld.sock';
   elseif (($db_host ?? '') !== '') {
     $args[] = '--host=' . $db_host;

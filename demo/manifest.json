@@ -1,0 +1,19 @@
+{
+    "format": "fenping-backup-v1",
+    "created_at": "2026-07-10T23:33:07+00:00",
+    "database": "ping",
+    "hostname": "ubuntu-linux-2404",
+    "includes": {
+        "db": "db.sql",
+        "netboot": "netboot/",
+        "netboot_index": "netboot-index.json"
+    },
+    "counts": {
+        "netboot_files": 2,
+        "scan_rows": 8,
+        "scan_snapshot_rows": 6,
+        "scan_snapshot_bytes": 5787,
+        "netboot_rows": 2
+    },
+    "db_sql_bytes": 31312
+}

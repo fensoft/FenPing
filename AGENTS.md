@@ -31,6 +31,7 @@ Do not fold MariaDB back into the application image or split dnsmasq into anothe
 - `docker-compose.yml`: application and MariaDB services, mounts, capabilities, health checks, and logging limits.
 - `Dockerfile`: multi-stage build; Vite frontend first, then Ubuntu application runtime with Apache/PHP/dnsmasq/cron, networking tools, and the MariaDB client. Keep direct runtime dependencies explicit instead of relying on MariaDB server transitive packages.
 - `restart.sh`: validates, builds, and starts the Compose project.
+- `demo/`: versioned synthetic screenshot database, netboot files, and backup metadata. `./restart.sh demo` rebuilds and restores it after preserving the current state.
 - `boot.sh`: application-service bootstrap and database schema application.
 - `config.php`: committed generic PHP config that reads runtime values from environment variables.
 - `mariadb-fenping.cnf`: low-write MariaDB durability/logging policy; preserves InnoDB doublewrite protection.
@@ -106,6 +107,8 @@ npm run build
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 ```
+
+After implementation work, run `./restart.sh` as the final deployment check. Use `./restart.sh demo` only when the user explicitly requests replacing the active data with the synthetic screenshot environment.
 
 If PHP or Node is unavailable on the host, run syntax checks inside the container/image.
 

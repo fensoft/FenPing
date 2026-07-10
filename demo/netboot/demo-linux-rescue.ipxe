@@ -1,0 +1,5 @@
+#!ipxe
+dhcp
+set base-url https://boot.netboot.xyz
+kernel ${base-url}/ipxe/netboot.xyz.lkrn
+boot
