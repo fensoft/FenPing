@@ -68,7 +68,7 @@ Run commands through the single container:
 ```bash
 docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
-docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
+docker exec fenping php /opt/fenping/cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4]
 docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh

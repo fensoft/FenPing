@@ -83,7 +83,7 @@
               </template>
               <strong v-else>{{ serviceLabel(change, change.change_type === 'appeared' ? 'current' : 'previous') }}</strong>
             </td>
-            <td><span class="badge bg-secondary-lt text-secondary">{{ change.mode }}</span></td>
+            <td><span class="badge" :class="scanProfileBadgeClass(change.mode)">{{ scanProfileLabel(change.mode) }}</span></td>
           </tr>
         </tbody>
       </table>
@@ -106,6 +106,7 @@ import {
   statusIcon,
   statusTitle
 } from '../lib/formatters.js';
+import { scanProfileBadgeClass, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
 const emit = defineEmits(['network', 'open-history', 'open-scan']);

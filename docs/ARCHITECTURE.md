@@ -67,7 +67,7 @@ Route modules:
 - `routes/system.php`: health, inventory, notify, ping refresh.
 - `routes/hosts.php`: host CRUD, host detail/history, category create/rename/delete.
 - `routes/ipam.php`: IPAM summary plus authenticated device approve/unapprove actions.
-- `routes/scans.php`: scan queue, quick scans, scan status/history, and database-backed XML/JSON responses.
+- `routes/scans.php`: scan profiles, queueing, scan status/history, and database-backed XML/JSON responses.
 - `routes/netboot.php`: netboot image list/upload/delete.
 
 ### CLI
@@ -77,7 +77,7 @@ Route modules:
 ```bash
 docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
-docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
+docker exec fenping php /opt/fenping/cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4]
 docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
@@ -127,18 +127,19 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 
 - Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and queues deep scans.
 - A lock-protected coordinator claims queued jobs and runs no more than four nmap child processes concurrently.
-- Only one job runs per IP at a time. A deep job may wait behind a running quick job; queued deep work supersedes queued quick work, and quick requests never downgrade a deep job.
-- Deep scan uses `-A -p- -sS -T3`.
-- Quick scan targets one host with faster flags.
-- Quick-scan API requests return HTTP `202` after enqueueing and start the coordinator in the background.
-- Every nmap command has a 2-hour hard timeout; timed-out scans are recorded with the `timeout` state.
+- Only one job runs per IP at a time. Profiles are ordered lightweight, standard, then deep. A stronger request upgrades weaker queued work or waits behind weaker running work, while weaker requests never downgrade an active stronger job.
+- Lightweight uses `-F -sS -T4` and has a five-minute timeout.
+- Standard uses `-A --top-ports 1000 -sS -T3` and has a 30-minute timeout.
+- Deep uses `-A -p- -sS -T3` and has a two-hour timeout.
+- Profile scan API requests return HTTP `202` after enqueueing and start the coordinator in the background.
+- Timed-out scans are recorded with the `timeout` state.
 - Completed XML is stored in `scan_snapshots`; identical results reuse an existing snapshot rather than storing another copy.
-- Quick and deep scans are compared independently. Default scan details prefer the latest changed deep snapshot and fall back to quick only when no deep result exists.
-- Selecting a quick snapshot merges it at read time with the preceding deep snapshot. Quick values override matching ports; deep-only ports and OS data remain and each port carries its source mode.
-- Port-change detection builds an effective view from the latest deep snapshot plus newer quick observations. It removes only ports included in the current scan scope, retains richer deep-scan version data when quick detection is incomplete, and records services in the first usable result as newly appeared.
+- Scan profiles are compared independently. Default scan details prefer the latest changed deep snapshot and fall back to the newest partial result only when no deep result exists.
+- Selecting a lightweight or standard snapshot merges it at read time with the preceding deep snapshot. Partial values override matching ports; deep-only ports and OS data remain and each port carries its source profile.
+- Port-change detection builds an effective view from the latest deep snapshot plus every newer partial observation in chronological order. It removes only ports included in each scan scope, retains richer version data when partial detection is incomplete, and records services in the first usable result as newly appeared.
 - Service-change events are retained for one week, returned by `/api/notify`, rendered alongside host-status changes, and optionally posted to Discord after the scan transaction commits.
 - Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
-- History pruning keeps one week of jobs plus the latest changed result for each mode.
+- History pruning keeps one week of jobs plus the latest changed result for each profile.
 
 `oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains a validated seed at `/usr/share/fenping/ieee-oui.json`; the monthly refresh command downloads the complete registries with short timeouts and atomically writes `/var/lib/fenping/state/ieee-oui.json`. Boot runs `oui-sync` after schema setup, hashes the source and SQL rows, and transactionally replaces `oui_vendors` only when they differ. A successful monthly download also performs this sync. Invalid or failed refreshes leave the previous data untouched. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the JSON registry remains a lookup fallback if SQL is unavailable.
 
@@ -185,7 +186,7 @@ Important files:
 
 Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock for running durations and relative times. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
 
-The IPAM route shows pool capacity, pending devices, and approved dynamic devices. Approve/unapprove actions are reversible; Reserve opens the existing fixed-host workflow with no address preselected. The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest quick result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
+The IPAM route shows pool capacity, pending devices, and approved dynamic devices. Approve/unapprove actions are reversible; Reserve opens the existing fixed-host workflow with no address preselected. The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest lightweight or standard result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
 
 Apache serves real public files directly and falls back all other non-API paths to `index.html`.
 
@@ -255,7 +256,7 @@ Useful commands:
 ```bash
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php ping 1
-docker exec fenping php /opt/fenping/cli.php inventory --quick 1
+docker exec fenping php /opt/fenping/cli.php inventory --profile lightweight 1
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup

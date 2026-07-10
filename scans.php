@@ -5,6 +5,63 @@ const SCAN_XSL_LEGACY = '../res/xsl/';
 const SCAN_XSL_TO = '/res/xsl/';
 const SCAN_HISTORY_DAYS = 7;
 
+function scanProfiles(): array {
+  return array(
+    array(
+      'id' => 'lightweight',
+      'name' => 'Lightweight',
+      'description' => 'Fast check of the 100 most common TCP ports with basic service names.',
+      'timeout_seconds' => 300
+    ),
+    array(
+      'id' => 'standard',
+      'name' => 'Standard',
+      'description' => 'Top 1,000 TCP ports with service, OS, script, and traceroute detection.',
+      'timeout_seconds' => 1800
+    ),
+    array(
+      'id' => 'deep',
+      'name' => 'Deep',
+      'description' => 'All 65,535 TCP ports with service, OS, script, and traceroute detection.',
+      'timeout_seconds' => 7200
+    )
+  );
+}
+
+function scanProfileIds(bool $includeLegacy = true): array {
+  $ids = array_column(scanProfiles(), 'id');
+  if ($includeLegacy)
+    array_unshift($ids, 'quick');
+  return $ids;
+}
+
+function scanProfileIsValid(string $profile, bool $includeLegacy = true): bool {
+  return in_array($profile, scanProfileIds($includeLegacy), true);
+}
+
+function scanProfileRank(string $profile): int {
+  return match ($profile) {
+    'quick', 'lightweight' => 1,
+    'standard' => 2,
+    'deep' => 3,
+    default => 0
+  };
+}
+
+function scanProfileIsPartial(string $profile): bool {
+  return scanProfileRank($profile) > 0 && $profile !== 'deep';
+}
+
+function scanProfileTimeout(string $profile): int {
+  if ($profile === 'quick')
+    $profile = 'lightweight';
+  foreach (scanProfiles() as $definition) {
+    if ($definition['id'] === $profile)
+      return (int)$definition['timeout_seconds'];
+  }
+  throw new InvalidArgumentException('invalid scan profile');
+}
+
 function scanXmlUrl(string $ip, ?int $id = null): string {
   if ($id !== null)
     return '/api/scans/' . rawurlencode($ip) . '/' . $id . '.xml';
@@ -245,8 +302,8 @@ function scanAttributes(string $attributes): array {
 function scanMetadataEnqueue(string $ip, string $mode): array {
   if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
     throw new InvalidArgumentException('invalid scan ip');
-  if (!in_array($mode, array('quick', 'deep'), true))
-    throw new InvalidArgumentException('invalid scan mode');
+  if (!scanProfileIsValid($mode))
+    throw new InvalidArgumentException('invalid scan profile');
 
   $lockName = 'fenping-scan-' . hash('sha256', $ip);
   $lock = db()->prepare('SELECT GET_LOCK(:name, 5)');
@@ -264,24 +321,25 @@ function scanMetadataEnqueue(string $ip, string $mode): array {
     $stmt->execute(array('ip' => $ip));
     $activeJobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    $requestedRank = scanProfileRank($mode);
+    $covering = null;
     foreach ($activeJobs as $active) {
-      if ($active['mode'] === $mode)
-        return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
+      if (scanProfileRank((string)$active['mode']) < $requestedRank)
+        continue;
+      if ($covering === null || scanProfileRank((string)$active['mode']) > scanProfileRank((string)$covering['mode']))
+        $covering = $active;
     }
+    if ($covering !== null)
+      return array('metadata' => scanNormalizeMetadata($covering), 'created' => false);
 
-    if ($mode === 'quick') {
-      foreach ($activeJobs as $active) {
-        if ($active['mode'] === 'deep')
-          return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
-      }
-    } else {
-      foreach ($activeJobs as $active) {
-        if ($active['mode'] === 'quick' && $active['state'] === 'queued') {
-          $update = db()->prepare("UPDATE scans SET mode='deep' WHERE id=:id AND state='queued'");
-          $update->execute(array('id' => $active['id']));
-          $active['mode'] = 'deep';
-          return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
-        }
+    foreach ($activeJobs as $active) {
+      if ($active['state'] !== 'queued' || scanProfileRank((string)$active['mode']) >= $requestedRank)
+        continue;
+      $update = db()->prepare("UPDATE scans SET mode=:mode WHERE id=:id AND state='queued'");
+      $update->execute(array('mode' => $mode, 'id' => $active['id']));
+      if ($update->rowCount() === 1) {
+        $active['mode'] = $mode;
+        return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
       }
     }
 
@@ -326,7 +384,12 @@ function scanMetadataClaimQueued(int $limit): array {
         FROM scans running
         WHERE running.ip=queued.ip AND running.state='running'
       )
-    ORDER BY CASE WHEN queued.mode='quick' THEN 0 ELSE 1 END, queued.id ASC
+    ORDER BY CASE queued.mode
+      WHEN 'quick' THEN 0
+      WHEN 'lightweight' THEN 0
+      WHEN 'standard' THEN 1
+      ELSE 2
+    END, queued.id ASC
     LIMIT $limit
   ");
   $stmt->execute();
@@ -567,20 +630,26 @@ function scanPortChangesBackfill(): int {
 
 function scanEffectivePortsBefore(string $ip, int $beforeId): array {
   $deep = scanPreviousSnapshotXml($ip, 'deep', $beforeId);
-  $quick = scanPreviousSnapshotXml($ip, 'quick', $beforeId);
-  if ($deep === null && $quick === null)
-    return array();
+  $afterId = $deep === null ? 0 : (int)$deep['id'];
+  $ports = $deep === null
+    ? array()
+    : scanOpenPortMap(scanParsePortObservation($deep['xml'], $ip));
 
-  if ($deep === null) {
-    $quickScan = scanParsePortObservation($quick['xml'], $ip);
-    return scanOpenPortMap($quickScan);
-  }
-
-  $deepScan = scanParsePortObservation($deep['xml'], $ip);
-  $ports = scanOpenPortMap($deepScan);
-  if ($quick !== null && $quick['id'] > $deep['id']) {
-    $quickScan = scanParsePortObservation($quick['xml'], $ip);
-    $ports = scanApplyPortObservation($ports, $quickScan, 'quick');
+  $stmt = db()->prepare("
+    SELECT s.id, s.mode, ss.xml
+    FROM scans s
+    INNER JOIN scan_snapshots ss ON ss.id=s.snapshot_id
+    WHERE s.ip=:ip
+      AND s.id>:after_id
+      AND s.id<:before_id
+      AND s.mode<>'deep'
+      AND s.state='complete'
+    ORDER BY s.id ASC
+  ");
+  $stmt->execute(array('ip' => $ip, 'after_id' => $afterId, 'before_id' => $beforeId));
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $observation = scanParsePortObservation((string)$row['xml'], $ip);
+    $ports = scanApplyPortObservation($ports, $observation, (string)$row['mode']);
   }
 
   return $ports;
@@ -753,8 +822,8 @@ function scanMetadataLatest(string $ip): ?array {
 }
 
 function scanMetadataBestResult(string $ip, ?string $mode = null): ?array {
-  if ($mode !== null && !in_array($mode, array('quick', 'deep'), true))
-    throw new InvalidArgumentException('invalid scan mode');
+  if ($mode !== null && !scanProfileIsValid($mode))
+    throw new InvalidArgumentException('invalid scan profile');
 
   $modeWhere = $mode === null ? '' : ' AND mode=:mode';
   $order = $mode === null
@@ -780,8 +849,8 @@ function scanMetadataBestResult(string $ip, ?string $mode = null): ?array {
 }
 
 function scanMetadataPreviousResult(string $ip, string $mode, int $beforeId): ?array {
-  if (!in_array($mode, array('quick', 'deep'), true))
-    throw new InvalidArgumentException('invalid scan mode');
+  if (!scanProfileIsValid($mode))
+    throw new InvalidArgumentException('invalid scan profile');
 
   $stmt = db()->prepare("
     SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
@@ -811,60 +880,63 @@ function scanMetadataById(string $ip, int $id): ?array {
   return $metadata === false ? null : scanNormalizeMetadata($metadata);
 }
 
-function scanMergeQuickWithDeep(array $quick, array $deep, array $deepMetadata): array {
+function scanMergePartialWithDeep(array $partial, array $deep, array $deepMetadata): array {
   $merged = $deep;
+  $partialMode = (string)($partial['metadata']['mode'] ?? 'lightweight');
 
   foreach (array('ip', 'args', 'started', 'status') as $field) {
-    if (($quick[$field] ?? '') !== '')
-      $merged[$field] = $quick[$field];
+    if (($partial[$field] ?? '') !== '')
+      $merged[$field] = $partial[$field];
   }
-  if (($quick['duration'] ?? null) !== null)
-    $merged['duration'] = $quick['duration'];
-  if (($quick['uptime'] ?? '') !== '')
-    $merged['uptime'] = $quick['uptime'];
+  if (($partial['duration'] ?? null) !== null)
+    $merged['duration'] = $partial['duration'];
+  if (($partial['uptime'] ?? '') !== '')
+    $merged['uptime'] = $partial['uptime'];
 
   $merged['addresses'] = scanMergeResultItems(
     $deep['addresses'] ?? array(),
-    $quick['addresses'] ?? array(),
-    fn($item) => ($item['type'] ?? '') . '|' . ($item['addr'] ?? '')
+    $partial['addresses'] ?? array(),
+    fn($item) => ($item['type'] ?? '') . '|' . ($item['addr'] ?? ''),
+    $partialMode
   );
   $merged['hostnames'] = scanMergeResultItems(
     $deep['hostnames'] ?? array(),
-    $quick['hostnames'] ?? array(),
-    fn($item) => ($item['type'] ?? '') . '|' . ($item['name'] ?? '')
+    $partial['hostnames'] ?? array(),
+    fn($item) => ($item['type'] ?? '') . '|' . ($item['name'] ?? ''),
+    $partialMode
   );
-  $merged['ports'] = scanMergePorts($deep['ports'] ?? array(), $quick['ports'] ?? array());
+  $merged['ports'] = scanMergePorts($deep['ports'] ?? array(), $partial['ports'] ?? array(), $partialMode);
   usort($merged['ports'], function ($left, $right) {
     $portOrder = (int)($left['port'] ?? 0) <=> (int)($right['port'] ?? 0);
     return $portOrder !== 0 ? $portOrder : strcmp((string)($left['protocol'] ?? ''), (string)($right['protocol'] ?? ''));
   });
 
-  $quickOs = $quick['os'] ?? array();
-  $merged['os'] = scanMarkResultSource(count($quickOs) !== 0 ? $quickOs : ($deep['os'] ?? array()), count($quickOs) !== 0 ? 'quick' : 'deep');
+  $partialOs = $partial['os'] ?? array();
+  $merged['os'] = scanMarkResultSource(count($partialOs) !== 0 ? $partialOs : ($deep['os'] ?? array()), count($partialOs) !== 0 ? $partialMode : 'deep');
   $merged['ports_count'] = count($merged['ports']);
-  $merged['metadata'] = $quick['metadata'] ?? null;
-  $merged['xml'] = $quick['xml'] ?? null;
+  $merged['metadata'] = $partial['metadata'] ?? null;
+  $merged['xml'] = $partial['xml'] ?? null;
   $merged['merged'] = true;
   $merged['merged_with'] = $deepMetadata;
   return $merged;
 }
 
-function scanMergeResultItems(array $base, array $overlay, callable $key): array {
+function scanMergeResultItems(array $base, array $overlay, callable $key, string $overlaySource): array {
   $items = array();
   foreach (scanMarkResultSource($base, 'deep') as $item)
     $items[$key($item)] = $item;
-  foreach (scanMarkResultSource($overlay, 'quick') as $item)
+  foreach (scanMarkResultSource($overlay, $overlaySource) as $item)
     $items[$key($item)] = $item;
   return array_values($items);
 }
 
-function scanMergePorts(array $deep, array $quick): array {
+function scanMergePorts(array $deep, array $partial, string $partialSource): array {
   $items = array();
   foreach (scanMarkResultSource($deep, 'deep') as $item) {
     $key = ($item['protocol'] ?? '') . '|' . ($item['port'] ?? '');
     $items[$key] = $item;
   }
-  foreach (scanMarkResultSource($quick, 'quick') as $item) {
+  foreach (scanMarkResultSource($partial, $partialSource) as $item) {
     $key = ($item['protocol'] ?? '') . '|' . ($item['port'] ?? '');
     $items[$key] = scanMergePortKnowledge($items[$key] ?? null, $item);
   }

@@ -61,6 +61,19 @@
           <div class="modal-footer"><button class="btn btn-link" type="button" :disabled="saving" @click="requestClose">Cancel</button><button class="btn btn-danger" type="submit" :disabled="saving"><i class="ti ti-trash me-1"></i>Delete</button></div>
         </form>
 
+        <div v-else-if="modal.type === 'scanProfile'">
+          <div class="modal-body">
+            <div class="text-secondary mb-3">Choose how thoroughly to scan <strong class="text-body">{{ modal.host?.name || modal.host?.ip }}</strong>.</div>
+            <div class="scan-profile-grid">
+              <button v-for="(profile, index) in scanProfiles" :key="profile.id" class="scan-profile-option" type="button" :autofocus="index === 0" @click="$emit('submit-scan-profile', profile.id)">
+                <i :class="profile.icon"></i>
+                <span><strong>{{ profile.name }}</strong><small>{{ profile.description }}</small><small class="text-secondary">{{ profile.timeout }}</small></span>
+              </button>
+            </div>
+          </div>
+          <div class="modal-footer"><button class="btn btn-link" type="button" @click="requestClose">Cancel</button></div>
+        </div>
+
         <div v-else-if="modal.type === 'history'">
           <div class="modal-body p-0">
             <div v-if="error" class="alert alert-danger m-3">{{ error }}</div>
@@ -86,12 +99,12 @@
                 <div class="scan-actions"><select v-if="modal.history && modal.history.length > 1" class="form-select form-select-sm scan-history-select" :value="modal.selectedScanId || ''" @change="$emit('select-scan', $event.target.value)"><option v-for="scan in modal.history" :key="scan.id" :value="scan.id">{{ scanHistoryLabel(scan) }}</option></select><button class="btn btn-outline-secondary btn-sm" type="button" @click="$emit('toggle-raw')"><i class="ti ti-code me-1"></i>XML</button></div>
               </div>
               <div class="scan-summary">
-                <div class="scan-fact"><span>Status</span><strong>{{ modal.scan.status || '-' }}</strong></div><div class="scan-fact"><span>State</span><strong>{{ modal.scan.metadata?.state || '-' }}</strong></div><div class="scan-fact"><span>Mode</span><strong>{{ scanModeLabel(modal.scan) }}</strong></div><div class="scan-fact"><span>Ports</span><strong>{{ modal.scan.ports_count ?? modal.scan.metadata?.ports_count ?? modal.scan.ports.length }}</strong></div><div class="scan-fact"><span>Duration</span><strong>{{ formatScanDuration(modal.scan.metadata?.duration ?? modal.scan.duration) }}</strong></div><div class="scan-fact"><span>Last</span><strong>{{ formatScanDate(modal.scan.metadata?.date_end || modal.scan.metadata?.date_begin || modal.scan.started) }}</strong></div>
+                <div class="scan-fact"><span>Status</span><strong>{{ modal.scan.status || '-' }}</strong></div><div class="scan-fact"><span>State</span><strong>{{ modal.scan.metadata?.state || '-' }}</strong></div><div class="scan-fact"><span>Profile</span><strong>{{ scanModeLabel(modal.scan) }}</strong></div><div class="scan-fact"><span>Ports</span><strong>{{ modal.scan.ports_count ?? modal.scan.metadata?.ports_count ?? modal.scan.ports.length }}</strong></div><div class="scan-fact"><span>Duration</span><strong>{{ formatScanDuration(modal.scan.metadata?.duration ?? modal.scan.duration) }}</strong></div><div class="scan-fact"><span>Last</span><strong>{{ formatScanDate(modal.scan.metadata?.date_end || modal.scan.metadata?.date_begin || modal.scan.started) }}</strong></div>
               </div>
               <ScanSimpleSection v-if="modal.scan.addresses.length" title="Addresses"><tr v-for="address in modal.scan.addresses" :key="`${address.type}-${address.addr}`"><td class="scan-type">{{ address.type }}</td><td class="font-monospace">{{ address.addr }}</td><td class="text-truncate-cell">{{ address.vendor }}</td></tr></ScanSimpleSection>
               <ScanSimpleSection v-if="modal.scan.hostnames.length" title="Hostnames"><tr v-for="hostname in modal.scan.hostnames" :key="`${hostname.name}-${hostname.type}`"><td>{{ hostname.name }}</td><td class="scan-type">{{ hostname.type }}</td></tr></ScanSimpleSection>
               <ScanSimpleSection v-if="modal.scan.os.length" title="OS"><tr v-for="os in modal.scan.os" :key="os.name"><td>{{ os.name }}</td><td class="scan-type">{{ os.accuracy }}%</td></tr></ScanSimpleSection>
-              <div class="scan-section"><h3>Ports</h3><table v-if="modal.scan.ports.length" class="table table-sm scan-table"><thead><tr><th>Port</th><th>State</th><th>Service</th><th>Details</th><th>Source</th></tr></thead><tbody><tr v-for="port in modal.scan.ports" :key="`${port.protocol}-${port.port}`"><td class="font-monospace">{{ port.port }}/{{ port.protocol }}</td><td><span :class="scanStateClass(port.state)">{{ port.state || '-' }}</span></td><td>{{ port.service || '-' }}</td><td class="text-truncate-cell" :title="port.details">{{ port.details }}</td><td class="scan-type">{{ port.source || modal.scan.metadata?.mode || '-' }}</td></tr></tbody></table><div v-else class="text-secondary small">No ports found</div></div>
+              <div class="scan-section"><h3>Ports</h3><table v-if="modal.scan.ports.length" class="table table-sm scan-table"><thead><tr><th>Port</th><th>State</th><th>Service</th><th>Details</th><th>Source</th></tr></thead><tbody><tr v-for="port in modal.scan.ports" :key="`${port.protocol}-${port.port}`"><td class="font-monospace">{{ port.port }}/{{ port.protocol }}</td><td><span :class="scanStateClass(port.state)">{{ port.state || '-' }}</span></td><td>{{ port.service || '-' }}</td><td class="text-truncate-cell" :title="port.details">{{ port.details }}</td><td class="scan-type">{{ scanProfileLabel(port.source || modal.scan.metadata?.mode) }}</td></tr></tbody></table><div v-else class="text-secondary small">No ports found</div></div>
               <pre v-if="modal.showRaw" class="scan-raw">{{ modal.raw }}</pre>
             </template>
           </div>
@@ -110,15 +123,16 @@ import ModalFooter from './ModalFooter.vue';
 import ScanSimpleSection from './ScanSimpleSection.vue';
 import { useAccessibleModal } from '../composables/useAccessibleModal.js';
 import { formatDuration, formatMac, formatPercent, formatScanDate, formatScanDuration, formatServerDate, historyRowClass, scanStateClass, statusClass, statusIcon, statusTitle } from '../lib/formatters.js';
+import { scanProfileLabel, scanProfiles } from '../lib/scanProfiles.js';
 
 const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] } });
-const emit = defineEmits(['close', 'delete-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'toggle-raw']);
+const emit = defineEmits(['close', 'delete-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'submit-scan-profile', 'toggle-raw']);
 const titleId = `fenping-modal-title-${Math.random().toString(36).slice(2)}`;
-const title = computed(() => props.modal.type === 'create' && props.modal.purpose === 'reserve' ? 'Reserve address' : ({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', history: `History ${props.modal.ip || ''}`, scan: `Scan ${props.modal.ip || ''}`, loading: 'Loading' })[props.modal.type] || 'Dialog');
+const title = computed(() => props.modal.type === 'create' && props.modal.purpose === 'reserve' ? 'Reserve address' : ({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', history: `History ${props.modal.ip || ''}`, scan: `Scan ${props.modal.ip || ''}`, loading: 'Loading' })[props.modal.type] || 'Dialog');
 const dialogClass = computed(() => props.modal.type === 'login' ? 'modal-sm' : props.modal.type === 'scan' ? 'modal-xl scan-modal-dialog' : 'modal-lg');
 const modalRoot = useAccessibleModal(() => props.modal.type, requestClose);
 
 function requestClose() { if (!props.saving) emit('close'); }
-function scanModeLabel(scan) { return scan?.merged_with ? 'quick + deep' : scan?.metadata?.mode || '-'; }
-function scanHistoryLabel(scan) { return `${formatServerDate(scan.date_end || scan.date_begin || '')} ${scan.mode} ${scan.status || scan.state || '-'} ${Number(scan.ports_count || 0)}p`; }
+function scanModeLabel(scan) { return scan?.merged_with ? `${scanProfileLabel(scan?.metadata?.mode)} + Deep` : scanProfileLabel(scan?.metadata?.mode); }
+function scanHistoryLabel(scan) { return `${formatServerDate(scan.date_end || scan.date_begin || '')} ${scanProfileLabel(scan.mode)} ${scan.status || scan.state || '-'} ${Number(scan.ports_count || 0)}p`; }
 </script>

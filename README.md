@@ -14,9 +14,9 @@ It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, Maria
 - Device onboarding with reversible MAC approval and DHCP pool utilization tracking.
 - Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
 - Category/range separators with collapsible groups and rename support.
-- Quick and deep nmap scans with deduplicated database history; quick results never replace the latest deep snapshot.
+- Lightweight, standard, and deep nmap profiles with deduplicated database history; partial results never replace the latest deep snapshot.
 - Service-change notifications when an open port appears, disappears, or reports a different service/version.
-- Searchable service inventory showing every open service per computer from the latest deep or merged quick scan.
+- Searchable service inventory showing every open service per computer from the latest deep or merged partial scan.
 - Local MAC vendor resolution from the IEEE MA-L, MA-M, MA-S, and IAB registries, without sending device addresses to a third party.
 - Netboot image upload, delete, and per-host boot image selection.
 - Guest read-only mode and admin login.
@@ -128,7 +128,9 @@ docker exec fenping php /opt/fenping/cli.php ping
 docker exec fenping php /opt/fenping/cli.php ping 10
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory
-docker exec fenping php /opt/fenping/cli.php inventory --quick 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php inventory --profile lightweight 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php inventory --profile standard 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php inventory --profile deep 10.10.10.10
 docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
@@ -148,9 +150,9 @@ Cron inside the container runs:
 
 The image includes a vendor registry seed downloaded from the [IEEE Registration Authority public listings](https://standards.ieee.org/products-programs/regauth/). Every boot verifies the SQL registry against the last validated data and transactionally imports it only when changed. A monthly background job downloads and validates the complete public MA-L, MA-M, MA-S, and historical IAB CSV files, atomically replaces `data/state/ieee-oui.json`, and refreshes the SQL table. Inventory requests query this local prefix index; individual LAN MAC addresses are never sent outside the appliance. If a download or SQL import fails, FenPing retains the previous registry and can fall back to the image seed.
 
-Completed nmap output is stored in MariaDB. FenPing keeps one XML snapshot per distinct semantic result and scan mode, so unchanged scans reuse the existing snapshot. Quick and deep scans have separate change baselines, and the normal detail view prefers the latest deep result. Selecting a quick result merges it over the preceding deep snapshot: quick observations replace matching ports while deep-only ports and OS data remain visible with source labels. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
+Completed nmap output is stored in MariaDB. FenPing keeps one XML snapshot per distinct semantic result and scan profile, so unchanged scans reuse the existing snapshot. Lightweight checks Nmap's 100 most common TCP ports with a five-minute limit. Standard checks the top 1,000 TCP ports with service, OS, default-script, and traceroute detection with a 30-minute limit. Deep performs the same detection across all 65,535 TCP ports with a two-hour limit. The normal detail view prefers the latest deep result. Selecting a lightweight or standard result merges it over the preceding deep snapshot: partial observations replace matching ports while deep-only ports and OS data remain visible with source labels. Existing `quick` history remains readable as Lightweight. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
 
-Completed scans also build an effective open-port view. A deep scan observes the full TCP range; a quick scan changes only the ports listed in its Nmap scan scope. Services in the first usable result are recorded as newly appeared, and later appearances, disappearances, and confirmed service/version changes are stored for seven days, displayed on Notify, and sent to Discord when a webhook is configured. Missing version data from a quick scan does not erase version details learned by a deep scan.
+Completed scans also build an effective open-port view. A deep scan observes the full TCP range; lightweight and standard scans change only the ports listed in their Nmap scan scope. Services in the first usable result are recorded as newly appeared, and later appearances, disappearances, and confirmed service/version changes are stored for seven days, displayed on Notify, and sent to Discord when a webhook is configured. Missing version data from a partial scan does not erase version details learned by a deeper scan.
 
 At boot, `scan-port-backfill` replays stored snapshots in chronological order and inserts any missing service-change events using their original scan timestamps. The replay is idempotent, so it can also be run manually after restoring older scan history.
 
@@ -178,7 +180,7 @@ docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/db
 
 The UI starts in guest mode. Guests can view inventory, IPAM utilization, services, history, scans, health, and notifications, but cannot approve devices or change DHCP/DNS/netboot state.
 
-After login, admins can create/edit hosts, add/rename/delete categories, trigger ping refreshes and quick scans, upload/delete netboot images, and assign netboot images to hosts.
+After login, admins can create/edit hosts, add/rename/delete categories, trigger ping refreshes and choose lightweight, standard, or deep host scans, upload/delete netboot images, and assign netboot images to hosts.
 
 Netboot uploads accept UEFI applications (`.efi`), iPXE/PXE loaders (`.kpxe`, `.kkpxe`, `.kkkpxe`, `.pxe`, `.lkrn`), PXELINUX loaders (`.0`), and iPXE scripts (`.ipxe`). FenPing validates both the filename extension and the file content. PHP execution is disabled in the netboot directory.
 
@@ -199,9 +201,11 @@ Useful endpoints:
 | `GET` | `/api/services` | Current open services by host using the latest effective scan. |
 | `POST` | `/api/ping/refresh` | Run ping scan and wait for completion. |
 | `GET` | `/api/history/{ip}` | Status history for a host. |
-| `GET` | `/api/scans/{ip}` | Preferred scan result as JSON (deep before quick). |
+| `GET` | `/api/scans/{ip}` | Preferred scan result as JSON, favoring the latest deep result. |
+| `GET` | `/api/scans/profiles` | List available scan profiles and timeout limits. |
+| `POST` | `/api/scans/{ip}` | Queue the requested `lightweight`, `standard`, or `deep` profile and return HTTP `202`. |
 | `GET` | `/api/scans/{ip}/xml` | Preferred database-backed scan XML. |
-| `POST` | `/api/scans/{ip}/quick` | Queue a quick scan and return HTTP `202`. |
+| `POST` | `/api/scans/{ip}/quick` | Legacy alias that queues a lightweight scan. |
 | `GET` | `/api/netboot/images` | List netboot images. |
 | `POST` | `/api/netboot/images` | Upload a netboot image. |
 | `GET` | `/api/netboot/images/{id}/file` | Download a netboot image. |
@@ -250,7 +254,7 @@ docker logs -f fenping
 ### Scans Are Missing
 
 ```bash
-docker exec fenping php /opt/fenping/cli.php inventory --quick 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php inventory --profile lightweight 10.10.10.10
 docker exec fenping php /opt/fenping/cli.php inventory --work
 ```
 

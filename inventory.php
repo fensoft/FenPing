@@ -26,12 +26,12 @@ function runInventoryCommand(array $args): int {
     if (count($options['args']) === 0)
       echo "discovered " . count($targets) . " hosts" . PHP_EOL;
     else
-      echo "queueing " . $targets[0] . ($options['quick'] ? " quick" : " deep") . PHP_EOL;
+      echo "queueing " . $targets[0] . " " . $options['profile'] . PHP_EOL;
 
     $queued = 0;
     $active = 0;
     foreach ($targets as $ip) {
-      $result = scanMetadataEnqueue($ip, $options['quick'] ? 'quick' : 'deep');
+      $result = scanMetadataEnqueue($ip, $options['profile']);
       if ($result['created'])
         $queued++;
       else
@@ -140,29 +140,42 @@ function runInventoryJobCommand(array $args): int {
   if ($job['state'] !== 'running')
     throw new RuntimeException("scan job $scanId is not running");
 
-  $result = inventoryScan($job['ip'], $job['mode'] === 'quick', $scanId);
+  $result = inventoryScan($job['ip'], $job['mode'], $scanId);
   echo $job['ip'] . ($result['saved'] ? ' saved' : ' skipped') . PHP_EOL;
   return 0;
 }
 
 function inventoryOptions(array $args): array {
-  $quick = false;
+  $profile = 'deep';
   $remaining = array();
 
-  foreach ($args as $arg) {
+  for ($index = 0; $index < count($args); $index++) {
+    $arg = $args[$index];
     if ($arg === '--quick' || $arg === '-q') {
-      $quick = true;
+      $profile = 'lightweight';
       continue;
     }
     if ($arg === 'quick') {
-      $quick = true;
+      $profile = 'lightweight';
+      continue;
+    }
+    if ($arg === '--profile') {
+      $profile = (string)($args[++$index] ?? '');
+      if (!scanProfileIsValid($profile, false))
+        throw new InvalidArgumentException(inventoryUsage());
+      continue;
+    }
+    if (str_starts_with($arg, '--profile=')) {
+      $profile = substr($arg, strlen('--profile='));
+      if (!scanProfileIsValid($profile, false))
+        throw new InvalidArgumentException(inventoryUsage());
       continue;
     }
     $remaining[] = $arg;
   }
 
   return array(
-    'quick' => $quick,
+    'profile' => $profile,
     'args' => $remaining
   );
 }
@@ -217,8 +230,9 @@ function inventoryDiscover(string $range): array {
   return array_values(array_unique($hosts));
 }
 
-function inventoryScan(string $ip, bool $quick = false, ?int $scanId = null): array {
-  $mode = $quick ? 'quick' : 'deep';
+function inventoryScan(string $ip, string $mode = 'deep', ?int $scanId = null): array {
+  if (!scanProfileIsValid($mode))
+    throw new InvalidArgumentException('invalid scan profile');
   if ($scanId === null)
     $scanId = scanMetadataStart($ip, $mode);
   $tmp = tempnam(sys_get_temp_dir(), 'fenping-nmap-');
@@ -228,11 +242,9 @@ function inventoryScan(string $ip, bool $quick = false, ?int $scanId = null): ar
   }
 
   try {
-    $command = $quick
-      ? array('nmap', $ip, '-T4', '-F', '-sS', '-v', '-oX', $tmp)
-      : array('nmap', $ip, '-T3', '-A', '-p-', '-sS', '-v', '-oX', $tmp);
+    $command = inventoryScanCommand($ip, $mode, $tmp);
 
-    inventoryExec($command, true);
+    inventoryExec($command, true, scanProfileTimeout($mode));
     $xml = file_get_contents($tmp);
     if ($xml === false)
       throw new RuntimeException("failed to read nmap result for $ip");
@@ -271,6 +283,16 @@ function inventoryScan(string $ip, bool $quick = false, ?int $scanId = null): ar
   }
 }
 
+function inventoryScanCommand(string $ip, string $profile, string $output): array {
+  if ($profile === 'quick' || $profile === 'lightweight')
+    return array('nmap', $ip, '-T4', '-F', '-sS', '-v', '-oX', $output);
+  if ($profile === 'standard')
+    return array('nmap', $ip, '-T3', '-A', '--top-ports', '1000', '-sS', '-v', '-oX', $output);
+  if ($profile === 'deep')
+    return array('nmap', $ip, '-T3', '-A', '-p-', '-sS', '-v', '-oX', $output);
+  throw new InvalidArgumentException('invalid scan profile');
+}
+
 function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds = INVENTORY_SCAN_TIMEOUT_SECONDS): array {
   $timeoutSeconds = max(1, $timeoutSeconds);
   $timedCommand = array_merge(array(
@@ -289,9 +311,7 @@ function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds 
   $code = 0;
   exec($line, $output, $code);
   if ($code === 124 || $code === 137) {
-    $duration = $timeoutSeconds % 60 === 0
-      ? ($timeoutSeconds / 60) . ' minute' . ($timeoutSeconds === 60 ? '' : 's')
-      : $timeoutSeconds . ' second' . ($timeoutSeconds === 1 ? '' : 's');
+    $duration = inventoryTimeoutLabel($timeoutSeconds);
     $name = basename($command[0] ?? 'command');
     throw new InventoryTimeoutException("$name timed out after $duration");
   }
@@ -301,7 +321,20 @@ function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds 
   return $output;
 }
 
+function inventoryTimeoutLabel(int $seconds): string {
+  if ($seconds % 3600 === 0) {
+    $hours = (int)($seconds / 3600);
+    return $hours . ' hour' . ($hours === 1 ? '' : 's');
+  }
+  if ($seconds % 60 === 0) {
+    $minutes = (int)($seconds / 60);
+    return $minutes . ' minute' . ($minutes === 1 ? '' : 's');
+  }
+  return $seconds . ' second' . ($seconds === 1 ? '' : 's');
+}
+
 function inventoryUsage(): string {
-  return "Usage: php cli.php inventory [--quick] [1-254|IPv4]\n"
+  return "Usage: php cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4]\n"
+    . "       php cli.php inventory --quick [1-254|IPv4] (legacy lightweight alias)\n"
     . "       php cli.php inventory --work";
 }

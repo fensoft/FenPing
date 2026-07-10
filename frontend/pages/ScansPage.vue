@@ -14,7 +14,7 @@
           <col class="scan-col-status" /><col class="scan-col-ports" /><col class="scan-col-started" />
           <col class="scan-col-duration" /><col class="scan-col-error" /><col class="scan-col-actions" />
         </colgroup>
-        <thead><tr><th>State</th><th>Host</th><th>Mode</th><th>Status</th><th>Ports</th><th>Started</th><th>Duration</th><th>Error</th><th class="text-end">Actions</th></tr></thead>
+        <thead><tr><th>State</th><th>Host</th><th>Profile</th><th>Status</th><th>Ports</th><th>Started</th><th>Duration</th><th>Error</th><th class="text-end">Actions</th></tr></thead>
         <tbody>
           <tr v-if="loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">Loading</td></tr>
           <tr v-else-if="!loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">No scans</td></tr>
@@ -25,12 +25,12 @@
               <strong v-else>{{ displayName(scan) }}</strong>
               <small class="font-monospace">{{ scan.ip }}</small>
             </td>
-            <td>{{ scan.mode || '-' }}</td><td>{{ scan.status || '-' }}</td><td>{{ Number(scan.ports_count || 0) }}</td>
+            <td>{{ scanProfileLabel(scan.mode) }}</td><td>{{ scan.status || '-' }}</td><td>{{ Number(scan.ports_count || 0) }}</td>
             <td class="text-nowrap">{{ formatScanDate(scan.date_begin) }}</td>
             <td class="text-nowrap">{{ formatScanDuration(activeScanDuration(scan, now)) }}</td>
             <td class="text-truncate-cell" :title="scan.error || ''">{{ scan.error || '-' }}</td>
             <td class="text-end action-cell">
-              <button v-if="isAuthenticated && scan.ip" class="btn btn-outline-secondary btn-sm icon-btn" :class="{ 'is-spinning': isScanning(scan) || scan.state === 'running' }" type="button" :disabled="isScanning(scan) || scanIsActiveState(scan.state)" title="Quick scan" @click="$emit('quick-scan', scan)">
+              <button v-if="isAuthenticated && scan.ip" class="btn btn-outline-secondary btn-sm icon-btn" :class="{ 'is-spinning': isScanning(scan) || scan.state === 'running' }" type="button" :disabled="isScanning(scan) || scanIsActiveState(scan.state)" title="Scan host" @click="$emit('scan-host', scan)">
                 <i :class="isScanning(scan) || scan.state === 'running' ? 'ti ti-loader-2' : 'ti ti-search'"></i>
               </button>
               <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!scan.xml_usable" @click="$emit('open-scan', scan.ip, scan.id)"><i class="ti ti-file-search"></i></button>
@@ -49,10 +49,11 @@ import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
 import { activeScanDuration, formatScanDate, formatScanDuration, scanIsActiveState, scanRunStateClass, scanRunStateIcon } from '../lib/formatters.js';
+import { scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({ isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
-defineEmits(['host-detail', 'open-scan', 'quick-scan']);
+defineEmits(['host-detail', 'open-scan', 'scan-host']);
 const scans = ref([]);
 const loading = ref(false);
 const error = ref('');

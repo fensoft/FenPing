@@ -989,6 +989,48 @@ body {
   white-space: nowrap;
 }
 
+.scan-profile-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.scan-profile-option {
+  align-items: flex-start;
+  background: transparent;
+  border: 1px solid #dce1e7;
+  border-radius: 6px;
+  color: inherit;
+  display: flex;
+  gap: 0.65rem;
+  min-height: 8rem;
+  padding: 0.8rem;
+  text-align: left;
+}
+
+.scan-profile-option:hover,
+.scan-profile-option:focus-visible {
+  background: #f0f3f7;
+  border-color: #206bc4;
+  outline: none;
+}
+
+.scan-profile-option > .ti {
+  color: #206bc4;
+  font-size: 1.4rem;
+}
+
+.scan-profile-option span,
+.scan-profile-option small {
+  display: block;
+}
+
+.scan-profile-option small {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  margin-top: 0.3rem;
+}
+
 .history-table {
   margin: 0;
 }
@@ -1343,6 +1385,16 @@ html[data-bs-theme='dark'] .modal {
   background: rgba(6, 10, 16, 0.55);
 }
 
+html[data-bs-theme='dark'] .scan-profile-option {
+  border-color: #324154;
+}
+
+html[data-bs-theme='dark'] .scan-profile-option:hover,
+html[data-bs-theme='dark'] .scan-profile-option:focus-visible {
+  background: #202c3a;
+  border-color: #4299e1;
+}
+
 html[data-bs-theme='dark'] .history-muted td {
   color: #8c9aad;
 }
@@ -1473,6 +1525,14 @@ html[data-bs-theme='dark'] .scan-state-filtered {
 
   .modal-switch-grid {
     grid-template-columns: 1fr;
+  }
+
+  .scan-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scan-profile-option {
+    min-height: 0;
   }
 
   .history-summary {

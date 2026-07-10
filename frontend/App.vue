@@ -43,7 +43,7 @@
             @login="openLogin"
             @notice="setNotice"
             @ping-refresh="refreshScan"
-            @quick-scan="quickScanHost"
+            @scan-host="openScanProfile"
             @host-detail="navigateHostDetail"
             @open-history="openHistory"
             @open-scan="openScan"
@@ -74,6 +74,7 @@
       @submit-rename-category="submitRenameCategory"
       @submit-delete-host="submitDeleteHost"
       @submit-delete-category="submitDeleteCategory"
+      @submit-scan-profile="submitScanProfile"
       @select-scan="selectScanHistory"
       @toggle-raw="toggleScanRaw"
     />
@@ -88,6 +89,7 @@ import { apiJson, apiText, isAbortError } from './lib/api.js';
 import { useAbortableTask } from './composables/useAbortableTask.js';
 import { providePageController } from './composables/usePageController.js';
 import { formatMac, toFlag } from './lib/formatters.js';
+import { scanProfileLabel } from './lib/scanProfiles.js';
 import { routeNames } from './router.js';
 
 const router = useRouter();
@@ -228,18 +230,31 @@ function setHostScanning(host, value) {
   const next = new Set(scanningHosts.value); value ? next.add(key) : next.delete(key); scanningHosts.value = next;
 }
 
-async function quickScanHost(host) {
+function openScanProfile(host) {
   if (!isAuthenticated.value) return openLogin();
+  if (!host?.ip || isHostScanning(host)) return;
+  clearMessages();
+  modal.value = { type: 'scanProfile', host };
+}
+
+function submitScanProfile(profile) {
+  const host = modal.value?.host;
+  closeModal();
+  if (host) scanHost(host, profile);
+}
+
+async function scanHost(host, profile) {
   if (!host?.ip || isHostScanning(host)) return;
   clearMessages();
   setHostScanning(host, true);
   try {
-    const result = await apiJson(`/api/scans/${encodeURIComponent(host.ip)}/quick`, { method: 'POST' });
-    setNotice(result?.created === false ? 'Scan already queued or running' : 'Scan queued');
+    const result = await apiJson(`/api/scans/${encodeURIComponent(host.ip)}`, { method: 'POST', body: JSON.stringify({ profile }) });
+    const queuedProfile = scanProfileLabel(result?.metadata?.mode || profile);
+    setNotice(result?.created === false ? `${queuedProfile} scan already queued or running` : `${queuedProfile} scan queued`);
     await reloadCurrentPage();
     const metadata = await pollScanStatus(host, result?.metadata?.id);
     if (metadata && ['failed', 'timeout', 'cancelled'].includes(metadata.state)) throw new Error(metadata.error || `Scan ${metadata.state}`);
-    setNotice(metadata?.result_changed ? 'Scan changes saved' : 'Scan complete, no changes');
+    setNotice(metadata?.result_changed ? `${queuedProfile} scan changes saved` : `${queuedProfile} scan complete, no changes`);
     await reloadCurrentPage();
   } catch (error) {
     globalError.value = error.message;

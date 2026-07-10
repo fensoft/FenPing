@@ -3,7 +3,9 @@
 function scansApiRoutes(): array {
   return array(
     apiRoute('GET', '/scans', 'handleScansQueue'),
+    apiRoute('GET', '/scans/profiles', 'handleScanProfiles'),
     apiRoute('GET', '/services', 'handleServices'),
+    apiRoute('POST', '/scans/{ip:ipv4}', 'handleScanCreate', 'session'),
     apiRoute('POST', '/scans/{ip:ipv4}/quick', 'handleScanQuick', 'session'),
     apiRoute('GET', '/scans/{ip:ipv4}/status', 'handleScanStatus'),
     apiRoute('GET', '/scans/{ip:ipv4}/history', 'handleScanHistory'),
@@ -20,6 +22,10 @@ function scansApiRoutes(): array {
 
 function handleScansQueue(array $params): array {
   return array('scans' => scanMetadataQueue());
+}
+
+function handleScanProfiles(array $params): array {
+  return array('profiles' => scanProfiles());
 }
 
 function handleServices(array $params): array {
@@ -72,14 +78,26 @@ function handleServices(array $params): array {
   );
 }
 
+function handleScanCreate(array $params): void {
+  $body = requestBody();
+  $profile = $body['profile'] ?? '';
+  if (!is_string($profile) || !scanProfileIsValid($profile, false))
+    jsonError(400, 'invalid scan profile');
+  queueScanResponse($params['ip'], $profile);
+}
+
 function handleScanQuick(array $params): void {
-  $ip = $params['ip'];
-  $queued = scanMetadataEnqueue($ip, 'quick');
+  queueScanResponse($params['ip'], 'lightweight');
+}
+
+function queueScanResponse(string $ip, string $profile): void {
+  $queued = scanMetadataEnqueue($ip, $profile);
   startScanWorkerAsync();
 
   jsonResponse(array(
     'queued' => true,
     'created' => $queued['created'],
+    'profile' => $profile,
     'metadata' => $queued['metadata'],
     'xml' => '/api/scans/' . rawurlencode($ip) . '/xml'
   ), 202);
@@ -144,7 +162,7 @@ function scanJsonResponse(string $ip, ?int $id = null): array {
     jsonError(404, 'scan not found');
 
   $xml = scanReadXml($ip, $metadata);
-  $deepMetadata = $metadata !== null && ($metadata['mode'] ?? '') === 'quick'
+  $deepMetadata = $metadata !== null && scanProfileIsPartial((string)($metadata['mode'] ?? ''))
     ? scanMetadataPreviousResult($ip, 'deep', (int)$metadata['id'])
     : null;
   if ($xml === null && $deepMetadata === null)
@@ -171,7 +189,7 @@ function scanJsonResponse(string $ip, ?int $id = null): array {
   if ($deepMetadata !== null) {
     $deepXml = scanReadXml($ip, $deepMetadata);
     if ($deepXml !== null)
-      $scan = scanMergeQuickWithDeep($scan, scanParseXml($deepXml, $deepMetadata), $deepMetadata);
+      $scan = scanMergePartialWithDeep($scan, scanParseXml($deepXml, $deepMetadata), $deepMetadata);
   }
 
   if ($metadata === null)

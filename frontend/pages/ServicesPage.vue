@@ -33,8 +33,8 @@
             <td class="font-monospace text-nowrap"><strong>{{ row.port }}</strong>/{{ row.protocol }}</td>
             <td><strong>{{ row.service || 'unknown' }}</strong></td>
             <td class="services-version" :title="row.version || ''">{{ row.version || '-' }}</td>
-            <td><span class="badge" :class="row.source === 'quick' ? 'bg-blue-lt text-blue' : 'bg-purple-lt text-purple'">{{ row.source || row.scan_mode }}</span></td>
-            <td class="text-nowrap"><span>{{ formatScanDate(row.scan_date) }}</span><small v-if="row.merged">quick + deep</small></td>
+            <td><span class="badge" :class="scanProfileBadgeClass(row.source || row.scan_mode)">{{ scanProfileLabel(row.source || row.scan_mode) }}</span></td>
+            <td class="text-nowrap"><span>{{ formatScanDate(row.scan_date) }}</span><small v-if="row.merged">{{ scanProfileLabel(row.scan_mode) }} + Deep</small></td>
             <td class="text-end action-cell">
               <a v-if="serviceUrl(row)" class="btn btn-outline-primary btn-sm icon-btn" :href="serviceUrl(row)" target="_blank" rel="noopener noreferrer" title="Open web service"><i class="ti ti-external-link"></i></a>
               <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" @click="$emit('open-scan', row.ip, row.scan_id)"><i class="ti ti-file-search"></i></button>
@@ -52,6 +52,7 @@ import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatMac, formatScanDate } from '../lib/formatters.js';
+import { scanProfileBadgeClass, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
 const emit = defineEmits(['host-detail', 'network', 'open-scan']);

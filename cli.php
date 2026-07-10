@@ -48,7 +48,7 @@ if ($command === 'restore') {
 
 fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
-fwrite(STDERR, "       php cli.php inventory [--quick] [1-254|IPv4] (queue scans)" . PHP_EOL);
+fwrite(STDERR, "       php cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4] (queue scans)" . PHP_EOL);
 fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);
 fwrite(STDERR, "       php cli.php scan-port-backfill" . PHP_EOL);
 fwrite(STDERR, "       php cli.php oui-refresh" . PHP_EOL);

@@ -41,7 +41,7 @@
               <td class="text-truncate-cell" :title="row.host.vendor || ''">{{ row.host.vendor }}</td><td class="text-truncate-cell font-monospace" :title="row.host.ip || ''">{{ row.host.ip }}</td>
               <td class="text-end action-cell">
                 <button v-if="row.host.id" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Host detail" @click="$emit('host-detail', row.host.id)"><i class="ti ti-info-circle"></i></button>
-                <button v-if="isAuthenticated && row.host.ip" class="btn btn-sm icon-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('quick-scan', row.host)"><i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i></button>
+                <button v-if="isAuthenticated && row.host.ip" class="btn btn-sm icon-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i></button>
                 <button v-if="row.host.xml" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" @click="$emit('open-scan', row.host.ip)"><i class="ti ti-file-search"></i></button>
                 <button v-if="isAuthenticated && row.host.id" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Edit host" @click="$emit('open-edit', row.host)"><i class="ti ti-edit"></i></button>
                 <button v-else-if="isAuthenticated && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" title="Create host" @click="$emit('open-create', row.host)"><i class="ti ti-plus"></i></button>
@@ -68,7 +68,7 @@ const props = defineProps({
   refreshQueued: Boolean,
   scanningHosts: { type: Object, required: true }
 });
-const emit = defineEmits(['add-category', 'delete-category', 'host-detail', 'network', 'open-create', 'open-edit', 'open-history', 'open-scan', 'ping-refresh', 'quick-scan', 'rename-category']);
+const emit = defineEmits(['add-category', 'delete-category', 'host-detail', 'network', 'open-create', 'open-edit', 'open-history', 'open-scan', 'ping-refresh', 'rename-category', 'scan-host']);
 const hosts = ref([]);
 const loading = ref(false);
 const error = ref('');
@@ -144,7 +144,7 @@ function scanButtonTitle(host) {
   if (isScanRunning(host)) return 'Scanning';
   if (host?.scan?.state === 'failed') return `Scan failed${host.scan.error ? `: ${host.scan.error}` : ''}`;
   if (host?.scan?.state === 'timeout') return `Scan timed out${host.scan.error ? `: ${host.scan.error}` : ''}`;
-  return host?.scan?.date_end ? `Quick scan, last ${formatServerDate(host.scan.date_end)}` : 'Quick scan';
+  return host?.scan?.date_end ? `Scan host, last ${formatServerDate(host.scan.date_end)}` : 'Scan host';
 }
 function showStability(host) { return Boolean(host?.stability && !host.stability.stable); }
 function stabilityLabel(stability) { return stability?.label || formatPercent(stability?.uptime_percent); }

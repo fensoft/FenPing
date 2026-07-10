@@ -35,6 +35,7 @@ PUBLIC_GET_ROUTES=(
   /api/ipam
   /api/notify
   /api/services
+  /api/scans/profiles
   /api/netboot/images
 )
 

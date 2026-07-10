@@ -8,7 +8,7 @@
       </div>
       <div class="page-actions">
         <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" :disabled="!latestScan || !scanHasXml(latestScan)" @click="$emit('open-scan', host.ip, latestScan?.id)"><i class="ti ti-file-search me-1"></i>View scan</button>
-        <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('quick-scan', host)"><i :class="isScanning ? 'ti ti-loader-2 is-spinning me-1' : 'ti ti-search me-1'"></i>Quick scan</button>
+        <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('scan-host', host)"><i :class="isScanning ? 'ti ti-loader-2 is-spinning me-1' : 'ti ti-search me-1'"></i>Scan</button>
         <button v-if="isAuthenticated && host.id" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><i class="ti ti-edit me-1"></i>Edit</button>
       </div>
     </div>
@@ -28,7 +28,7 @@
         </dl></section>
         <section class="detail-panel"><h3>Latest Scan</h3><dl class="detail-list">
           <div><dt>State</dt><dd>{{ latestScan?.state || '-' }}</dd></div><div><dt>Status</dt><dd>{{ latestScan?.status || '-' }}</dd></div>
-          <div><dt>Mode</dt><dd>{{ latestScan?.mode || '-' }}</dd></div><div><dt>Ports</dt><dd>{{ latestScan?.ports_count ?? 0 }}</dd></div>
+          <div><dt>Profile</dt><dd>{{ scanProfileLabel(latestScan?.mode) }}</dd></div><div><dt>Ports</dt><dd>{{ latestScan?.ports_count ?? 0 }}</dd></div>
           <div><dt>Last</dt><dd>{{ formatScanDate(latestScan?.date_end || latestScan?.date_begin) }}</dd></div>
         </dl></section>
       </div>
@@ -44,9 +44,9 @@
       <div class="detail-section">
         <div class="detail-section-heading"><h3>Scan History</h3><span class="text-secondary small">{{ scans.length }} scans</span></div>
         <div class="table-wrap"><table class="table table-sm detail-table">
-          <thead><tr><th>State</th><th>Mode</th><th>Status</th><th>Ports</th><th>Ended</th><th class="text-end">Actions</th></tr></thead>
+          <thead><tr><th>State</th><th>Profile</th><th>Status</th><th>Ports</th><th>Ended</th><th class="text-end">Actions</th></tr></thead>
           <tbody><tr v-if="scans.length === 0"><td class="text-secondary text-center py-4" colspan="6">No scans</td></tr>
-            <tr v-for="scan in scans" :key="scan.id"><td><span :class="scanRunStateClass(scan.state)"><i :class="scan.state === 'running' ? 'ti ti-loader-2 is-spinning' : scanRunStateIcon(scan.state)"></i>{{ scan.state || '-' }}</span></td><td>{{ scan.mode || '-' }}</td><td>{{ scan.status || '-' }}</td><td>{{ Number(scan.ports_count || 0) }}</td><td>{{ formatScanDate(scan.date_end || scan.date_begin) }}</td><td class="text-end"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!scanHasXml(scan)" @click="$emit('open-scan', host.ip, scan.id)"><i class="ti ti-file-search"></i></button></td></tr>
+            <tr v-for="scan in scans" :key="scan.id"><td><span :class="scanRunStateClass(scan.state)"><i :class="scan.state === 'running' ? 'ti ti-loader-2 is-spinning' : scanRunStateIcon(scan.state)"></i>{{ scan.state || '-' }}</span></td><td>{{ scanProfileLabel(scan.mode) }}</td><td>{{ scan.status || '-' }}</td><td>{{ Number(scan.ports_count || 0) }}</td><td>{{ formatScanDate(scan.date_end || scan.date_begin) }}</td><td class="text-end"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!scanHasXml(scan)" @click="$emit('open-scan', host.ip, scan.id)"><i class="ti ti-file-search"></i></button></td></tr>
           </tbody>
         </table></div>
       </div>
@@ -61,10 +61,11 @@ import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanIsActiveState, scanRunStateClass, scanRunStateIcon, statusClass, statusIcon, statusTitle, toFlag } from '../lib/formatters.js';
+import { scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({ isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
-defineEmits(['open-edit', 'open-scan', 'quick-scan']);
+defineEmits(['open-edit', 'open-scan', 'scan-host']);
 const route = useRoute();
 const detail = ref(null);
 const loading = ref(false);
