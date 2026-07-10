@@ -433,6 +433,12 @@ function restoreLiveGeneratedFile(string $path, array $snapshot): void {
 }
 
 function writeGeneratedFile(string $path, string $contents): void {
+  if (is_file($path)) {
+    $current = @file_get_contents($path);
+    if ($current !== false && $current === $contents)
+      return;
+  }
+
   $dir = dirname($path);
   $tmp = tempnam($dir, basename($path) . '.');
   if ($tmp === false)

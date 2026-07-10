@@ -33,6 +33,11 @@ docker run -d \
   --cap-add NET_BROADCAST \
   --cap-add NET_RAW \
   --env-file .env \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
+  --tmpfs /run:rw,nosuid,nodev,size=64m,mode=0755 \
+  --log-driver local \
+  --log-opt max-size=5m \
+  --log-opt max-file=2 \
   -v `pwd`/data/dnsmasq:/var/lib/misc \
   -v `pwd`/data/dnsmasq.d:/etc/dnsmasq.d \
   -v `pwd`/data/netboot:/var/lib/fenping/netboot \

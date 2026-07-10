@@ -10,7 +10,7 @@ The current runtime is one host-networked Docker container named `fenping`. The 
 2. `restart.sh` builds `fensoft/fenping:1.5`.
 3. `restart.sh` removes the old `fenping` container if present, then starts one `fenping` container with host networking and reduced capabilities.
 4. `boot.sh` starts MariaDB, initializes the DB if needed, and applies `db.sql`.
-5. `boot.sh` transactionally loads the local IEEE vendor registry into MariaDB, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
+5. `boot.sh` verifies the local IEEE vendor registry in MariaDB and imports it only when changed, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
 6. Apache serves the static Vue app from `/var/www/public` and rewrites `/api/...` to the public `api.php` entrypoint, which loads private application code from `/opt/fenping`.
 
 ## Docker Build
@@ -40,6 +40,14 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 The web root contains only the built frontend, static scan stylesheet assets, favicons, and the public API entrypoint. PHP modules, CLI code, templates, schema files, `.env` in development, and all persistent state remain outside the web root. Apache also explicitly denies dotfiles, source/config extensions, and legacy runtime URL paths.
 
 Avoid destructive edits in `data/` unless explicitly requested.
+
+## Write Endurance
+
+`mariadb-fenping.cnf` uses `innodb_flush_log_at_trx_commit=2` and a five-second `innodb_flush_log_at_timeout`. This groups durable redo flushes, with the explicit tradeoff that an operating-system crash or power loss can discard approximately five seconds of recent transactions. InnoDB doublewrite remains enabled for torn-page protection, binary/general/slow logging is disabled, and buffer-pool state is not dumped on shutdown.
+
+`restart.sh` mounts `/tmp` and `/run` as size-limited tmpfs filesystems. MariaDB's temporary tablespace, scan output, locks, and PHP sessions therefore avoid disk writes. Login sessions are cleared on container restart. Apache discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP leases are retained, but `dnsmasq.leases.php` compares normalized lease data and updates MariaDB only when the lease set changes. Generated dnsmasq files use content comparison to avoid identical replacements.
+
+Stable ping records update their activity timestamp at most once per day; actual status, IP, or MAC changes are still written immediately. The boot-time IEEE sync hashes both registries and skips the 57,000-row transaction when SQL is already current. Backups, netboot uploads, DHCP leases, changed scan results, and actual application mutations remain persistent by design.
 
 ## Backend Entry Points
 
@@ -98,7 +106,7 @@ Important tables:
 
 `db.sql` is run at container boot and after restore. Keep it idempotent with `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, safe cleanup/update statements, and repeatable procedures.
 
-The `update_status` procedure appends to `stats` only when status/IP/MAC changes; otherwise it extends the current row.
+The `update_status` procedure appends to `stats` immediately when status/IP/MAC changes; otherwise it extends the current row at most once per day.
 
 ## Scanning
 
@@ -125,7 +133,7 @@ The `update_status` procedure appends to `stats` only when status/IP/MAC changes
 - Selecting a quick snapshot merges it at read time with the preceding deep snapshot. Quick values override matching ports; deep-only ports and OS data remain and each port carries its source mode.
 - History pruning keeps one week of jobs plus the latest changed result for each mode.
 
-`oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains a validated seed at `/usr/share/fenping/ieee-oui.json`; the monthly refresh command downloads the complete registries with short timeouts and atomically writes `/var/lib/fenping/state/ieee-oui.json`. Boot runs `oui-sync` after schema setup to transactionally replace `oui_vendors`, and a successful monthly download also imports the new data. Invalid or failed refreshes leave the previous data untouched. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the JSON registry remains a lookup fallback if SQL is unavailable.
+`oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains a validated seed at `/usr/share/fenping/ieee-oui.json`; the monthly refresh command downloads the complete registries with short timeouts and atomically writes `/var/lib/fenping/state/ieee-oui.json`. Boot runs `oui-sync` after schema setup, hashes the source and SQL rows, and transactionally replaces `oui_vendors` only when they differ. A successful monthly download also performs this sync. Invalid or failed refreshes leave the previous data untouched. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the JSON registry remains a lookup fallback if SQL is unavailable.
 
 Avoid default inventory scans in tests unless the user accepts LAN scan traffic.
 

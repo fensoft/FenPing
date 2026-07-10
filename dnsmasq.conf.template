@@ -23,5 +23,4 @@ tftp-root=/var/lib/fenping/netboot
 addn-hosts=/etc/dnsmasq.d/fenping.hosts
 pid-file=/var/run/dnsmasq.pid
 user=root
-log-dhcp
-log-async
+quiet-dhcp

@@ -30,6 +30,7 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `restart.sh`: builds and starts the single host-networked container.
 - `boot.sh`: single-container service bootstrap.
 - `config.php`: committed generic PHP config that reads runtime values from environment variables.
+- `mariadb-fenping.cnf`: low-write MariaDB durability/logging policy; preserves InnoDB doublewrite protection.
 - `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `oui-refresh`, `oui-sync`, `backup`, `restore`, `discord-restart`.
 - `api.php`: JSON API front controller.
 - `routes/`: route modules for auth, system, hosts/categories, scans, netboot.
@@ -107,6 +108,8 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - Do not revert unrelated dirty work.
 - `data/` is live state.
 - Keep `db.sql` idempotent.
+- The MariaDB five-second flush window is an intentional SSD-endurance tradeoff. Do not disable InnoDB doublewrite protection.
+- `/tmp` and `/run` are tmpfs; persistent state must remain under the documented bind mounts.
 - API-triggered sudo calls expect `/usr/bin/php` in Dockerfile sudoers.
 - Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.
 - MAC vendor lookups must remain local; refresh the complete public IEEE registries through `oui-refresh` instead of sending individual LAN MAC addresses to an external API.

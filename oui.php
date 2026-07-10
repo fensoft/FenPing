@@ -27,8 +27,10 @@ function runIeeeOuiRefreshCommand(array $args): int {
     $result = ieeeOuiRefresh($target);
     $message = "IEEE OUI registry updated: {$result['assignments']} assignments from {$result['registries']} registries";
     if ($target !== IEEE_OUI_SEED_PATH) {
-      $loaded = ieeeOuiSyncDatabase(db());
-      $message .= "; $loaded loaded into SQL";
+      $sync = ieeeOuiSyncDatabase(db());
+      $message .= $sync['changed']
+        ? "; {$sync['assignments']} loaded into SQL"
+        : '; SQL already current';
     }
     echo $message . PHP_EOL;
     return 0;
@@ -45,8 +47,11 @@ function runIeeeOuiSyncCommand(array $args): int {
   }
 
   try {
-    $loaded = ieeeOuiSyncDatabase(db());
-    echo "IEEE OUI SQL registry loaded: $loaded assignments" . PHP_EOL;
+    $sync = ieeeOuiSyncDatabase(db());
+    if ($sync['changed'])
+      echo "IEEE OUI SQL registry loaded: {$sync['assignments']} assignments" . PHP_EOL;
+    else
+      echo "IEEE OUI SQL registry already current: {$sync['assignments']} assignments" . PHP_EOL;
     return 0;
   } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
@@ -165,11 +170,16 @@ function ieeeOuiWriteAtomic(string $target, string $contents): void {
   }
 }
 
-function ieeeOuiSyncDatabase(PDO $db): int {
+function ieeeOuiSyncDatabase(PDO $db): array {
   $assignments = ieeeOuiAssignments();
   $count = array_sum(array_map('count', $assignments));
   if ($count < 1000)
     throw new RuntimeException('no valid IEEE OUI registry is available for SQL import');
+
+  $sourceHash = ieeeOuiAssignmentsHash($assignments);
+  $databaseState = ieeeOuiDatabaseState($db);
+  if ($databaseState['count'] === $count && hash_equals($sourceHash, $databaseState['hash']))
+    return array('assignments' => $count, 'changed' => false);
 
   $db->beginTransaction();
   try {
@@ -192,7 +202,29 @@ function ieeeOuiSyncDatabase(PDO $db): int {
       $db->rollBack();
     throw $e;
   }
-  return $count;
+  return array('assignments' => $count, 'changed' => true);
+}
+
+function ieeeOuiAssignmentsHash(array $assignments): string {
+  $context = hash_init('sha256');
+  foreach (array('6', '7', '9') as $length) {
+    $prefixes = $assignments[$length] ?? array();
+    ksort($prefixes, SORT_STRING);
+    foreach ($prefixes as $prefix => $vendor)
+      hash_update($context, $length . "\0" . $prefix . "\0" . $vendor . "\n");
+  }
+  return hash_final($context);
+}
+
+function ieeeOuiDatabaseState(PDO $db): array {
+  $context = hash_init('sha256');
+  $count = 0;
+  $stmt = $db->query('SELECT prefix_length, prefix, vendor FROM oui_vendors ORDER BY prefix_length, prefix');
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    hash_update($context, $row['prefix_length'] . "\0" . $row['prefix'] . "\0" . $row['vendor'] . "\n");
+    $count++;
+  }
+  return array('count' => $count, 'hash' => hash_final($context));
 }
 
 function ieeeOuiInsertBatch(PDO $db, array $rows): void {

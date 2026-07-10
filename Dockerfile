@@ -14,7 +14,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends cron nano apache2 mariadb-server mariadb-client libapache2-mod-php php-mysql dnsmasq-base libxml-xpath-perl nmap iputils-ping iputils-arping net-tools php-curl sudo iptables && apt-get clean && rm -rf /var/lib/apt/lists/* /var/www/html
 COPY config.php oui.php /opt/fenping/
 RUN mkdir -p /usr/share/fenping && php -r 'require "/opt/fenping/config.php"; require "/opt/fenping/oui.php"; $result=ieeeOuiRefresh(IEEE_OUI_SEED_PATH); printf("IEEE OUI registry seed: %d assignments from %d registries\n", $result["assignments"], $result["registries"]);'
-RUN PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')" && printf "upload_max_filesize=512M\npost_max_size=512M\nmax_file_uploads=20\n" > "/etc/php/$PHP_VERSION/apache2/conf.d/99-fenping-upload.ini"
+COPY mariadb-fenping.cnf /etc/mysql/mariadb.conf.d/60-fenping.cnf
+RUN PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')" && printf "upload_max_filesize=512M\npost_max_size=512M\nmax_file_uploads=20\nsession.save_path=/run/fenping/sessions\nsession.lazy_write=1\n" > "/etc/php/$PHP_VERSION/apache2/conf.d/99-fenping.ini"
 RUN a2enmod rewrite && echo 'ServerName 127.0.0.1' >> /etc/apache2/apache2.conf
 COPY apache-fenping.conf /etc/apache2/sites-available/000-default.conf
 COPY --from=frontend /app/dist/ /var/www/public/

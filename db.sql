@@ -172,7 +172,10 @@ DECLARE var_next_status VARCHAR(50);
 SET var_next_status = IFNULL(NULLIF(TRIM(p_status), ''), 'Down');
 SELECT id,mac,ip,status,date_begin INTO var_id,var_mac,var_ip,var_status,var_date_begin FROM stats WHERE ip=p_ip ORDER BY id DESC LIMIT 1;
 IF var_status = var_next_status AND (var_ip=p_ip OR (var_ip IS NULL AND p_ip IS NULL)) AND (var_mac=p_mac OR (var_mac IS NULL AND p_mac IS NULL)) THEN
-  UPDATE stats SET date_end=CURRENT_TIMESTAMP, nb_scan=nb_scan+1 WHERE id=var_id;
+  UPDATE stats
+  SET date_end=CURRENT_TIMESTAMP, nb_scan=nb_scan+1
+  WHERE id=var_id
+    AND (date_end IS NULL OR date_end <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY));
 ELSE
   INSERT INTO stats (ip,mac,status) VALUES (p_ip, p_mac, var_next_status);
 END IF;
