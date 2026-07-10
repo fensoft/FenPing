@@ -5,6 +5,7 @@
         <div><h1 class="app-title">FenPing</h1><div class="text-secondary small">{{ network || 'Network' }}</div></div>
         <div class="toolbar">
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: isInventoryRoute }" type="button" title="Inventory" @click="go('/')"><i class="ti ti-list-details"></i></button>
+          <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.ipam }" type="button" title="IPAM" @click="go('/ipam')"><i class="ti ti-address-book"></i></button>
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.notify }" type="button" title="Notify" @click="go('/notify')"><i class="ti ti-bell"></i></button>
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" @click="go('/scans')"><i class="ti ti-radar"></i></button>
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.services }" type="button" title="Services" @click="go('/services')"><i class="ti ti-world-www"></i></button>
@@ -38,6 +39,7 @@
           @open-scan="openScan"
           @open-edit="openEdit"
           @open-create="openCreate"
+          @reserve-device="openReserve"
           @add-category="openAddCategory"
           @rename-category="openRenameCategory"
           @delete-category="openDeleteCategory"
@@ -270,6 +272,10 @@ function openCreate(host) {
   if (!isAuthenticated.value) return openLogin();
   clearMessages(); modal.value = { type: 'create', form: { mac: formatMac(host.mac), ip: toShortIp(host.ip || '') } };
 }
+function openReserve(host) {
+  if (!isAuthenticated.value) return openLogin();
+  clearMessages(); modal.value = { type: 'create', purpose: 'reserve', form: { mac: formatMac(host.mac), ip: '' } };
+}
 
 async function openEdit(host) {
   if (!isAuthenticated.value) return openLogin();
@@ -356,9 +362,10 @@ async function toggleScanRaw() {
 
 async function submitCreate() {
   await saveModal(async (signal) => {
+    const purpose = modal.value.purpose;
     const form = modal.value.form;
     const result = await apiJson('/api/hosts', { method: 'POST', body: JSON.stringify({ mac: form.mac, ip: form.ip }), signal });
-    setNotice('Created'); await reloadCurrentPage();
+    setNotice(purpose === 'reserve' ? 'Reservation created' : 'Created'); await reloadCurrentPage();
     if (result?.id) await openEdit({ id: result.id }); else closeModal();
   });
 }

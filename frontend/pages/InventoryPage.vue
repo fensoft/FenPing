@@ -32,6 +32,7 @@
             <template v-else>
               <td class="status-cell"><div class="status-icons">
                 <span :class="statusClass(row.host.status)" :title="statusTitle(row.host.status)" class="status-pill"><i :class="statusIcon(row.host.status)"></i></span>
+                <i v-if="toFlag(row.host.is_new)" class="ti ti-alert-triangle text-warning host-role-icon" title="New device — approve it in IPAM"></i>
                 <button v-if="showStability(row.host)" :class="stabilityClass(row.host.stability)" type="button" :title="stabilityTitle(row.host.stability)" @click="$emit('open-history', row.host.ip)">{{ stabilityLabel(row.host.stability) }}</button>
                 <i v-if="toFlag(row.host.repeater)" class="ti ti-wifi text-secondary host-role-icon" title="Router/repeater"></i>
               </div></td>
@@ -130,7 +131,7 @@ function closeAllCategories() { collapsed.value = new Set(hosts.value.filter((ho
 function matchesFilters(host) {
   if (filters.value.onlyDown && host.status === 'Up') return false;
   if (filters.value.onlyImportant && !toFlag(host.important)) return false;
-  if (filters.value.hideUnknown && !host.id) return false;
+  if (filters.value.hideUnknown && toFlag(host.is_new)) return false;
   const query = filters.value.search.trim().toLowerCase();
   return query === '' || [host.name, host.ip, host.mac, host.vendor, host.status, host.scan?.status, host.scan?.state, host.scan?.mode].some((value) => String(value || '').toLowerCase().includes(query));
 }

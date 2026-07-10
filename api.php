@@ -12,10 +12,12 @@ require_once __DIR__ . '/oui.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/hosts.php';
 require_once __DIR__ . '/health.php';
+require_once __DIR__ . '/ipam.php';
 require_once __DIR__ . '/scans.php';
 require_once __DIR__ . '/routes/auth.php';
 require_once __DIR__ . '/routes/system.php';
 require_once __DIR__ . '/routes/hosts.php';
+require_once __DIR__ . '/routes/ipam.php';
 require_once __DIR__ . '/routes/netboot.php';
 require_once __DIR__ . '/routes/scans.php';
 
@@ -68,6 +70,7 @@ function apiRoutes(): array {
     authApiRoutes(),
     systemApiRoutes(),
     hostsApiRoutes(),
+    ipamApiRoutes(),
     netbootApiRoutes(),
     scansApiRoutes()
   );

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import HostDetailPage from './pages/HostDetailPage.vue';
+import IpamPage from './pages/IpamPage.vue';
 import InventoryPage from './pages/InventoryPage.vue';
 import NetbootPage from './pages/NetbootPage.vue';
 import NotificationsPage from './pages/NotificationsPage.vue';
@@ -8,6 +9,7 @@ import ServicesPage from './pages/ServicesPage.vue';
 
 export const routeNames = Object.freeze({
   inventory: 'inventory',
+  ipam: 'ipam',
   notify: 'notify',
   scans: 'scans',
   services: 'services',
@@ -19,6 +21,7 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: routeNames.inventory, component: InventoryPage },
+    { path: '/ipam', name: routeNames.ipam, component: IpamPage },
     { path: '/notify', name: routeNames.notify, component: NotificationsPage },
     { path: '/scans', name: routeNames.scans, component: ScansPage },
     { path: '/services', name: routeNames.services, component: ServicesPage },

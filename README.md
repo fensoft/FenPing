@@ -11,6 +11,7 @@ It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, Maria
 - Stability, host history, and a 24-hour notify view.
 - Static DHCP/DNS host management through dnsmasq.
 - Transactional DHCP lease history with stable first-seen and last-seen timestamps.
+- Device onboarding with reversible MAC approval and DHCP pool utilization tracking.
 - Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
 - Category/range separators with collapsible groups and rename support.
 - Quick and deep nmap scans with deduplicated database history; quick results never replace the latest deep snapshot.
@@ -175,7 +176,7 @@ docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/db
 
 ## Admin Workflow
 
-The UI starts in guest mode. Guests can view inventory, services, history, scans, health, and notifications, but cannot change DHCP/DNS/netboot state.
+The UI starts in guest mode. Guests can view inventory, IPAM utilization, services, history, scans, health, and notifications, but cannot approve devices or change DHCP/DNS/netboot state.
 
 After login, admins can create/edit hosts, add/rename/delete categories, trigger ping refreshes and quick scans, upload/delete netboot images, and assign netboot images to hosts.
 
@@ -191,6 +192,9 @@ Useful endpoints:
 | --- | --- | --- |
 | `GET` | `/api/health` | Appliance health. |
 | `GET` | `/api/inventory` | Network inventory. |
+| `GET` | `/api/ipam` | DHCP pool utilization plus pending and approved dynamic devices. |
+| `PUT` | `/api/ipam/devices/{mac}/approval` | Acknowledge a new device without changing DHCP behavior. |
+| `DELETE` | `/api/ipam/devices/{mac}/approval` | Mark an acknowledged dynamic device as new again. |
 | `GET` | `/api/notify` | Last 24 hours of changes. |
 | `GET` | `/api/services` | Current open services by host using the latest effective scan. |
 | `POST` | `/api/ping/refresh` | Run ping scan and wait for completion. |
@@ -217,8 +221,8 @@ Useful checks before committing:
 bash -n boot.sh restart.sh tests/test.sh
 docker build --check .
 docker build -t fenping-check .
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
-php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php
+php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 ```
 
 Smoke test a running instance:

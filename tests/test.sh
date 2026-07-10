@@ -32,6 +32,7 @@ PUBLIC_GET_ROUTES=(
   /api/health
   /api/auth/session
   /api/inventory
+  /api/ipam
   /api/notify
   /api/services
   /api/netboot/images
@@ -58,7 +59,12 @@ done
 
 echo inventory bytes: `wc -c < "${OUT_DIR}/fenping-GET--api-inventory.json"`
 
+expect_code "PUT /api/ipam approval guest" 403 -X PUT "${SITE}/api/ipam/devices/02%3A00%3A00%3A00%3A00%3A01/approval"
+
 expect_code "POST /api/auth/login" 200 -c "$COOKIE" -X POST -H "$JSON" -d "{\"password\":\"$PASS\"}" "${SITE}/api/auth/login"
+expect_code "PUT /api/ipam approval invalid" 400 -b "$COOKIE" -X PUT "${SITE}/api/ipam/devices/invalid/approval"
+expect_code "PUT /api/ipam approval" 200 -b "$COOKIE" -X PUT "${SITE}/api/ipam/devices/02%3A00%3A00%3A00%3A00%3A01/approval"
+expect_code "DELETE /api/ipam approval" 200 -b "$COOKIE" -X DELETE "${SITE}/api/ipam/devices/02%3A00%3A00%3A00%3A00%3A01/approval"
 
 if [ "$TEST_IP" != "" ]; then
   expect_code "GET /api/scans/ip/status" 200 "${SITE}/api/scans/${TEST_IP}/status"

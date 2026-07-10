@@ -42,8 +42,8 @@
         </form>
 
         <form v-else-if="modal.type === 'create'" @submit.prevent="$emit('submit-create')">
-          <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" /></label><label class="form-label">IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" /></div></label></div></div>
-          <ModalFooter :saving="saving" submit-label="Create" submit-icon="ti ti-plus" @close="requestClose" />
+          <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" required /></label><label class="form-label">IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" inputmode="numeric" required /></div></label></div></div>
+          <ModalFooter :saving="saving" :submit-label="modal.purpose === 'reserve' ? 'Reserve' : 'Create'" :submit-icon="modal.purpose === 'reserve' ? 'ti ti-pin' : 'ti ti-plus'" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'category'" @submit.prevent="$emit('submit-category')">
@@ -114,7 +114,7 @@ import { formatDuration, formatMac, formatPercent, formatScanDate, formatScanDur
 const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] } });
 const emit = defineEmits(['close', 'delete-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'toggle-raw']);
 const titleId = `fenping-modal-title-${Math.random().toString(36).slice(2)}`;
-const title = computed(() => ({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', history: `History ${props.modal.ip || ''}`, scan: `Scan ${props.modal.ip || ''}`, loading: 'Loading' })[props.modal.type] || 'Dialog');
+const title = computed(() => props.modal.type === 'create' && props.modal.purpose === 'reserve' ? 'Reserve address' : ({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', history: `History ${props.modal.ip || ''}`, scan: `Scan ${props.modal.ip || ''}`, loading: 'Loading' })[props.modal.type] || 'Dialog');
 const dialogClass = computed(() => props.modal.type === 'login' ? 'modal-sm' : props.modal.type === 'scan' ? 'modal-xl scan-modal-dialog' : 'modal-lg');
 const modalRoot = useAccessibleModal(() => props.modal.type, requestClose);
 

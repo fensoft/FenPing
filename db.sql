@@ -27,7 +27,15 @@ CREATE TABLE IF NOT EXISTS `leases` (
   PRIMARY KEY (`hardware-ethernet`, `ip`),
   KEY `leases_ip` (`ip`),
   KEY `leases_ends` (`ends`),
-  KEY `leases_active_last_seen` (`active`, `last_seen`)
+  KEY `leases_active_last_seen` (`active`, `last_seen`),
+  KEY `leases_mac_last_seen` (`hardware-ethernet`, `last_seen`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `device_approvals` (
+  `mac` char(17) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `approved_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`mac`),
+  KEY `device_approvals_approved_at` (`approved_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP PROCEDURE IF EXISTS `migrate_leases_v2`;
@@ -200,6 +208,8 @@ CREATE TABLE IF NOT EXISTS `netboot_images` (
 CREATE INDEX IF NOT EXISTS `leases_ip` ON `leases` (`ip`);
 CREATE INDEX IF NOT EXISTS `leases_ends` ON `leases` (`ends`);
 CREATE INDEX IF NOT EXISTS `leases_active_last_seen` ON `leases` (`active`, `last_seen`);
+CREATE INDEX IF NOT EXISTS `leases_mac_last_seen` ON `leases` (`hardware-ethernet`, `last_seen`);
+CREATE INDEX IF NOT EXISTS `device_approvals_approved_at` ON `device_approvals` (`approved_at`);
 CREATE INDEX IF NOT EXISTS `ping_mac` ON `ping` (`mac`);
 CREATE INDEX IF NOT EXISTS `range_ip_begin` ON `range` (`ip_begin`);
 CREATE INDEX IF NOT EXISTS `stats_ip_date_begin` ON `stats` (`ip`, `date_begin`);

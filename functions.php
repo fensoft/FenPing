@@ -65,6 +65,13 @@ function getInventory() {
 
   $db = getDb();
   $latestScans = getLatestScans();
+  $approvedDevices = array();
+  $approvalStmt = $db->query("SELECT mac FROM device_approvals");
+  while ($approvedMac = $approvalStmt->fetchColumn()) {
+    $approvedMac = strtolower(trim((string)$approvedMac));
+    if ($approvedMac !== '')
+      $approvedDevices[$approvedMac] = true;
+  }
 
   $repeater = array();
   $stmt = $db->prepare("select mac, ip, name from ips where repeater=1");
@@ -152,6 +159,10 @@ function getInventory() {
     $mac = trim((string)$data["mac"]);
     if ($mac == "")
       continue;
+    $normalizedMac = strtolower($mac);
+    $managed = isset($data['id']) && $data['id'] !== null;
+    $data['approved'] = $managed || isset($approvedDevices[$normalizedMac]) ? 1 : 0;
+    $data['is_new'] = !$managed && !isset($approvedDevices[$normalizedMac]) ? 1 : 0;
     $stmt2 = $db->prepare("
       select ip_begin, ip_begin_full, type from (
         select

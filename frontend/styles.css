@@ -515,6 +515,70 @@ body {
   white-space: nowrap;
 }
 
+.ipam-pool {
+  border: 1px solid #dce1e7;
+  border-radius: 6px;
+  padding: 0.65rem;
+}
+
+.ipam-pool .notify-summary {
+  border: 0;
+  border-radius: 0;
+}
+
+.ipam-utilization-heading {
+  align-items: center;
+  display: flex;
+  font-size: 0.78rem;
+  justify-content: space-between;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+}
+
+.ipam-progress {
+  height: 0.65rem;
+}
+
+.ipam-table {
+  margin: 0;
+  min-width: 60rem;
+}
+
+.ipam-table th,
+.ipam-table td {
+  line-height: 1.15;
+  padding: 0.32rem 0.45rem;
+  vertical-align: middle;
+}
+
+.ipam-table th {
+  background: #f0f3f7;
+  color: #2f3b4a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ipam-table td > small {
+  color: #667085;
+  display: block;
+  font-size: 0.72rem;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ipam-device-name {
+  align-items: center;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.ipam-device-new td {
+  background: #fffbeb;
+}
+
 .inventory-table {
   border-collapse: collapse;
   border-spacing: 0 !important;
@@ -1112,6 +1176,23 @@ html[data-bs-theme='dark'] .services-table th {
 html[data-bs-theme='dark'] .services-host small,
 html[data-bs-theme='dark'] .services-table td > small {
   color: #9aa8ba;
+}
+
+html[data-bs-theme='dark'] .ipam-pool {
+  border-color: #273444;
+}
+
+html[data-bs-theme='dark'] .ipam-table th {
+  background: #202c3a;
+  color: #d7dee8;
+}
+
+html[data-bs-theme='dark'] .ipam-table td > small {
+  color: #9aa8ba;
+}
+
+html[data-bs-theme='dark'] .ipam-device-new td {
+  background: #3a321d;
 }
 
 html[data-bs-theme='dark'] .inventory-table th {

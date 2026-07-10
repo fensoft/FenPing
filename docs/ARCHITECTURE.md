@@ -66,6 +66,7 @@ Route modules:
 - `routes/auth.php`: session, login, logout.
 - `routes/system.php`: health, inventory, notify, ping refresh.
 - `routes/hosts.php`: host CRUD, host detail/history, category create/rename/delete.
+- `routes/ipam.php`: IPAM summary plus authenticated device approve/unapprove actions.
 - `routes/scans.php`: scan queue, quick scans, scan status/history, and database-backed XML/JSON responses.
 - `routes/netboot.php`: netboot image list/upload/delete.
 
@@ -99,6 +100,7 @@ Important tables:
 - `stats`: status history used for stability and notifications.
 - `range`: category separators keyed by starting IP.
 - `leases`: current and historical dnsmasq assignments keyed by MAC/IP, with first-seen, last-seen, expiry, and active state.
+- `device_approvals`: reversible acknowledgements for dynamic devices, keyed by normalized MAC address.
 - `oui_vendors`: locally imported IEEE assignments keyed by 24-, 28-, or 36-bit prefix.
 - `scans`: nmap job metadata and references to stored results.
 - `scan_snapshots`: deduplicated nmap XML keyed by host, mode, and semantic result hash.
@@ -161,6 +163,8 @@ Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_i
 
 `dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a memory-backed staging table. One InnoDB transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
 
+`ipam.php` combines lease, ping, and status observations by MAC. Devices seen within seven days remain pending until approved or converted into a managed fixed host. Approval only updates `device_approvals`; it never changes DHCP access or reloads dnsmasq. Pool utilization counts the union of active unexpired leases and fixed MAC reservations within the configured dynamic range, so overlapping addresses count once.
+
 ## Frontend
 
 The UI is a static Vue 3 app built by Vite and routed by Vue Router using browser history. Apache's existing SPA fallback serves `index.html` for direct navigation to frontend routes.
@@ -169,9 +173,9 @@ Important files:
 
 - `index.html`: Vite HTML entry.
 - `frontend/main.js`: app bootstrap and Tabler imports.
-- `frontend/router.js`: named routes for inventory, services, notifications, scans, host detail, and netboot.
+- `frontend/router.js`: named routes for inventory, IPAM, services, notifications, scans, host detail, and netboot.
 - `frontend/App.vue`: application shell, authentication, cross-page actions, and modal orchestration.
-- `frontend/pages/`: independent inventory, services, notifications, scans, host detail, and netboot route components.
+- `frontend/pages/`: independent inventory, IPAM, services, notifications, scans, host detail, and netboot route components.
 - `frontend/components/`: accessible application modal and smaller shared view components.
 - `frontend/composables/`: abort-controller lifecycle, page refresh registration, reactive time, and modal focus management.
 - `frontend/lib/api.js`: the only frontend `fetch` boundary, with consistent JSON/text errors and `AbortSignal` support.
@@ -181,7 +185,7 @@ Important files:
 
 Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock for running durations and relative times. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
 
-The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest quick result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
+The IPAM route shows pool capacity, pending devices, and approved dynamic devices. Approve/unapprove actions are reversible; Reserve opens the existing fixed-host workflow with no address preselected. The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest quick result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
 
 Apache serves real public files directly and falls back all other non-API paths to `index.html`.
 
@@ -240,8 +244,8 @@ Typical checks:
 bash -n boot.sh restart.sh tests/test.sh
 docker build --check .
 docker build -t fenping-check .
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
-php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php
+php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 curl -fsS http://127.0.0.1/api/health
 curl -fsS http://127.0.0.1/api/inventory
 ```

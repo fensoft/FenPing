@@ -33,8 +33,9 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `mariadb-fenping.cnf`: low-write MariaDB durability/logging policy; preserves InnoDB doublewrite protection.
 - `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `scan-port-backfill`, `oui-refresh`, `oui-sync`, `backup`, `restore`, `discord-restart`.
 - `api.php`: JSON API front controller.
-- `routes/`: route modules for auth, system, hosts/categories, scans, netboot.
+- `routes/`: route modules for auth, system, hosts/categories, IPAM, scans, netboot.
 - `functions.php`: domain helpers for inventory, host CRUD, categories, history, notify, netboot.
+- `ipam.php`: dynamic-device approval, observation aggregation, and DHCP pool utilization.
 - `database.php`: PDO singleton.
 - `db.sql`: idempotent schema/migration SQL and `update_status`.
 - `ping.php`: ping scanner and status writer.
@@ -43,7 +44,7 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `oui.php`: local IEEE MA-L/MA-M/MA-S/IAB vendor index loading and atomic refresh.
 - `backup.php`: backup/restore implementation.
 - `frontend/App.vue`: Vue application shell and cross-page orchestration.
-- `frontend/router.js`, `frontend/pages/`: Vue Router configuration and route-level inventory, services, scans, notifications, host-detail, and netboot components.
+- `frontend/router.js`, `frontend/pages/`: Vue Router configuration and route-level inventory, IPAM, services, scans, notifications, host-detail, and netboot components.
 - `frontend/components/`, `frontend/composables/`, `frontend/lib/`: shared UI, lifecycle, API, and formatting modules.
 - `docs/ARCHITECTURE.md`: deeper project overview.
 
@@ -98,8 +99,8 @@ bash -n boot.sh restart.sh tests/test.sh
 docker build --check .
 docker build -t fenping-check .
 npm run build
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php oui.php
-php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php
+php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 ```
 
 If PHP or Node is unavailable on the host, run syntax checks inside the container/image.
