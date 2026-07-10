@@ -69,7 +69,8 @@ IP=$IP
 DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
 FENPING_DATA_DIR=$FENPING_DATA_DIR
 
-0 * * * * root flock -n /tmp/inv.lck -c "php /opt/fenping/cli.php inventory"
+0 * * * * root flock -n /tmp/inventory-discovery.lck -c "php /opt/fenping/cli.php inventory"
+* * * * * root php /opt/fenping/cli.php inventory --work
 */15 * * * * root flock -n /tmp/ping.lck -c "php /opt/fenping/cli.php ping"
 * * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /opt/fenping/dnsmasq.leases.php"
 EOF

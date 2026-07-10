@@ -291,6 +291,11 @@ body {
   color: #1d4ed8;
 }
 
+.scan-run-queued {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
 .scan-run-failed {
   background: #fee2e2;
   color: #b91c1c;
@@ -308,6 +313,10 @@ body {
 
 .scan-row-running td {
   background: #f8fbff;
+}
+
+.scan-row-queued td {
+  background: #fdfaff;
 }
 
 .scan-row-failed td {
@@ -1036,6 +1045,10 @@ html[data-bs-theme='dark'] .scan-row-running td {
   background: #172438;
 }
 
+html[data-bs-theme='dark'] .scan-row-queued td {
+  background: #21162b;
+}
+
 html[data-bs-theme='dark'] .scan-run-state {
   background: #334155;
   color: #e5e7eb;
@@ -1049,6 +1062,11 @@ html[data-bs-theme='dark'] .scan-run-complete {
 html[data-bs-theme='dark'] .scan-run-running {
   background: #1e3a8a;
   color: #dbeafe;
+}
+
+html[data-bs-theme='dark'] .scan-run-queued {
+  background: #3a1f4d;
+  color: #d8b4fe;
 }
 
 html[data-bs-theme='dark'] .scan-run-failed {

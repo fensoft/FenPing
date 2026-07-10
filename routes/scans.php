@@ -21,34 +21,23 @@ function handleScansQueue(array $params): array {
   return array('scans' => scanMetadataQueue());
 }
 
-function handleScanQuick(array $params): array {
+function handleScanQuick(array $params): void {
   $ip = $params['ip'];
-  $lock = '/tmp/inv-' . preg_replace('/[^A-Za-z0-9_.-]/', '_', $ip) . '.lck';
-  $scan = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(dirname(__DIR__) . '/cli.php') . ' inventory --quick ' . escapeshellarg($ip);
-  $command = 'flock -n ' . escapeshellarg($lock) . ' -c ' . escapeshellarg($scan);
-  $previousMetadata = scanMetadataLatest($ip);
-  $output = array();
-  $code = 0;
-  exec($command . ' 2>&1', $output, $code);
+  $queued = scanMetadataEnqueue($ip, 'quick');
+  startScanWorkerAsync();
 
-  if ($code !== 0) {
-    $message = trim(implode("\n", $output));
-    $metadata = scanMetadataLatest($ip);
-    $isNewScan = $metadata !== null && (
-      $previousMetadata === null || $metadata['id'] !== $previousMetadata['id']
-    );
-    if ($isNewScan && ($metadata['state'] ?? '') === 'timeout')
-      jsonError(504, $message ?: ($metadata['error'] ?? 'scan timed out'));
-    jsonError($message === '' ? 409 : 500, $message ?: 'scan already running');
-  }
-
-  $log = implode("\n", $output);
-  return array(
-    'saved' => strpos("\n" . $log . "\n", "\n" . $ip . " saved\n") !== false,
-    'log' => $log,
-    'metadata' => scanMetadataLatest($ip),
+  jsonResponse(array(
+    'queued' => true,
+    'created' => $queued['created'],
+    'metadata' => $queued['metadata'],
     'xml' => '/api/scans/' . rawurlencode($ip) . '/xml'
-  );
+  ), 202);
+}
+
+function startScanWorkerAsync(): void {
+  $cli = dirname(__DIR__) . '/cli.php';
+  $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg($cli) . ' inventory --work';
+  exec($command . ' </dev/null >/dev/null 2>&1 &');
 }
 
 function handleScanStatus(array $params): array {

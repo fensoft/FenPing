@@ -70,6 +70,7 @@ Route modules:
 docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
+docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
 docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
 docker exec fenping php /opt/fenping/cli.php discord-restart
@@ -108,11 +109,14 @@ The `update_status` procedure appends to `stats` only when status/IP/MAC changes
 - `/proc/net/arp` is read directly for MAC discovery.
 - `arping` helps distinguish `arp` from `arp-down`.
 
-`inventory.php` performs nmap scans:
+`inventory.php` performs discovery and queued nmap scans:
 
-- Default mode discovers live hosts with `nmap -n -sn`, then deep scans discovered hosts.
+- Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and queues deep scans.
+- A lock-protected coordinator claims queued jobs and runs no more than four nmap child processes concurrently.
+- Only one queued or running job is allowed per IP; quick jobs are claimed before deep jobs.
 - Deep scan uses `-A -p- -sS -T3`.
 - Quick scan targets one host with faster flags.
+- Quick-scan API requests return HTTP `202` after enqueueing and start the coordinator in the background.
 - Every nmap command has a 2-hour hard timeout; timed-out scans are recorded with the `timeout` state.
 - XML is saved under `/var/lib/fenping/nmap`.
 - History pruning keeps one week and removes older duplicate scan signatures.
@@ -177,7 +181,8 @@ Restore supports FenPing `.tgz` archives and raw `.sql` or `.sql.gz` dumps. Afte
 `boot.sh` writes `/etc/cron.d/fenping`:
 
 - Ping scan every 15 minutes.
-- Inventory scan every hour.
+- Inventory discovery and enqueueing every hour.
+- Queue worker every minute; its internal lock prevents duplicate coordinators.
 - dnsmasq lease import every minute.
 
 Locks use `flock` under `/tmp` to prevent overlapping jobs.

@@ -209,6 +209,118 @@ function scanAttributes(string $attributes): array {
   return $result;
 }
 
+function scanMetadataEnqueue(string $ip, string $mode): array {
+  if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
+    throw new InvalidArgumentException('invalid scan ip');
+  if (!in_array($mode, array('quick', 'deep'), true))
+    throw new InvalidArgumentException('invalid scan mode');
+
+  $lockName = 'fenping-scan-' . hash('sha256', $ip);
+  $lock = db()->prepare('SELECT GET_LOCK(:name, 5)');
+  $lock->execute(array('name' => $lockName));
+  if ((int)$lock->fetchColumn() !== 1)
+    throw new RuntimeException("failed to lock scan queue for $ip");
+
+  try {
+    $stmt = db()->prepare("
+      SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+      FROM scans
+      WHERE ip=:ip AND state IN ('queued', 'running')
+      ORDER BY id DESC
+      LIMIT 1
+    ");
+    $stmt->execute(array('ip' => $ip));
+    $active = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($active !== false) {
+      if ($mode === 'quick' && $active['state'] === 'queued' && $active['mode'] !== 'quick') {
+        $update = db()->prepare("UPDATE scans SET mode='quick' WHERE id=:id AND state='queued'");
+        $update->execute(array('id' => $active['id']));
+        $active['mode'] = 'quick';
+      }
+      return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
+    }
+
+    $insert = db()->prepare("
+      INSERT INTO scans (ip, mode, state, date_begin, ports_count)
+      VALUES (:ip, :mode, 'queued', NULL, 0)
+    ");
+    $insert->execute(array('ip' => $ip, 'mode' => $mode));
+    $metadata = scanMetadataJobById((int)db()->lastInsertId());
+    if ($metadata === null)
+      throw new RuntimeException('failed to read queued scan');
+    return array('metadata' => $metadata, 'created' => true);
+  } finally {
+    $release = db()->prepare('SELECT RELEASE_LOCK(:name)');
+    $release->execute(array('name' => $lockName));
+  }
+}
+
+function scanMetadataJobById(int $id): ?array {
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    FROM scans
+    WHERE id=:id
+    LIMIT 1
+  ");
+  $stmt->execute(array('id' => $id));
+  $metadata = $stmt->fetch(PDO::FETCH_ASSOC);
+  return $metadata === false ? null : scanNormalizeMetadata($metadata);
+}
+
+function scanMetadataClaimQueued(int $limit): array {
+  $limit = max(0, min(20, $limit));
+  if ($limit === 0)
+    return array();
+
+  $stmt = db()->prepare("
+    SELECT id
+    FROM scans
+    WHERE state='queued'
+    ORDER BY CASE WHEN mode='quick' THEN 0 ELSE 1 END, id ASC
+    LIMIT $limit
+  ");
+  $stmt->execute();
+
+  $jobs = array();
+  foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
+    $update = db()->prepare("
+      UPDATE scans
+      SET state='running', date_begin=CURRENT_TIMESTAMP, date_end=NULL, duration=NULL, error=NULL
+      WHERE id=:id AND state='queued'
+    ");
+    $update->execute(array('id' => $id));
+    if ($update->rowCount() !== 1)
+      continue;
+    $job = scanMetadataJobById((int)$id);
+    if ($job !== null)
+      $jobs[] = $job;
+  }
+  return $jobs;
+}
+
+function scanMetadataQueuedCount(): int {
+  return (int)db()->query("SELECT COUNT(*) FROM scans WHERE state='queued'")->fetchColumn();
+}
+
+function scanMetadataRunningCount(): int {
+  return (int)db()->query("SELECT COUNT(*) FROM scans WHERE state='running'")->fetchColumn();
+}
+
+function scanMetadataExpireStaleRunning(int $maxSeconds): int {
+  $maxSeconds = max(60, $maxSeconds);
+  $stmt = db()->prepare("
+    UPDATE scans
+    SET state='timeout',
+        date_end=CURRENT_TIMESTAMP,
+        duration=IF(date_begin IS NULL, NULL, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP))),
+        error=COALESCE(NULLIF(error, ''), 'scan worker stopped before completion')
+    WHERE state='running'
+      AND (date_begin IS NULL OR date_begin <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL $maxSeconds SECOND))
+  ");
+  $stmt->execute();
+  return $stmt->rowCount();
+}
+
 function scanMetadataStart(string $ip, string $mode): int {
   $stmt = db()->prepare("
     INSERT INTO scans (ip, mode, state, date_begin, ports_count)
@@ -246,6 +358,7 @@ function scanMetadataFailed(int $id, string $error): void {
     UPDATE scans
     SET state='failed',
         date_end=CURRENT_TIMESTAMP,
+        duration=IF(date_begin IS NULL, NULL, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP))),
         error=:error
     WHERE id=:id
   ");
@@ -357,7 +470,7 @@ function scanMetadataQueue(int $limit = 100): array {
     FROM scans s
     LEFT JOIN ips i ON i.ip=s.ip
     ORDER BY
-      CASE WHEN s.state='running' THEN 0 ELSE 1 END,
+      CASE s.state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END,
       COALESCE(s.date_end, s.date_begin) DESC,
       s.id DESC
     LIMIT $limit

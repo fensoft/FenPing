@@ -173,7 +173,7 @@
         <div class="page-header">
           <div>
             <h2>Scans</h2>
-            <div class="text-secondary small">Running and recent inventory scans</div>
+            <div class="text-secondary small">Queued, running, and recent inventory scans</div>
           </div>
           <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="scanQueueLoading" @click="loadScanQueue">
             <i class="ti ti-refresh me-1" :class="{ 'is-spinning': scanQueueLoading }"></i>
@@ -245,7 +245,7 @@
                     class="btn btn-outline-secondary btn-sm icon-btn"
                     :class="{ 'is-spinning': isHostScanning(scan) || scan.state === 'running' }"
                     type="button"
-                    :disabled="isHostScanning(scan) || scan.state === 'running'"
+                    :disabled="isHostScanning(scan) || scanIsActiveState(scan.state)"
                     title="Quick scan"
                     @click="quickScanHost(scan)"
                   >
@@ -294,7 +294,7 @@
               v-if="isAuthenticated && hostDetailHost.ip"
               class="btn btn-outline-primary btn-sm"
               type="button"
-              :disabled="isHostScanning(hostDetailHost)"
+              :disabled="isHostScanning(hostDetailHost) || scanIsActiveState(hostDetailLatestScan?.state)"
               @click="quickScanHost(hostDetailHost)"
             >
               <i :class="isHostScanning(hostDetailHost) ? 'ti ti-loader-2 is-spinning me-1' : 'ti ti-search me-1'"></i>
@@ -735,7 +735,7 @@
                     :class="scanActionClass(row.host)"
                     type="button"
                     :title="scanButtonTitle(row.host)"
-                    :disabled="isHostScanning(row.host)"
+                    :disabled="isScanRunning(row.host)"
                     @click="quickScanHost(row.host)"
                   >
                     <i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i>
@@ -1845,7 +1845,11 @@ function isHostScanning(host) {
 }
 
 function isScanRunning(host) {
-  return isHostScanning(host) || host?.scan?.state === 'running';
+  return isHostScanning(host) || scanIsActiveState(host?.scan?.state);
+}
+
+function scanIsActiveState(state) {
+  return state === 'queued' || state === 'running';
 }
 
 function scanActionClass(host) {
@@ -1859,6 +1863,8 @@ function scanActionClass(host) {
 }
 
 function scanButtonTitle(host) {
+  if (host?.scan?.state === 'queued')
+    return 'Scan queued';
   if (isScanRunning(host))
     return 'Scanning';
   if (host?.scan?.state === 'failed')
@@ -1891,13 +1897,20 @@ async function quickScanHost(host) {
   if (!host?.ip || isHostScanning(host)) return;
   clearMessages();
   setHostScanning(host, true);
-  pollScanStatus(host);
 
   try {
     const result = await apiJson(`/api/scans/${encodeURIComponent(host.ip)}/quick`, { method: 'POST' });
     if (result?.metadata)
-      updateHostScan(host.ip, result.metadata, result.saved);
-    notice.value = result && result.saved ? 'Scan saved' : 'Scan complete';
+      updateHostScan(host.ip, result.metadata, false);
+    notice.value = result?.created === false ? 'Scan already queued or running' : 'Scan queued';
+    if (isScansPage.value)
+      await loadScanQueue();
+
+    const metadata = await pollScanStatus(host, result?.metadata?.id);
+    if (metadata && ['failed', 'timeout', 'cancelled'].includes(metadata.state))
+      throw new Error(metadata.error || `Scan ${metadata.state}`);
+
+    notice.value = metadata?.xml ? 'Scan saved' : 'Scan complete';
     if (isScansPage.value)
       await loadScanQueue();
     else if (isHostPage.value)
@@ -1915,24 +1928,29 @@ async function quickScanHost(host) {
   }
 }
 
-function pollScanStatus(host) {
+async function pollScanStatus(host, scanId = null) {
   const key = hostScanKey(host);
   const ip = host.ip;
+  let delay = 300;
 
-  window.setTimeout(async function poll() {
-    if (!scanningHosts.value.has(key))
-      return;
+  while (scanningHosts.value.has(key)) {
+    await new Promise((resolve) => window.setTimeout(resolve, delay));
+    delay = 1000;
 
     try {
       const metadata = await apiJson(scanStatusUrl(ip));
-      if (metadata && metadata.state !== 'none')
+      if (metadata && metadata.state !== 'none') {
+        if (scanId && metadata.id !== scanId)
+          continue;
         updateHostScan(ip, metadata, false);
+        if (!scanIsActiveState(metadata.state))
+          return metadata;
+      }
     } catch {
-      // The POST request will surface the useful error; polling can be quiet.
+      // Keep polling; a transient status request failure should not lose the job.
     }
-
-    window.setTimeout(poll, 1000);
-  }, 300);
+  }
+  return null;
 }
 
 function updateHostScan(ip, metadata, saved) {
@@ -1944,6 +1962,11 @@ function updateHostScan(ip, metadata, saved) {
       scan: metadata,
       xml: saved || metadata?.xml ? ip : host.xml
     };
+  });
+  scanQueue.value = scanQueue.value.map((scan) => {
+    if (scan.ip !== ip || (metadata?.id && scan.id !== metadata.id))
+      return scan;
+    return { ...scan, ...metadata };
   });
 }
 
@@ -1960,6 +1983,7 @@ function scanDisplayName(scan) {
 }
 
 function scanRunStateClass(state) {
+  if (state === 'queued') return 'scan-run-state scan-run-queued';
   if (state === 'running') return 'scan-run-state scan-run-running';
   if (state === 'complete') return 'scan-run-state scan-run-complete';
   if (state === 'failed') return 'scan-run-state scan-run-failed';
@@ -1969,6 +1993,7 @@ function scanRunStateClass(state) {
 }
 
 function scanRunStateIcon(state) {
+  if (state === 'queued') return 'ti ti-clock';
   if (state === 'complete') return 'ti ti-check';
   if (state === 'failed') return 'ti ti-alert-triangle';
   if (state === 'timeout') return 'ti ti-clock-exclamation';
@@ -1977,6 +2002,7 @@ function scanRunStateIcon(state) {
 }
 
 function scanQueueRowClass(scan) {
+  if (scan?.state === 'queued') return 'scan-row-queued';
   if (scan?.state === 'running') return 'scan-row-running';
   if (scan?.state === 'failed') return 'scan-row-failed';
   if (scan?.state === 'timeout') return 'scan-row-timeout';

@@ -1,43 +1,149 @@
 <?php
 
 const INVENTORY_SCAN_TIMEOUT_SECONDS = 7200;
+const INVENTORY_DISCOVERY_TIMEOUT_SECONDS = 300;
+const INVENTORY_SCAN_CONCURRENCY = 4;
+const INVENTORY_WORKER_LOCK = '/tmp/fenping-inventory-worker.lck';
 
 class InventoryTimeoutException extends RuntimeException {}
 
 function runInventoryCommand(array $args): int {
   try {
+    if (($args[0] ?? '') === '--work')
+      return runInventoryWorkerCommand(array_slice($args, 1));
+    if (($args[0] ?? '') === '--run-job')
+      return runInventoryJobCommand(array_slice($args, 1));
+
     $options = inventoryOptions($args);
     $targets = inventoryTargets($options['args']);
-    ensureInventoryDir();
 
     if (count($targets) === 0) {
       echo "discovered 0 hosts" . PHP_EOL;
-      echo "saved 0 scans" . PHP_EOL;
+      echo "queued 0 scans" . PHP_EOL;
       return 0;
     }
 
     if (count($options['args']) === 0)
       echo "discovered " . count($targets) . " hosts" . PHP_EOL;
     else
-      echo "scanning " . $targets[0] . ($options['quick'] ? " quick" : "") . PHP_EOL;
+      echo "queueing " . $targets[0] . ($options['quick'] ? " quick" : " deep") . PHP_EOL;
 
-    $saved = 0;
+    $queued = 0;
+    $active = 0;
     foreach ($targets as $ip) {
-      $result = inventoryScan($ip, $options['quick']);
-      if ($result['saved']) {
-        $saved++;
-        echo "$ip saved" . PHP_EOL;
-      } else {
-        echo "$ip skipped" . PHP_EOL;
-      }
+      $result = scanMetadataEnqueue($ip, $options['quick'] ? 'quick' : 'deep');
+      if ($result['created'])
+        $queued++;
+      else
+        $active++;
     }
 
-    echo "saved $saved scans" . PHP_EOL;
+    echo "queued $queued scans" . PHP_EOL;
+    if ($active > 0)
+      echo "$active scans already queued or running" . PHP_EOL;
     return 0;
   } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
     return 1;
   }
+}
+
+function runInventoryWorkerCommand(array $args): int {
+  if (count($args) !== 0)
+    throw new InvalidArgumentException(inventoryUsage());
+
+  $lock = fopen(INVENTORY_WORKER_LOCK, 'c');
+  if ($lock === false)
+    throw new RuntimeException('failed to open inventory worker lock');
+  if (!flock($lock, LOCK_EX | LOCK_NB)) {
+    fclose($lock);
+    echo "inventory worker already running" . PHP_EOL;
+    return 0;
+  }
+
+  try {
+    ensureInventoryDir();
+    scanMetadataExpireStaleRunning(INVENTORY_SCAN_TIMEOUT_SECONDS + 60);
+    return inventoryWorkerLoop();
+  } finally {
+    flock($lock, LOCK_UN);
+    fclose($lock);
+  }
+}
+
+function inventoryWorkerLoop(): int {
+  $processes = array();
+
+  while (true) {
+    inventoryReapJobProcesses($processes);
+
+    $slots = max(0, INVENTORY_SCAN_CONCURRENCY - scanMetadataRunningCount());
+    if ($slots > 0) {
+      foreach (scanMetadataClaimQueued($slots) as $job) {
+        $process = inventoryStartJobProcess((int)$job['id']);
+        if ($process === false) {
+          scanMetadataFailed((int)$job['id'], 'failed to start scan worker');
+          continue;
+        }
+        $processes[(int)$job['id']] = $process;
+      }
+    }
+
+    if (count($processes) === 0) {
+      $queued = scanMetadataQueuedCount();
+      $running = scanMetadataRunningCount();
+      if ($queued === 0 || $running >= INVENTORY_SCAN_CONCURRENCY)
+        return 0;
+    }
+
+    usleep(1000000);
+  }
+}
+
+function inventoryStartJobProcess(int $scanId) {
+  $command = array(PHP_BINARY, __DIR__ . '/cli.php', 'inventory', '--run-job', (string)$scanId);
+  $descriptors = array(
+    0 => array('file', '/dev/null', 'r'),
+    1 => array('file', '/dev/null', 'a'),
+    2 => array('file', '/dev/null', 'a')
+  );
+  return proc_open($command, $descriptors, $pipes);
+}
+
+function inventoryReapJobProcesses(array &$processes): void {
+  foreach ($processes as $scanId => $process) {
+    $status = proc_get_status($process);
+    if ($status['running'])
+      continue;
+
+    $exitCode = (int)$status['exitcode'];
+    proc_close($process);
+    unset($processes[$scanId]);
+
+    $metadata = scanMetadataJobById((int)$scanId);
+    if ($metadata !== null && $metadata['state'] === 'running') {
+      $message = $exitCode === 0
+        ? 'scan worker exited without completing metadata'
+        : "scan worker exited with code $exitCode";
+      scanMetadataFailed((int)$scanId, $message);
+    }
+  }
+}
+
+function runInventoryJobCommand(array $args): int {
+  if (count($args) !== 1 || !ctype_digit((string)$args[0]))
+    throw new InvalidArgumentException(inventoryUsage());
+
+  $scanId = (int)$args[0];
+  $job = scanMetadataJobById($scanId);
+  if ($job === null)
+    throw new InvalidArgumentException("scan job $scanId not found");
+  if ($job['state'] !== 'running')
+    throw new RuntimeException("scan job $scanId is not running");
+
+  $result = inventoryScan($job['ip'], $job['mode'] === 'quick', $scanId);
+  echo $job['ip'] . ($result['saved'] ? ' saved' : ' skipped') . PHP_EOL;
+  return 0;
 }
 
 function inventoryOptions(array $args): array {
@@ -83,11 +189,25 @@ function inventoryTargets(array $args): array {
     return array($target);
   }
 
-  return inventoryDiscover($network . '.1-254');
+  return inventoryExcludeAutomaticTargets(inventoryDiscover($network . '.1-254'));
+}
+
+function inventoryExcludeAutomaticTargets(array $hosts): array {
+  global $myself;
+
+  $excluded = array_filter(array_unique(array(
+    (string)($myself ?? ''),
+    (string)(getenv('IP') ?: '')
+  )));
+  return array_values(array_diff($hosts, $excluded));
 }
 
 function inventoryDiscover(string $range): array {
-  $output = inventoryExec(array('nmap', '-n', '-sn', '-T3', '-oG', '-', $range));
+  $output = inventoryExec(
+    array('nmap', '-n', '-sn', '-T3', '-oG', '-', $range),
+    false,
+    INVENTORY_DISCOVERY_TIMEOUT_SECONDS
+  );
   $hosts = array();
 
   foreach ($output as $line) {
@@ -98,9 +218,10 @@ function inventoryDiscover(string $range): array {
   return array_values(array_unique($hosts));
 }
 
-function inventoryScan(string $ip, bool $quick = false): array {
+function inventoryScan(string $ip, bool $quick = false, ?int $scanId = null): array {
   $mode = $quick ? 'quick' : 'deep';
-  $scanId = scanMetadataStart($ip, $mode);
+  if ($scanId === null)
+    $scanId = scanMetadataStart($ip, $mode);
   $tmp = tempnam(sys_get_temp_dir(), 'fenping-nmap-');
   if ($tmp === false) {
     scanMetadataFailed($scanId, 'failed to create temporary nmap file');
@@ -212,5 +333,6 @@ function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds 
 }
 
 function inventoryUsage(): string {
-  return "Usage: php cli.php inventory [--quick] [1-254|IPv4]";
+  return "Usage: php cli.php inventory [--quick] [1-254|IPv4]\n"
+    . "       php cli.php inventory --work";
 }

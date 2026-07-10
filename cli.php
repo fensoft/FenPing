@@ -35,7 +35,8 @@ if ($command === 'restore') {
 
 fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
-fwrite(STDERR, "       php cli.php inventory [--quick] [1-254|IPv4]" . PHP_EOL);
+fwrite(STDERR, "       php cli.php inventory [--quick] [1-254|IPv4] (queue scans)" . PHP_EOL);
+fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);
 fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
 fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php restore <backup.tgz|dump.sql.gz>" . PHP_EOL);

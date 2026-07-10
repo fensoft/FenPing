@@ -115,6 +115,7 @@ docker exec fenping php /opt/fenping/cli.php ping 10
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory
 docker exec fenping php /opt/fenping/cli.php inventory --quick 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php backup
 docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 docker exec fenping php /opt/fenping/cli.php discord-restart
@@ -123,7 +124,8 @@ docker exec fenping php /opt/fenping/cli.php discord-restart
 Cron inside the container runs:
 
 - `ping` every 15 minutes.
-- `inventory` every hour.
+- inventory discovery every hour; discovered hosts are queued for deep scans.
+- the inventory worker runs queued scans with a maximum concurrency of four.
 - dnsmasq lease import every minute.
 
 ## Backup And Restore
@@ -169,7 +171,7 @@ Useful endpoints:
 | `GET` | `/api/history/{ip}` | Status history for a host. |
 | `GET` | `/api/scans/{ip}` | Latest scan as JSON. |
 | `GET` | `/api/scans/{ip}/xml` | Latest scan XML. |
-| `POST` | `/api/scans/{ip}/quick` | Run quick scan. |
+| `POST` | `/api/scans/{ip}/quick` | Queue a quick scan and return HTTP `202`. |
 | `GET` | `/api/netboot/images` | List netboot images. |
 | `POST` | `/api/netboot/images` | Upload a netboot image. |
 | `GET` | `/api/netboot/images/{id}/file` | Download a netboot image. |
@@ -219,6 +221,7 @@ docker logs -f fenping
 
 ```bash
 docker exec fenping php /opt/fenping/cli.php inventory --quick 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php inventory --work
 ```
 
 ### Docker Build Is Slow During npm install

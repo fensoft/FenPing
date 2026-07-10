@@ -20,7 +20,7 @@ This repo currently uses a single container, not a split Compose stack.
 - `restart.sh` builds `fensoft/fenping:1.5`.
 - `restart.sh` runs one container named `fenping` with host networking.
 - `boot.sh` starts MariaDB, applies `db.sql`, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
-- Cron inside the container runs ping, inventory, and lease import jobs.
+- Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
 Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/dnsmasq containers unless the user explicitly asks for the split architecture again.
 
@@ -65,6 +65,7 @@ Run commands through the single container:
 docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
+docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
 docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
 docker exec fenping php /opt/fenping/cli.php discord-restart
@@ -103,6 +104,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - `data/` is live state.
 - Keep `db.sql` idempotent.
 - API-triggered sudo calls expect `/usr/bin/php` in Dockerfile sudoers.
+- Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.
 - dnsmasq generation happens through `php cli.php hosts`.
 - Cron is inside the container; do not look for Ofelia.
 - Avoid full `/24` inventory scans unless the user accepts LAN scan traffic.
