@@ -527,12 +527,20 @@
 
         <div class="table-wrap">
           <table class="table table-sm netboot-table">
+            <colgroup>
+              <col class="netboot-col-name" />
+              <col class="netboot-col-file" />
+              <col class="netboot-col-size" />
+              <col class="netboot-col-hosts" />
+              <col class="netboot-col-created" />
+              <col v-if="isAuthenticated" class="netboot-col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Name</th>
                 <th>File</th>
-                <th>Size</th>
-                <th>Hosts</th>
+                <th class="text-nowrap">Size</th>
+                <th class="text-center text-nowrap">Hosts</th>
                 <th>Created</th>
                 <th v-if="isAuthenticated" class="text-end">Actions</th>
               </tr>
@@ -552,8 +560,8 @@
                 <td class="text-truncate-cell font-monospace" :title="image.filename">
                   <a :href="image.url" target="_blank" rel="noopener noreferrer">{{ image.filename }}</a>
                 </td>
-                <td>{{ formatBytes(image.size) }}</td>
-                <td>{{ image.hosts || 0 }}</td>
+                <td class="text-nowrap">{{ formatBytes(image.size) }}</td>
+                <td class="text-center text-nowrap">{{ image.hosts || 0 }}</td>
                 <td class="text-nowrap">{{ formatServerDate(image.created_at) }}</td>
                 <td v-if="isAuthenticated" class="text-end">
                   <button class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete image" :disabled="netbootLoading" @click="deleteNetbootImage(image)">

@@ -163,7 +163,28 @@ body {
 
 .netboot-table {
   margin: 0;
+  min-width: 42rem;
   table-layout: fixed;
+}
+
+.netboot-col-name {
+  width: 20%;
+}
+
+.netboot-col-size {
+  width: 5.5rem;
+}
+
+.netboot-col-hosts {
+  width: 4.25rem;
+}
+
+.netboot-col-created {
+  width: 10.5rem;
+}
+
+.netboot-col-actions {
+  width: 4.25rem;
 }
 
 .netboot-table th,
