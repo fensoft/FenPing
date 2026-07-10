@@ -150,6 +150,8 @@ The UI starts in guest mode. Guests can view inventory, history, scans, health, 
 
 After login, admins can create/edit hosts, add/rename/delete categories, trigger ping refreshes and quick scans, upload/delete netboot images, and assign netboot images to hosts.
 
+Netboot uploads accept UEFI applications (`.efi`), iPXE/PXE loaders (`.kpxe`, `.kkpxe`, `.kkkpxe`, `.pxe`, `.lkrn`), PXELINUX loaders (`.0`), and iPXE scripts (`.ipxe`). FenPing validates both the filename extension and the file content. PHP execution is disabled in the netboot directory.
+
 ## API
 
 The PHP API is routed by `api.php` and grouped under `routes/`.

@@ -464,8 +464,9 @@ function create_netboot_image(array $file, string $name = "") {
   if ($tmp === "" || !is_uploaded_file($tmp))
     throw new RuntimeException("invalid upload");
 
-  ensure_netboot_dir();
   $original = basename((string)($file["name"] ?? "netboot.img"));
+  validate_netboot_image($tmp, $original);
+  ensure_netboot_dir();
   $displayName = trim($name) !== "" ? trim($name) : $original;
   $filename = unique_netboot_filename($original);
   $target = netboot_dir() . "/" . $filename;
@@ -486,6 +487,109 @@ function create_netboot_image(array $file, string $name = "") {
   ));
 
   return get_netboot_image((int)getDb()->lastInsertId());
+}
+
+function netboot_allowed_extensions(): array {
+  return array('efi', 'kpxe', 'kkpxe', 'kkkpxe', 'pxe', 'lkrn', '0', 'ipxe');
+}
+
+function validate_netboot_image(string $path, string $original): void {
+  $extension = strtolower((string)pathinfo($original, PATHINFO_EXTENSION));
+  $allowed = netboot_allowed_extensions();
+  if (!in_array($extension, $allowed, true)) {
+    $suffix = $extension === '' ? '(none)' : '.' . $extension;
+    throw new RuntimeException(
+      "unsupported netboot file extension $suffix; allowed: ." . implode(', .', $allowed)
+    );
+  }
+
+  if (preg_match('/\.(?:php[0-9]*|phtml|phar)(?:\.|$)/i', $original))
+    throw new RuntimeException('executable PHP filenames are not allowed');
+
+  $size = filesize($path);
+  if ($size === false || $size < 1)
+    throw new RuntimeException('netboot file is empty');
+
+  $valid = false;
+  if ($extension === 'efi') {
+    $valid = netboot_is_efi($path);
+  } elseif ($extension === 'ipxe') {
+    $valid = netboot_is_ipxe_script($path);
+  } elseif ($extension === '0') {
+    $valid = netboot_contains_marker($path, array('PXELINUX'));
+  } else {
+    $valid = netboot_contains_marker($path, array('iPXE', 'PXELINUX'));
+  }
+
+  if (!$valid)
+    throw new RuntimeException("file content does not match .$extension netboot format");
+}
+
+function netboot_is_efi(string $path): bool {
+  $handle = fopen($path, 'rb');
+  if ($handle === false)
+    return false;
+
+  try {
+    $dosHeader = fread($handle, 64);
+    if ($dosHeader === false || strlen($dosHeader) < 64 || substr($dosHeader, 0, 2) !== "MZ")
+      return false;
+
+    $offset = unpack('Voffset', substr($dosHeader, 60, 4));
+    $peOffset = (int)($offset['offset'] ?? 0);
+    $size = filesize($path);
+    if ($peOffset < 64 || $size === false || $peOffset > $size - 96)
+      return false;
+    if (fseek($handle, $peOffset) !== 0)
+      return false;
+
+    $peHeader = fread($handle, 96);
+    if ($peHeader === false || strlen($peHeader) < 94 || substr($peHeader, 0, 4) !== "PE\0\0")
+      return false;
+
+    $magicData = unpack('vmagic', substr($peHeader, 24, 2));
+    $subsystemData = unpack('vsubsystem', substr($peHeader, 92, 2));
+    $magic = (int)($magicData['magic'] ?? 0);
+    $subsystem = (int)($subsystemData['subsystem'] ?? 0);
+    return in_array($magic, array(0x10b, 0x20b), true) && $subsystem === 10;
+  } finally {
+    fclose($handle);
+  }
+}
+
+function netboot_is_ipxe_script(string $path): bool {
+  $prefix = netboot_read_prefix($path, 4096);
+  if ($prefix === null || strpos($prefix, "\0") !== false)
+    return false;
+
+  if (str_starts_with($prefix, "\xEF\xBB\xBF"))
+    $prefix = substr($prefix, 3);
+  return preg_match('/^#!ipxe(?:[ \t]*\r?\n|[ \t]+)/i', $prefix) === 1;
+}
+
+function netboot_contains_marker(string $path, array $markers): bool {
+  $prefix = netboot_read_prefix($path, 1024 * 1024);
+  if ($prefix === null)
+    return false;
+
+  foreach ($markers as $marker) {
+    if (strpos($prefix, $marker) !== false)
+      return true;
+  }
+  return false;
+}
+
+function netboot_read_prefix(string $path, int $limit): ?string {
+  $handle = fopen($path, 'rb');
+  if ($handle === false)
+    return null;
+
+  try {
+    $contents = fread($handle, $limit);
+    return $contents === false ? null : $contents;
+  } finally {
+    fclose($handle);
+  }
 }
 
 function delete_netboot_image(int $id): void {

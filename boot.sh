@@ -13,6 +13,7 @@ chown mysql:mysql /var/log/mysql
 cd /var/www/html
 mkdir -p /var/www/html/netboot
 chown -R www-data:www-data /var/www/html/netboot
+install -o root -g root -m 0644 /.netboot-htaccess /var/www/html/netboot/.htaccess
 mkdir -p /var/lib/mysql
 chown mysql:mysql -R /var/lib/mysql
 MYSQL_AUTH="-proot"

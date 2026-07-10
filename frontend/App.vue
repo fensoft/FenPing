@@ -511,7 +511,13 @@
           </label>
           <label class="form-label netboot-file-field">
             File
-            <input ref="netbootFileInput" class="form-control form-control-sm" type="file" @change="onNetbootFile" />
+            <input
+              ref="netbootFileInput"
+              class="form-control form-control-sm"
+              type="file"
+              accept=".efi,.kpxe,.kkpxe,.kkkpxe,.pxe,.lkrn,.0,.ipxe"
+              @change="onNetbootFile"
+            />
           </label>
           <button class="btn btn-primary btn-sm" type="submit" :disabled="netbootUploading">
             <i class="ti ti-upload me-1" :class="{ 'is-spinning': netbootUploading }"></i>
