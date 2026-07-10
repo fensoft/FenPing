@@ -398,7 +398,7 @@ async function submitCreate() {
 async function submitEdit() {
   await saveModal(async (signal) => {
     const form = modal.value.form;
-    await apiJson(`/api/hosts/${encodeURIComponent(form.id)}`, { method: 'PUT', signal, body: JSON.stringify({ ip: form.ip, router: form.router, mac: form.mac, name: form.name, important: form.important ? 1 : null, repeater: form.repeater ? 1 : null, dns: form.dns, web: form.web ? 1 : null, netboot_image_id: form.netboot_image_id || null }) });
+    await apiJson(`/api/hosts/${encodeURIComponent(form.id)}`, { method: 'PUT', signal, body: JSON.stringify({ ip: form.ip, router: form.router, mac: form.mac, name: form.name, important: form.important ? 1 : null, repeater: form.repeater ? 1 : null, dns: form.dns, web: form.web ? 1 : null, netboot_image_id: form.netboot_image_id || null, scan_profile: form.scan_profile, scan_interval_hours: form.scan_interval_hours }) });
     setNotice('Saved'); closeModal(); await reloadCurrentPage();
   });
 }
@@ -430,7 +430,7 @@ async function saveModal(action) {
 function closeModal() { modalRequest.abort(); modal.value = null; modalError.value = ''; saving.value = false; }
 function clearMessages() { modalError.value = ''; globalError.value = ''; notice.value = ''; }
 function toShortIp(ip) { const value = String(ip || ''); const prefix = `${network.value}.`; return value.startsWith(prefix) ? value.slice(prefix.length) : value; }
-function hostForm(data) { return { id: data.id, ip: toShortIp(data.ip || ''), router: data.router || '', mac: formatMac(data.mac), name: data.name || '', important: toFlag(data.important), repeater: toFlag(data.repeater), dns: data.dns || '', web: toFlag(data.web), netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : '' }; }
+function hostForm(data) { return { id: data.id, ip: toShortIp(data.ip || ''), router: data.router || '', mac: formatMac(data.mac), name: data.name || '', important: toFlag(data.important), repeater: toFlag(data.repeater), dns: data.dns || '', web: toFlag(data.web), netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : '', scan_profile: data.scan_profile || 'deep', scan_interval_hours: Number(data.scan_interval_hours ?? 1) }; }
 
 function toggleDarkMode() { darkMode.value = !darkMode.value; writeCookie('fenping_theme', darkMode.value ? 'dark' : 'light'); applyTheme(); }
 function applyTheme() { const theme = darkMode.value ? 'dark' : 'light'; document.documentElement.dataset.bsTheme = theme; document.documentElement.style.colorScheme = theme; }

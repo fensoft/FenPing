@@ -29,6 +29,8 @@
               <label class="form-label">Router<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.router" class="form-control" name="router" type="text" /></div></label>
               <label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" /></label>
               <label class="form-label">Name<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label>
+              <label class="form-label">Scheduled scan profile<select v-model="modal.form.scan_profile" class="form-select" name="scan_profile"><option v-for="profile in scanProfiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option></select></label>
+              <label class="form-label">Scan cadence<div class="input-group"><input v-model.number="modal.form.scan_interval_hours" class="form-control" name="scan_interval_hours" type="number" min="0" max="8760" list="scan-cadence-options" required /><span class="input-group-text">hours</span></div><small class="form-hint">Use 0 to disable scheduled scans.</small><datalist id="scan-cadence-options"><option v-for="cadence in scanCadenceOptions" :key="cadence.hours" :value="cadence.hours">{{ cadence.name }}</option></datalist></label>
               <label class="form-label field-wide">DNS<input v-model.trim="modal.form.dns" class="form-control" name="dns" type="text" /></label>
               <label class="form-label field-wide">Netboot image<select v-model="modal.form.netboot_image_id" class="form-select" name="netboot_image_id"><option value="">None</option><option v-for="image in netbootImages" :key="image.id" :value="String(image.id)">{{ image.name }} ({{ image.filename }})</option></select></label>
               <div class="modal-switch-grid field-wide">
@@ -123,7 +125,7 @@ import ModalFooter from './ModalFooter.vue';
 import ScanSimpleSection from './ScanSimpleSection.vue';
 import { useAccessibleModal } from '../composables/useAccessibleModal.js';
 import { formatDuration, formatMac, formatPercent, formatScanDate, formatScanDuration, formatServerDate, historyRowClass, scanStateClass, statusClass, statusIcon, statusTitle } from '../lib/formatters.js';
-import { scanProfileLabel, scanProfiles } from '../lib/scanProfiles.js';
+import { scanCadenceOptions, scanProfileLabel, scanProfiles } from '../lib/scanProfiles.js';
 
 const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] } });
 const emit = defineEmits(['close', 'delete-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'submit-scan-profile', 'toggle-raw']);

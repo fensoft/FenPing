@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS `ips` (
   `router` tinyint(4) unsigned DEFAULT NULL,
   `dns` varchar(50) DEFAULT NULL,
   `netboot_image_id` int(10) unsigned DEFAULT NULL,
+  `scan_profile` varchar(20) NOT NULL DEFAULT 'deep',
+  `scan_interval_hours` int(10) unsigned NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`),
   UNIQUE KEY `mac` (`mac`),
@@ -215,6 +217,8 @@ CREATE INDEX IF NOT EXISTS `range_ip_begin` ON `range` (`ip_begin`);
 CREATE INDEX IF NOT EXISTS `stats_ip_date_begin` ON `stats` (`ip`, `date_begin`);
 DROP TABLE IF EXISTS `vendors`;
 ALTER TABLE `ips` ADD COLUMN IF NOT EXISTS `netboot_image_id` int(10) unsigned DEFAULT NULL AFTER `dns`;
+ALTER TABLE `ips` ADD COLUMN IF NOT EXISTS `scan_profile` varchar(20) NOT NULL DEFAULT 'deep' AFTER `netboot_image_id`;
+ALTER TABLE `ips` ADD COLUMN IF NOT EXISTS `scan_interval_hours` int(10) unsigned NOT NULL DEFAULT 1 AFTER `scan_profile`;
 CREATE INDEX IF NOT EXISTS `ips_netboot_image_id` ON `ips` (`netboot_image_id`);
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `snapshot_id` int(11) unsigned DEFAULT NULL AFTER `ports_count`;
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0 AFTER `snapshot_id`;

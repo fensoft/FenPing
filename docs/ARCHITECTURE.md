@@ -95,7 +95,7 @@ The configured application database is normally `ping`.
 
 Important tables:
 
-- `ips`: managed hosts, static IPs, MACs, flags, DNS/router options, netboot assignment.
+- `ips`: managed hosts, static IPs, MACs, flags, DNS/router options, netboot assignment, and automatic scan schedule.
 - `ping`: latest ping status per IP.
 - `stats`: status history used for stability and notifications.
 - `range`: category separators keyed by starting IP.
@@ -125,7 +125,8 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 
 `inventory.php` performs discovery and queued nmap scans:
 
-- Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and queues deep scans.
+- Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and applies the automatic scan schedule.
+- Managed hosts store `scan_profile` and `scan_interval_hours`. Automatic discovery queues only hosts whose latest successful scan for that profile is due; `0` disables scheduled scans. Explicit API and CLI scans ignore cadence. Unmanaged hosts retain the default Deep hourly behavior.
 - A lock-protected coordinator claims queued jobs and runs no more than four nmap child processes concurrently.
 - Only one job runs per IP at a time. Profiles are ordered lightweight, standard, then deep. A stronger request upgrades weaker queued work or waits behind weaker running work, while weaker requests never downgrade an active stronger job.
 - Lightweight uses `-F -sS -T4` and has a five-minute timeout.

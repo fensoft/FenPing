@@ -22,6 +22,15 @@ export const scanProfiles = Object.freeze([
   })
 ]);
 
+export const scanCadenceOptions = Object.freeze([
+  Object.freeze({ hours: 0, name: 'Off' }),
+  Object.freeze({ hours: 1, name: 'Every hour' }),
+  Object.freeze({ hours: 6, name: 'Every 6 hours' }),
+  Object.freeze({ hours: 12, name: 'Every 12 hours' }),
+  Object.freeze({ hours: 24, name: 'Daily' }),
+  Object.freeze({ hours: 168, name: 'Weekly' })
+]);
+
 export function scanProfileLabel(profile) {
   if (profile === 'quick') return 'Lightweight';
   return scanProfiles.find((item) => item.id === profile)?.name || profile || '-';
@@ -31,4 +40,11 @@ export function scanProfileBadgeClass(profile) {
   if (profile === 'deep') return 'bg-purple-lt text-purple';
   if (profile === 'standard') return 'bg-azure-lt text-azure';
   return 'bg-blue-lt text-blue';
+}
+
+export function scanCadenceLabel(hours) {
+  const value = Number(hours || 0);
+  const preset = scanCadenceOptions.find((item) => item.hours === value);
+  if (preset) return preset.name;
+  return `Every ${value} hours`;
 }

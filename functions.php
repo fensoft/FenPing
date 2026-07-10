@@ -305,9 +305,9 @@ function create($ip, $mac) {
   return getDb()->lastInsertId();
 }
 
-function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId = null) {
-  $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns, netboot_image_id=:netboot_image_id WHERE id=:id");
-  $stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "netboot_image_id" => $netbootImageId, "id" => $id));
+function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId = null, $scanProfile = 'deep', $scanIntervalHours = 1) {
+  $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns, netboot_image_id=:netboot_image_id, scan_profile=:scan_profile, scan_interval_hours=:scan_interval_hours WHERE id=:id");
+  $stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "netboot_image_id" => $netbootImageId, "scan_profile" => $scanProfile, "scan_interval_hours" => $scanIntervalHours, "id" => $id));
   return $stmt->rowCount();
 }
 

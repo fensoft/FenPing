@@ -79,6 +79,9 @@ function handleHostCreate(array $params): array {
 function handleHostEdit(array $params): array {
   $body = requestBody();
   $id = $params['id'];
+  $existing = getId($id);
+  if ($existing === false)
+    jsonError(404, 'host not found');
   $ip = normalizeHostIp($body['ip'] ?? null);
   $netbootImageId = normalizeNetbootImageId($body['netboot_image_id'] ?? null);
 
@@ -90,12 +93,14 @@ function handleHostEdit(array $params): array {
       $body['router'] ?? null,
       $body['dns'] ?? null
     );
+    $scanProfile = normalizeScheduledScanProfile($body['scan_profile'] ?? $existing['scan_profile'] ?? 'deep');
+    $scanIntervalHours = normalizeScanIntervalHours($body['scan_interval_hours'] ?? $existing['scan_interval_hours'] ?? 1);
   } catch (InvalidArgumentException $e) {
     jsonError(400, $e->getMessage());
   }
 
   try {
-    $change = commitDhcpMutation(function () use ($id, $values, $body, $netbootImageId) {
+    $change = commitDhcpMutation(function () use ($id, $values, $body, $netbootImageId, $scanProfile, $scanIntervalHours) {
       if (getId($id) === false)
         throw new DhcpHostNotFoundException('host not found');
       if ($netbootImageId !== null && !netboot_image_exists($netbootImageId))
@@ -111,7 +116,9 @@ function handleHostEdit(array $params): array {
         toDbFlag($body['web'] ?? null),
         $values['router'],
         $values['dns'],
-        $netbootImageId
+        $netbootImageId,
+        $scanProfile,
+        $scanIntervalHours
       );
       return true;
     });
@@ -181,6 +188,8 @@ function normalizeHostDetail(array $host): array {
   $host['repeater'] = (int)($host['repeater'] ?? 0);
   $host['web'] = (int)($host['web'] ?? 0);
   $host['netboot_image_id'] = $host['netboot_image_id'] === null ? null : (int)$host['netboot_image_id'];
+  $host['scan_profile'] = normalizeScheduledScanProfile($host['scan_profile'] ?? 'deep');
+  $host['scan_interval_hours'] = normalizeScanIntervalHours($host['scan_interval_hours'] ?? 1);
   $host['mac'] = strtolower((string)($host['mac'] ?? ''));
   $host['vendor'] = hostVendorFromCache($host['mac']);
   $ping = hostPingState($host);

@@ -143,7 +143,7 @@ docker exec fenping php /opt/fenping/cli.php discord-restart
 Cron inside the container runs:
 
 - `ping` every 15 minutes.
-- inventory discovery every hour; discovered hosts are queued for deep scans.
+- inventory discovery every hour; discovered hosts are queued only when their scan cadence is due.
 - the inventory worker runs queued scans with a maximum concurrency of four.
 - the local IEEE OUI registry is refreshed monthly on the first day at 03:17.
 - dnsmasq lease import every minute.
@@ -153,6 +153,8 @@ The image includes a vendor registry seed downloaded from the [IEEE Registration
 Completed nmap output is stored in MariaDB. FenPing keeps one XML snapshot per distinct semantic result and scan profile, so unchanged scans reuse the existing snapshot. Lightweight checks Nmap's 100 most common TCP ports with a five-minute limit. Standard checks the top 1,000 TCP ports with service, OS, default-script, and traceroute detection with a 30-minute limit. Deep performs the same detection across all 65,535 TCP ports with a two-hour limit. The normal detail view prefers the latest deep result. Selecting a lightweight or standard result merges it over the preceding deep snapshot: partial observations replace matching ports while deep-only ports and OS data remain visible with source labels. Existing `quick` history remains readable as Lightweight. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
 
 Completed scans also build an effective open-port view. A deep scan observes the full TCP range; lightweight and standard scans change only the ports listed in their Nmap scan scope. Services in the first usable result are recorded as newly appeared, and later appearances, disappearances, and confirmed service/version changes are stored for seven days, displayed on Notify, and sent to Discord when a webhook is configured. Missing version data from a partial scan does not erase version details learned by a deeper scan.
+
+Managed hosts have an automatic scan profile and cadence. The default remains Deep every hour for compatibility. Set the cadence to `0` in the host editor to disable scheduled scans, or enter any interval up to 8,760 hours. The hourly discovery job queues a host only when its latest successful scan using the selected profile is older than that interval. Manual scans and explicit CLI targets ignore cadence. Unmanaged discovered devices continue to use Deep every hour.
 
 At boot, `scan-port-backfill` replays stored snapshots in chronological order and inserts any missing service-change events using their original scan timestamps. The replay is idempotent, so it can also be run manually after restoring older scan history.
 

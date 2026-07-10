@@ -24,6 +24,7 @@
         <section class="detail-panel"><h3>Configuration</h3><dl class="detail-list">
           <div><dt>Name</dt><dd>{{ host.name || '-' }}</dd></div><div><dt>IP</dt><dd class="font-monospace">{{ host.ip || '-' }}</dd></div>
           <div><dt>Router</dt><dd>{{ host.router || '-' }}</dd></div><div><dt>DNS</dt><dd>{{ host.dns || '-' }}</dd></div>
+          <div><dt>Scheduled scan</dt><dd>{{ scanSchedule }}</dd></div>
           <div><dt>Flags</dt><dd><span v-if="toFlag(host.important)" class="badge bg-red-lt text-red me-1">Important</span><span v-if="toFlag(host.repeater)" class="badge bg-blue-lt text-blue me-1">Router/repeater</span><span v-if="toFlag(host.web)" class="badge bg-green-lt text-green me-1">Web</span><span v-if="!toFlag(host.important) && !toFlag(host.repeater) && !toFlag(host.web)">-</span></dd></div>
         </dl></section>
         <section class="detail-panel"><h3>Latest Scan</h3><dl class="detail-list">
@@ -61,7 +62,7 @@ import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanIsActiveState, scanRunStateClass, scanRunStateIcon, statusClass, statusIcon, statusTitle, toFlag } from '../lib/formatters.js';
-import { scanProfileLabel } from '../lib/scanProfiles.js';
+import { scanCadenceLabel, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({ isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
@@ -77,6 +78,7 @@ const scans = computed(() => detail.value?.scans || []);
 const historyRows = computed(() => detail.value?.history?.rows || []);
 const title = computed(() => host.value.name || host.value.ip || 'Host detail');
 const netbootName = computed(() => detail.value?.netboot_image?.name || detail.value?.netboot_image?.filename || '-');
+const scanSchedule = computed(() => `${scanProfileLabel(host.value.scan_profile)} · ${scanCadenceLabel(host.value.scan_interval_hours)}`);
 const isScanning = computed(() => props.scanningHosts.has(String(host.value?.ip || host.value?.id || host.value?.mac || '')));
 
 usePageController({ loading, label: computed(() => loading.value ? 'Loading' : 'Device'), title: 'Refresh host', disabled: false, refresh: load });

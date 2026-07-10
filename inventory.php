@@ -16,6 +16,7 @@ function runInventoryCommand(array $args): int {
 
     $options = inventoryOptions($args);
     $targets = inventoryTargets($options['args']);
+    $automatic = count($options['args']) === 0 && !$options['profile_explicit'];
 
     if (count($targets) === 0) {
       echo "discovered 0 hosts" . PHP_EOL;
@@ -23,15 +24,19 @@ function runInventoryCommand(array $args): int {
       return 0;
     }
 
-    if (count($options['args']) === 0)
+    if ($automatic) {
       echo "discovered " . count($targets) . " hosts" . PHP_EOL;
-    else
+      $queueTargets = inventoryScheduledTargets($targets);
+      echo "due " . count($queueTargets) . " scans" . PHP_EOL;
+    } else {
+      $queueTargets = array_map(fn($ip) => array('ip' => $ip, 'profile' => $options['profile']), $targets);
       echo "queueing " . $targets[0] . " " . $options['profile'] . PHP_EOL;
+    }
 
     $queued = 0;
     $active = 0;
-    foreach ($targets as $ip) {
-      $result = scanMetadataEnqueue($ip, $options['profile']);
+    foreach ($queueTargets as $target) {
+      $result = scanMetadataEnqueue($target['ip'], $target['profile']);
       if ($result['created'])
         $queued++;
       else
@@ -147,28 +152,33 @@ function runInventoryJobCommand(array $args): int {
 
 function inventoryOptions(array $args): array {
   $profile = 'deep';
+  $profileExplicit = false;
   $remaining = array();
 
   for ($index = 0; $index < count($args); $index++) {
     $arg = $args[$index];
     if ($arg === '--quick' || $arg === '-q') {
       $profile = 'lightweight';
+      $profileExplicit = true;
       continue;
     }
     if ($arg === 'quick') {
       $profile = 'lightweight';
+      $profileExplicit = true;
       continue;
     }
     if ($arg === '--profile') {
       $profile = (string)($args[++$index] ?? '');
       if (!scanProfileIsValid($profile, false))
         throw new InvalidArgumentException(inventoryUsage());
+      $profileExplicit = true;
       continue;
     }
     if (str_starts_with($arg, '--profile=')) {
       $profile = substr($arg, strlen('--profile='));
       if (!scanProfileIsValid($profile, false))
         throw new InvalidArgumentException(inventoryUsage());
+      $profileExplicit = true;
       continue;
     }
     $remaining[] = $arg;
@@ -176,6 +186,7 @@ function inventoryOptions(array $args): array {
 
   return array(
     'profile' => $profile,
+    'profile_explicit' => $profileExplicit,
     'args' => $remaining
   );
 }
@@ -212,6 +223,51 @@ function inventoryExcludeAutomaticTargets(array $hosts): array {
     (string)(getenv('IP') ?: '')
   )));
   return array_values(array_diff($hosts, $excluded));
+}
+
+function inventoryScheduledTargets(array $hosts, ?int $now = null): array {
+  $now ??= time();
+  $settings = array();
+  $stmt = db()->query("
+    SELECT ip, scan_profile, scan_interval_hours
+    FROM ips
+    WHERE ip IS NOT NULL AND ip<>''
+  ");
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC))
+    $settings[(string)$row['ip']] = $row;
+
+  $lastScans = array();
+  $stmt = db()->query("
+    SELECT ip, mode, MAX(UNIX_TIMESTAMP(COALESCE(date_end, date_begin))) AS last_scan
+    FROM scans
+    WHERE state='complete'
+    GROUP BY ip, mode
+  ");
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC))
+    $lastScans[(string)$row['ip']][(string)$row['mode']] = (int)$row['last_scan'];
+
+  $scheduled = array();
+  foreach ($hosts as $ip) {
+    $setting = $settings[$ip] ?? null;
+    $profile = $setting === null ? 'deep' : (string)($setting['scan_profile'] ?? 'deep');
+    if (!scanProfileIsValid($profile, false))
+      $profile = 'deep';
+    $hours = $setting === null ? 1 : (int)($setting['scan_interval_hours'] ?? 1);
+    if ($hours <= 0)
+      continue;
+
+    $last = $lastScans[$ip][$profile] ?? null;
+    if ($profile === 'lightweight') {
+      $legacy = $lastScans[$ip]['quick'] ?? null;
+      if ($legacy !== null && ($last === null || $legacy > $last))
+        $last = $legacy;
+    }
+    if ($last !== null && $last > $now - $hours * 3600)
+      continue;
+
+    $scheduled[] = array('ip' => $ip, 'profile' => $profile);
+  }
+  return $scheduled;
 }
 
 function inventoryDiscover(string $range): array {

@@ -62,6 +62,27 @@ function scanProfileTimeout(string $profile): int {
   throw new InvalidArgumentException('invalid scan profile');
 }
 
+function normalizeScheduledScanProfile($value): string {
+  if (!is_scalar($value))
+    throw new InvalidArgumentException('invalid scan profile');
+  $profile = strtolower(trim((string)$value));
+  if (!scanProfileIsValid($profile, false))
+    throw new InvalidArgumentException('invalid scan profile');
+  return $profile;
+}
+
+function normalizeScanIntervalHours($value): int {
+  if (is_int($value))
+    $hours = $value;
+  elseif (is_string($value) && ctype_digit(trim($value)))
+    $hours = (int)trim($value);
+  else
+    throw new InvalidArgumentException('invalid scan cadence');
+  if ($hours < 0 || $hours > 8760)
+    throw new InvalidArgumentException('scan cadence must be between 0 and 8760 hours');
+  return $hours;
+}
+
 function scanXmlUrl(string $ip, ?int $id = null): string {
   if ($id !== null)
     return '/api/scans/' . rawurlencode($ip) . '/' . $id . '.xml';

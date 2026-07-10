@@ -118,6 +118,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.
 - MAC vendor lookups must remain local; refresh the complete public IEEE registries through `oui-refresh` instead of sending individual LAN MAC addresses to an external API.
 - Lease imports must retain the `(hardware-ethernet, ip)` history and use the staging/upsert transaction in `dnsmasq.leases.php`; do not restore truncate-and-reinsert behavior.
+- Automatic inventory discovery must honor each managed host's `scan_profile` and `scan_interval_hours`; manual API/CLI scans intentionally bypass cadence.
 - dnsmasq generation happens through `php cli.php hosts`.
 - Cron is inside the container; do not look for Ofelia.
 - Avoid full `/24` inventory scans unless the user accepts LAN scan traffic.
