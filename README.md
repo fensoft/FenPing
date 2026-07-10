@@ -2,7 +2,7 @@
 
 FenPing is a compact LAN appliance for device discovery, uptime history, DHCP/DNS host management, nmap scan history, notifications, backups, and netboot image assignment.
 
-It uses a static Vue/Vite frontend, a PHP API/CLI backend, MariaDB, dnsmasq, cron, nmap, ping, ARP, and arping. The default runtime is one Docker container.
+It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, MariaDB, dnsmasq, cron, nmap, ping, ARP, and arping. The default runtime is one Docker container.
 
 ## Features
 
@@ -17,6 +17,7 @@ It uses a static Vue/Vite frontend, a PHP API/CLI backend, MariaDB, dnsmasq, cro
 - Local MAC vendor resolution from the IEEE MA-L, MA-M, MA-S, and IAB registries, without sending device addresses to a third party.
 - Netboot image upload, delete, and per-host boot image selection.
 - Guest read-only mode and admin login.
+- Abortable route loading, live running durations, and keyboard-accessible modal dialogs.
 - Dark mode.
 - `/api/health` appliance status endpoint.
 - Optional Discord webhook notifications.

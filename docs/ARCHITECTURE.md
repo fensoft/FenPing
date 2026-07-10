@@ -158,15 +158,23 @@ Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_i
 
 ## Frontend
 
-The UI is a static Vue 3 app built by Vite.
+The UI is a static Vue 3 app built by Vite and routed by Vue Router using browser history. Apache's existing SPA fallback serves `index.html` for direct navigation to frontend routes.
 
 Important files:
 
 - `index.html`: Vite HTML entry.
 - `frontend/main.js`: app bootstrap and Tabler imports.
-- `frontend/App.vue`: main application, routes, modals, table, scans, notify, netboot, host detail.
+- `frontend/router.js`: named routes for inventory, notifications, scans, host detail, and netboot.
+- `frontend/App.vue`: application shell, authentication, cross-page actions, and modal orchestration.
+- `frontend/pages/`: independent inventory, notifications, scans, host detail, and netboot route components.
+- `frontend/components/`: accessible application modal and smaller shared view components.
+- `frontend/composables/`: abort-controller lifecycle, page refresh registration, reactive time, and modal focus management.
+- `frontend/lib/api.js`: the only frontend `fetch` boundary, with consistent JSON/text errors and `AbortSignal` support.
+- `frontend/lib/formatters.js`: shared status, date, duration, and size presentation helpers.
 - `frontend/styles.css`: app styling and dark mode.
 - `package.json`: Vue, Vite, Tabler Core, Tabler Icons Webfont.
+
+Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock for running durations and relative times. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
 
 Apache serves real public files directly and falls back all other non-API paths to `index.html`.
 

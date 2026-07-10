@@ -42,7 +42,9 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history.
 - `oui.php`: local IEEE MA-L/MA-M/MA-S/IAB vendor index loading and atomic refresh.
 - `backup.php`: backup/restore implementation.
-- `frontend/`: Vue app source.
+- `frontend/App.vue`: Vue application shell and cross-page orchestration.
+- `frontend/router.js`, `frontend/pages/`: Vue Router configuration and route-level page components.
+- `frontend/components/`, `frontend/composables/`, `frontend/lib/`: shared UI, lifecycle, API, and formatting modules.
 - `docs/ARCHITECTURE.md`: deeper project overview.
 
 ## Persistent Data
