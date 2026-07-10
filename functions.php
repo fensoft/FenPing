@@ -31,15 +31,7 @@ function getVendor($mac) {
 }
 
 function getDb() {
-  global $db;
-  global $db_host;
-  global $db_port;
-  global $db_name;
-  global $db_user;
-  global $db_pass;
-  if (!isset($db))
-    $db = new PDO('mysql:host=' . $db_host . ';port=' . ($db_port ?? '3306') . ';dbname=' . $db_name, $db_user, $db_pass);
-  return $db;
+  return db();
 }
 
 function normalizeCategoryIp($ip) {
@@ -276,22 +268,21 @@ function getId($id) {
 }
 
 function create($ip, $mac) {
-  $mac = strtolower(str_replace("-", ":", (string)$mac));
   $stmt = getDb()->prepare("INSERT INTO ips (mac,ip) VALUES (:mac,:ip)");
   $stmt->execute(array("mac" => $mac, "ip" => $ip));
   return getDb()->lastInsertId();
 }
 
 function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId = null) {
-  $mac = strtolower(str_replace("-", ":", (string)$mac));
   $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns, netboot_image_id=:netboot_image_id WHERE id=:id");
-  if (!$stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "netboot_image_id" => $netbootImageId, "id" => $id)))
-    print_r($stmt->errorInfo());
+  $stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "netboot_image_id" => $netbootImageId, "id" => $id));
+  return $stmt->rowCount();
 }
 
 function del($id) {
   $stmt = getDb()->prepare("DELETE FROM ips WHERE id=:id");
   $stmt->execute(array("id" => $id));
+  return $stmt->rowCount();
 }
 
 function get_stats() {
@@ -592,10 +583,10 @@ function netboot_read_prefix(string $path, int $limit): ?string {
   }
 }
 
-function delete_netboot_image(int $id): void {
+function delete_netboot_image(int $id): array {
   $image = get_netboot_image($id);
   if ($image === false)
-    throw new InvalidArgumentException("netboot image not found");
+    throw new OutOfBoundsException("netboot image not found");
 
   $stmt = getDb()->prepare("UPDATE ips SET netboot_image_id=NULL WHERE netboot_image_id=:id");
   $stmt->execute(array("id" => $id));
@@ -603,7 +594,11 @@ function delete_netboot_image(int $id): void {
   $stmt = getDb()->prepare("DELETE FROM netboot_images WHERE id=:id");
   $stmt->execute(array("id" => $id));
 
-  $path = netboot_dir() . "/" . basename($image["filename"]);
+  return $image;
+}
+
+function delete_netboot_image_file(array $image): void {
+  $path = netboot_image_path($image);
   if (is_file($path))
     @unlink($path);
 }

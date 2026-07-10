@@ -22,8 +22,10 @@ COPY routes /opt/fenping/routes/
 COPY functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php config.php dnsmasq.leases.php db.sql /opt/fenping/
 COPY netboot.htaccess /.netboot-htaccess
 RUN mkdir -p /var/lib/mysql /var/lib/fenping/nmap /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state && chown -R www-data:www-data /var/lib/fenping/netboot && chown -R mysql:mysql /var/lib/mysql
-RUN echo 'Defaults env_keep += "DB_HOST DB_PORT DB_USER DB_PASS DB_NAME NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR"' >> /etc/sudoers
+RUN echo 'Defaults env_keep += "DB_HOST DB_PORT DB_USER DB_PASS DB_NAME NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE"' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts' >> /etc/sudoers
+RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --apply-pending' >> /etc/sudoers
+RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --sync-locked' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php ping' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php inventory --work' >> /etc/sudoers
 RUN mkdir -p /etc/dnsmasq.d /var/lib/misc && touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts /var/lib/misc/dnsmasq.leases

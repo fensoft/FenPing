@@ -50,12 +50,13 @@ function handleNetbootImageCreate(array $params): array {
 
 function handleNetbootImageDelete(array $params): array {
   try {
-    delete_netboot_image($params['id']);
-  } catch (InvalidArgumentException $e) {
+    $change = commitDhcpMutation(fn() => delete_netboot_image($params['id']));
+  } catch (OutOfBoundsException $e) {
     jsonError(404, $e->getMessage());
   }
 
-  return array('deleted' => true, 'log' => reloadDhcpHosts());
+  delete_netboot_image_file($change['result']);
+  return array('deleted' => true, 'log' => $change['log']);
 }
 
 function netbootImageWithHostCount(int $id): array {

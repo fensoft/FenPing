@@ -14,7 +14,7 @@ if ($command === 'ping') {
 }
 
 if ($command === 'hosts') {
-  exit(runHostsCommand());
+  exit(runHostsCommand(array_slice($argv, 2)));
 }
 
 if ($command === 'inventory') {

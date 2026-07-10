@@ -9,6 +9,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/hosts.php';
 require_once __DIR__ . '/health.php';
 require_once __DIR__ . '/scans.php';
 require_once __DIR__ . '/routes/auth.php';
@@ -257,12 +258,78 @@ function normalizeNetbootImageId($value): ?int {
 }
 
 function reloadDhcpHosts(): string {
+  try {
+    return runDhcpHostsCli('');
+  } catch (RuntimeException $e) {
+    jsonError(500, $e->getMessage());
+  }
+}
+
+function commitDhcpMutation(callable $mutation): array {
+  $lock = acquireDnsmasqUpdateLock();
+  $database = db();
+  $candidateDir = dnsmasqPendingDir();
+  $applied = false;
+
+  try {
+    if ($database->inTransaction())
+      throw new RuntimeException('database transaction already active');
+
+    clearDnsmasqCandidateDir($candidateDir);
+    $database->beginTransaction();
+    $result = $mutation();
+    prepareDnsmasqCandidate(buildDnsmasqFiles(), $candidateDir);
+    $log = runDhcpHostsCli('--apply-pending');
+    $applied = true;
+    if (!$database->commit())
+      throw new RuntimeException('database commit failed');
+
+    return array('result' => $result, 'log' => $log);
+  } catch (Throwable $error) {
+    $recoveryErrors = array();
+
+    if ($database->inTransaction()) {
+      try {
+        $database->rollBack();
+      } catch (Throwable $rollbackError) {
+        $recoveryErrors[] = 'database rollback failed: ' . $rollbackError->getMessage();
+      }
+    }
+
+    if ($applied) {
+      try {
+        runDhcpHostsCli('--sync-locked');
+      } catch (Throwable $syncError) {
+        $recoveryErrors[] = 'dnsmasq recovery failed: ' . $syncError->getMessage();
+      }
+    }
+
+    if (count($recoveryErrors) !== 0) {
+      throw new RuntimeException(
+        'DHCP update failed: ' . $error->getMessage() . '; ' . implode('; ', $recoveryErrors),
+        0,
+        $error
+      );
+    }
+    throw $error;
+  } finally {
+    clearDnsmasqCandidateDir($candidateDir);
+    releaseDnsmasqUpdateLock($lock);
+  }
+}
+
+function runDhcpHostsCli(string $mode): string {
+  if (!in_array($mode, array('', '--apply-pending', '--sync-locked'), true))
+    throw new InvalidArgumentException('invalid DHCP apply mode');
+
   $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' hosts';
+  if ($mode !== '')
+    $command .= ' ' . escapeshellarg($mode);
   $output = array();
   $code = 0;
   exec($command . ' 2>&1', $output, $code);
   if ($code !== 0)
-    jsonError(500, trim(implode("\n", $output)) ?: 'dhcp reload failed');
+    throw new RuntimeException(trim(implode("\n", $output)) ?: 'DHCP apply failed');
   return implode("\n", $output);
 }
 

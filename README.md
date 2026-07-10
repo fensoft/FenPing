@@ -10,6 +10,7 @@ It uses a static Vue/Vite frontend, a PHP API/CLI backend, MariaDB, dnsmasq, cro
 - Status tracking with `Up`, `Down`, `arp`, and `arp-down` states.
 - Stability, host history, and a 24-hour notify view.
 - Static DHCP/DNS host management through dnsmasq.
+- Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
 - Category/range separators with collapsible groups and rename support.
 - Quick and deep nmap scans with XML history.
 - Netboot image upload, delete, and per-host boot image selection.
@@ -88,6 +89,8 @@ Important `.env` values:
 | `PASSWORD` | Admin login password. Empty means a blank login password. |
 | `SECRET` | Session signing secret. |
 | `DISCORD_WEBHOOK_URL` | Optional Discord webhook for status and restart notifications. |
+
+Managed hosts require a valid IPv4 address, a six-octet MAC address, and a host name containing one DNS label (letters, numbers, and internal hyphens). Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
 
 ## Persistent Data
 

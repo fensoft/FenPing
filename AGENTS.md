@@ -37,7 +37,7 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `database.php`: PDO singleton.
 - `db.sql`: idempotent schema/migration SQL and `update_status`.
 - `ping.php`: ping scanner and status writer.
-- `hosts.php`: dnsmasq generated file writer and local reload/start logic.
+- `hosts.php`: DHCP field validation, transactional dnsmasq candidate generation, and local reload/start logic.
 - `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history.
 - `backup.php`: backup/restore implementation.
 - `frontend/`: Vue app source.
@@ -80,6 +80,8 @@ Routes are declared in `routes/*.php` and merged in `api.php`. Success responses
 ```
 
 Guest mode is read-only. Mutating routes require authenticated session/body auth.
+
+Host and netboot mutations that affect dnsmasq must use `commitDhcpMutation()` so database changes and generated configuration stay coordinated. Do not write DHCP fields directly without the validators in `hosts.php`.
 
 ## Tests Before Commit
 

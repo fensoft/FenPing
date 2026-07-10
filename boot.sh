@@ -13,6 +13,8 @@ chown mysql:mysql /var/log/mysql
 cd /opt/fenping
 mkdir -p /var/lib/fenping/nmap /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
 chown -R www-data:www-data /var/lib/fenping/netboot
+install -d -o www-data -g www-data -m 0700 /run/fenping/dnsmasq-pending
+install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock
 install -o root -g root -m 0644 /.netboot-htaccess /var/lib/fenping/netboot/.htaccess
 mkdir -p /var/lib/mysql
 chown mysql:mysql -R /var/lib/mysql

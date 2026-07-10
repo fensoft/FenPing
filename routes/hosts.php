@@ -59,32 +59,94 @@ function handleHostDetail(array $params): array {
 
 function handleHostCreate(array $params): array {
   $body = requestBody();
-  $id = create(normalizeHostIp($body['ip'] ?? null), $body['mac'] ?? '');
-  return array('id' => (int)$id);
+  $ip = normalizeHostIp($body['ip'] ?? null);
+
+  try {
+    $values = validateDhcpHostCreate($ip, $body['mac'] ?? '');
+  } catch (InvalidArgumentException $e) {
+    jsonError(400, $e->getMessage());
+  }
+
+  try {
+    $change = commitDhcpMutation(fn() => create($values['ip'], $values['mac']));
+  } catch (PDOException $e) {
+    handleHostConstraintError($e);
+  }
+
+  return array('id' => (int)$change['result'], 'log' => $change['log']);
 }
 
 function handleHostEdit(array $params): array {
   $body = requestBody();
+  $id = $params['id'];
+  $ip = normalizeHostIp($body['ip'] ?? null);
+  $netbootImageId = normalizeNetbootImageId($body['netboot_image_id'] ?? null);
 
-  edit(
-    $params['id'],
-    normalizeHostIp($body['ip'] ?? null),
-    $body['mac'] ?? '',
-    $body['name'] ?? '',
-    toDbFlag($body['repeater'] ?? null),
-    toDbFlag($body['important'] ?? null),
-    toDbFlag($body['web'] ?? null),
-    normalizeEmpty($body['router'] ?? null),
-    normalizeEmpty($body['dns'] ?? null),
-    normalizeNetbootImageId($body['netboot_image_id'] ?? null)
-  );
+  try {
+    $values = validateDhcpHostEdit(
+      $ip,
+      $body['mac'] ?? '',
+      $body['name'] ?? '',
+      $body['router'] ?? null,
+      $body['dns'] ?? null
+    );
+  } catch (InvalidArgumentException $e) {
+    jsonError(400, $e->getMessage());
+  }
 
-  return array('log' => reloadDhcpHosts());
+  try {
+    $change = commitDhcpMutation(function () use ($id, $values, $body, $netbootImageId) {
+      if (getId($id) === false)
+        throw new DhcpHostNotFoundException('host not found');
+      if ($netbootImageId !== null && !netboot_image_exists($netbootImageId))
+        throw new DhcpHostInputException('invalid netboot image');
+
+      edit(
+        $id,
+        $values['ip'],
+        $values['mac'],
+        $values['name'],
+        toDbFlag($body['repeater'] ?? null),
+        toDbFlag($body['important'] ?? null),
+        toDbFlag($body['web'] ?? null),
+        $values['router'],
+        $values['dns'],
+        $netbootImageId
+      );
+      return true;
+    });
+  } catch (DhcpHostNotFoundException $e) {
+    jsonError(404, $e->getMessage());
+  } catch (DhcpHostInputException $e) {
+    jsonError(400, $e->getMessage());
+  } catch (PDOException $e) {
+    handleHostConstraintError($e);
+  }
+
+  return array('saved' => true, 'log' => $change['log']);
 }
 
 function handleHostDelete(array $params): array {
-  del($params['id']);
-  return array('deleted' => true);
+  $id = $params['id'];
+
+  try {
+    $change = commitDhcpMutation(function () use ($id) {
+      if (getId($id) === false)
+        throw new DhcpHostNotFoundException('host not found');
+      del($id);
+      return true;
+    });
+  } catch (DhcpHostNotFoundException $e) {
+    jsonError(404, $e->getMessage());
+  }
+
+  return array('deleted' => true, 'log' => $change['log']);
+}
+
+function handleHostConstraintError(PDOException $error): void {
+  if ((string)$error->getCode() === '23000')
+    jsonError(409, 'host name, MAC address, and IP address must be unique');
+  throw $error;
 }
 
 function handleCategoryCreate(array $params): array {
