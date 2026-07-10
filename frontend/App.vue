@@ -1033,6 +1033,9 @@
                   <div>
                     <div class="font-monospace scan-ip">{{ modal.ip }}</div>
                     <div class="text-secondary small">{{ modal.scan.started || modal.scan.args }}</div>
+                    <div v-if="modal.scan.merged_with" class="text-secondary small">
+                      Merged with full scan from {{ formatScanDate(modal.scan.merged_with.date_end || modal.scan.merged_with.date_begin) }}
+                    </div>
                   </div>
                   <div class="scan-actions">
                     <select
@@ -1063,11 +1066,11 @@
                   </div>
                   <div class="scan-fact">
                     <span>Mode</span>
-                    <strong>{{ modal.scan.metadata?.mode || '-' }}</strong>
+                    <strong>{{ scanModeLabel(modal.scan) }}</strong>
                   </div>
                   <div class="scan-fact">
                     <span>Ports</span>
-                    <strong>{{ modal.scan.metadata?.ports_count ?? modal.scan.ports.length }}</strong>
+                    <strong>{{ modal.scan.ports_count ?? modal.scan.metadata?.ports_count ?? modal.scan.ports.length }}</strong>
                   </div>
                   <div class="scan-fact">
                     <span>Duration</span>
@@ -1125,6 +1128,7 @@
                         <th>State</th>
                         <th>Service</th>
                         <th>Details</th>
+                        <th>Source</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1135,6 +1139,7 @@
                         </td>
                         <td>{{ port.service || '-' }}</td>
                         <td class="text-truncate-cell" :title="port.details">{{ port.details }}</td>
+                        <td class="scan-type">{{ port.source || modal.scan.metadata?.mode || '-' }}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1831,8 +1836,9 @@ function scanHistoryUrl(ip) {
   return `/api/scans/${encodeURIComponent(ip)}/history`;
 }
 
-function scanStatusUrl(ip) {
-  return `/api/scans/${encodeURIComponent(ip)}/status`;
+function scanStatusUrl(ip, scanId = null) {
+  const suffix = scanId ? `?id=${encodeURIComponent(scanId)}` : '';
+  return `/api/scans/${encodeURIComponent(ip)}/status${suffix}`;
 }
 
 function hostScanKey(host) {
@@ -1910,7 +1916,7 @@ async function quickScanHost(host) {
     if (metadata && ['failed', 'timeout', 'cancelled'].includes(metadata.state))
       throw new Error(metadata.error || `Scan ${metadata.state}`);
 
-    notice.value = metadata?.xml ? 'Scan saved' : 'Scan complete';
+    notice.value = metadata?.result_changed ? 'Scan changes saved' : 'Scan complete, no changes';
     if (isScansPage.value)
       await loadScanQueue();
     else if (isHostPage.value)
@@ -1938,10 +1944,8 @@ async function pollScanStatus(host, scanId = null) {
     delay = 1000;
 
     try {
-      const metadata = await apiJson(scanStatusUrl(ip));
+      const metadata = await apiJson(scanStatusUrl(ip, scanId));
       if (metadata && metadata.state !== 'none') {
-        if (scanId && metadata.id !== scanId)
-          continue;
         updateHostScan(ip, metadata, false);
         if (!scanIsActiveState(metadata.state))
           return metadata;
@@ -2454,6 +2458,12 @@ function scanStateClass(state) {
   if (state === 'closed') return 'scan-state scan-state-closed';
   if (state === 'filtered') return 'scan-state scan-state-filtered';
   return 'scan-state';
+}
+
+function scanModeLabel(scan) {
+  if (scan?.merged_with)
+    return 'quick + deep';
+  return scan?.metadata?.mode || '-';
 }
 
 async function toggleScanRaw() {

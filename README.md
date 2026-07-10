@@ -12,7 +12,7 @@ It uses a static Vue/Vite frontend, a PHP API/CLI backend, MariaDB, dnsmasq, cro
 - Static DHCP/DNS host management through dnsmasq.
 - Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
 - Category/range separators with collapsible groups and rename support.
-- Quick and deep nmap scans with XML history.
+- Quick and deep nmap scans with deduplicated database history; quick results never replace the latest deep snapshot.
 - Netboot image upload, delete, and per-host boot image selection.
 - Guest read-only mode and admin login.
 - Dark mode.
@@ -45,7 +45,7 @@ FenPing currently runs as one host-networked container named `fenping`.
 Inside that container:
 
 - Apache serves the static Vue app and routes `/api/...` to PHP.
-- MariaDB stores inventory, ping, stats, scan, category, auth, and netboot metadata.
+- MariaDB stores inventory, ping, stats, scan jobs/snapshots, category, auth, and netboot metadata.
 - dnsmasq serves DHCP, DNS, leases, and TFTP/netboot settings.
 - cron runs ping scans, inventory scans, and lease imports.
 - PHP CLI commands handle host generation, scanning, backup/restore, and notifications.
@@ -90,7 +90,7 @@ Important `.env` values:
 | `SECRET` | Session signing secret. |
 | `DISCORD_WEBHOOK_URL` | Optional Discord webhook for status and restart notifications. |
 
-Managed hosts require a valid IPv4 address, a six-octet MAC address, and a host name containing one DNS label (letters, numbers, and internal hyphens). Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
+Managed hosts require a valid IPv4 address and six-octet MAC address. Host names are optional; when set, they must contain one DNS label using letters, numbers, and internal hyphens. Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
 
 ## Persistent Data
 
@@ -101,7 +101,6 @@ Do not delete `data/` casually. It is the appliance state.
 | `data/db` | `/var/lib/mysql` | MariaDB data. |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases. |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | Generated dnsmasq config files. |
-| `data/nmap` | `/var/lib/fenping/nmap` | nmap XML, metadata, and history. |
 | `data/netboot` | `/var/lib/fenping/netboot` | Uploaded netboot files. |
 | `data/backups` | `/var/lib/fenping/backups` | Backup archives and imported dumps. |
 | `data/state` | `/var/lib/fenping/state` | Optional state/health files. |
@@ -130,6 +129,8 @@ Cron inside the container runs:
 - inventory discovery every hour; discovered hosts are queued for deep scans.
 - the inventory worker runs queued scans with a maximum concurrency of four.
 - dnsmasq lease import every minute.
+
+Completed nmap output is stored in MariaDB. FenPing keeps one XML snapshot per distinct semantic result and scan mode, so unchanged scans reuse the existing snapshot. Quick and deep scans have separate change baselines, and the normal detail view prefers the latest deep result. Selecting a quick result merges it over the preceding deep snapshot: quick observations replace matching ports while deep-only ports and OS data remain visible with source labels. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
 
 ## Backup And Restore
 
@@ -172,8 +173,8 @@ Useful endpoints:
 | `GET` | `/api/notify` | Last 24 hours of changes. |
 | `POST` | `/api/ping/refresh` | Run ping scan and wait for completion. |
 | `GET` | `/api/history/{ip}` | Status history for a host. |
-| `GET` | `/api/scans/{ip}` | Latest scan as JSON. |
-| `GET` | `/api/scans/{ip}/xml` | Latest scan XML. |
+| `GET` | `/api/scans/{ip}` | Preferred scan result as JSON (deep before quick). |
+| `GET` | `/api/scans/{ip}/xml` | Preferred database-backed scan XML. |
 | `POST` | `/api/scans/{ip}/quick` | Queue a quick scan and return HTTP `202`. |
 | `GET` | `/api/netboot/images` | List netboot images. |
 | `POST` | `/api/netboot/images` | Upload a netboot image. |

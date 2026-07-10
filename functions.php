@@ -181,7 +181,7 @@ function getInventory() {
       $data["stats"] = $stats[$ip]["label"];
       $data["stats2"] = $stats[$ip]["transitions"];
     }
-    if ($ip != "" && file_exists(SCAN_DIR . "/" . $ip . ".xml")) {
+    if ($ip != "" && !empty($latestScans[$ip]["result_available"])) {
       $data["xml"] = $ip;
     }
     if ($ip != "" && isset($latestScans[$ip])) {
@@ -194,7 +194,26 @@ function getInventory() {
 
 function getLatestScans() {
   $stmt = getDb()->prepare("
-    SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.xml, s.error
+    SELECT
+      s.id,
+      s.ip,
+      s.mode,
+      s.state,
+      s.status,
+      s.date_begin,
+      s.date_end,
+      s.duration,
+      s.ports_count,
+      s.snapshot_id,
+      s.result_changed,
+      s.error,
+      EXISTS(
+        SELECT 1
+        FROM scans result
+        WHERE result.ip=s.ip
+          AND result.state='complete'
+          AND result.snapshot_id IS NOT NULL
+      ) AS result_available
     FROM scans s
     INNER JOIN (
       SELECT ip, MAX(id) id
@@ -209,6 +228,10 @@ function getLatestScans() {
     $row["id"] = (int)$row["id"];
     $row["duration"] = $row["duration"] === null ? null : (int)$row["duration"];
     $row["ports_count"] = (int)$row["ports_count"];
+    $row["snapshot_id"] = $row["snapshot_id"] === null ? null : (int)$row["snapshot_id"];
+    $row["result_changed"] = (int)$row["result_changed"];
+    $row["result_available"] = (int)$row["result_available"];
+    $row["xml"] = $row["result_available"] ? scanXmlUrl($row["ip"]) : null;
     $scans[$row["ip"]] = $row;
   }
   return $scans;

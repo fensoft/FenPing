@@ -1,6 +1,4 @@
 vendor/
-nmap.raw/
-nmap/
 templates_c/
 *.old
 data

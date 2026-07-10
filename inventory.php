@@ -62,7 +62,6 @@ function runInventoryWorkerCommand(array $args): int {
   }
 
   try {
-    ensureInventoryDir();
     scanMetadataExpireStaleRunning(INVENTORY_SCAN_TIMEOUT_SECONDS + 60);
     return inventoryWorkerLoop();
   } finally {
@@ -243,16 +242,18 @@ function inventoryScan(string $ip, bool $quick = false, ?int $scanId = null): ar
     $status = $scan['status'] ?: 'unknown';
     $xmlHash = scanXmlHash($xml, $ip);
     $saved = $status === 'up';
-    $xmlPath = null;
-
-    if ($saved) {
-      $xmlPath = inventorySaveXml($ip, $scanId, $xml);
-    }
-
-    scanMetadataComplete($scanId, $status, count($scan['ports']), $scan['duration'], $xmlPath, $xmlHash);
+    $changed = scanMetadataComplete(
+      $scanId,
+      $status,
+      count($scan['ports']),
+      $scan['duration'],
+      $saved ? $xml : null,
+      $saved ? $xmlHash : null
+    );
     scanPruneHistory($ip);
     return array(
       'saved' => $saved,
+      'changed' => $changed,
       'status' => $status
     );
   } catch (InventoryTimeoutException $e) {
@@ -266,40 +267,6 @@ function inventoryScan(string $ip, bool $quick = false, ?int $scanId = null): ar
   } finally {
     @unlink($tmp);
   }
-}
-
-function inventorySaveXml(string $ip, int $scanId, string $xml): string {
-  $historyDir = SCAN_DIR . '/history/' . $ip;
-  if (!is_dir($historyDir) && !mkdir($historyDir, 0755, true))
-    throw new RuntimeException("failed to create scan history directory for $ip");
-
-  $historyPath = scanXmlPath($ip, $scanId);
-  inventoryWriteXmlFile($historyPath, $xml);
-  inventoryWriteXmlFile(scanXmlPath($ip), $xml);
-  return $historyPath;
-}
-
-function inventoryWriteXmlFile(string $target, string $xml): void {
-  $dir = dirname($target);
-  $tmp = tempnam($dir, basename($target) . '.');
-  if ($tmp === false)
-    throw new RuntimeException("failed to create temporary scan file");
-
-  if (file_put_contents($tmp, $xml) === false) {
-    @unlink($tmp);
-    throw new RuntimeException("failed to write scan file");
-  }
-
-  chmod($tmp, 0644);
-  if (!rename($tmp, $target)) {
-    @unlink($tmp);
-    throw new RuntimeException("failed to save scan file");
-  }
-}
-
-function ensureInventoryDir(): void {
-  if (!is_dir(SCAN_DIR) && !mkdir(SCAN_DIR, 0755, true))
-    throw new RuntimeException('failed to create nmap directory');
 }
 
 function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds = INVENTORY_SCAN_TIMEOUT_SECONDS): array {

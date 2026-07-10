@@ -9,7 +9,6 @@ fi
 mkdir -p `pwd`/data/db
 mkdir -p `pwd`/data/dnsmasq
 mkdir -p `pwd`/data/dnsmasq.d
-mkdir -p `pwd`/data/nmap
 mkdir -p `pwd`/data/netboot
 mkdir -p `pwd`/data/backups
 mkdir -p `pwd`/data/state
@@ -36,7 +35,6 @@ docker run -d \
   --env-file .env \
   -v `pwd`/data/dnsmasq:/var/lib/misc \
   -v `pwd`/data/dnsmasq.d:/etc/dnsmasq.d \
-  -v `pwd`/data/nmap:/var/lib/fenping/nmap \
   -v `pwd`/data/netboot:/var/lib/fenping/netboot \
   -v `pwd`/data/backups:/var/lib/fenping/backups \
   -v `pwd`/data/state:/var/lib/fenping/state \

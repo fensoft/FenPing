@@ -50,7 +50,6 @@ Do not casually delete or rewrite files under `data/`.
 - `data/db` -> `/var/lib/mysql`
 - `data/dnsmasq` -> `/var/lib/misc`
 - `data/dnsmasq.d` -> `/etc/dnsmasq.d`
-- `data/nmap` -> `/var/lib/fenping/nmap`
 - `data/netboot` -> `/var/lib/fenping/netboot`
 - `data/backups` -> `/var/lib/fenping/backups`
 - `data/state` -> `/var/lib/fenping/state`

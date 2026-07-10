@@ -11,7 +11,7 @@ chown mysql:mysql /var/run/mysqld
 mkdir -p /var/log/mysql
 chown mysql:mysql /var/log/mysql
 cd /opt/fenping
-mkdir -p /var/lib/fenping/nmap /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
+mkdir -p /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
 chown -R www-data:www-data /var/lib/fenping/netboot
 install -d -o www-data -g www-data -m 0700 /run/fenping/dnsmasq-pending
 install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock

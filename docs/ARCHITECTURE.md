@@ -33,7 +33,6 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 | `data/db` | `/var/lib/mysql` | MariaDB data directory |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | generated dnsmasq config |
-| `data/nmap` | `/var/lib/fenping/nmap` | latest nmap XML, metadata, and scan history |
 | `data/netboot` | `/var/lib/fenping/netboot` | uploaded netboot files |
 | `data/backups` | `/var/lib/fenping/backups` | backup archives and imported dumps |
 | `data/state` | `/var/lib/fenping/state` | optional state files |
@@ -59,7 +58,7 @@ Route modules:
 - `routes/auth.php`: session, login, logout.
 - `routes/system.php`: health, inventory, notify, ping refresh.
 - `routes/hosts.php`: host CRUD, host detail/history, category create/rename/delete.
-- `routes/scans.php`: scan queue, quick scans, scan status/history/XML/JSON.
+- `routes/scans.php`: scan queue, quick scans, scan status/history, and database-backed XML/JSON responses.
 - `routes/netboot.php`: netboot image list/upload/delete.
 
 ### CLI
@@ -90,7 +89,8 @@ Important tables:
 - `range`: category separators keyed by starting IP.
 - `leases`: imported dnsmasq lease data.
 - `vendors`: cached MAC vendor lookups.
-- `scans`: nmap scan metadata.
+- `scans`: nmap job metadata and references to stored results.
+- `scan_snapshots`: deduplicated nmap XML keyed by host, mode, and semantic result hash.
 - `netboot_images`: uploaded netboot file metadata.
 - `users`: legacy table still present in schema.
 
@@ -113,13 +113,15 @@ The `update_status` procedure appends to `stats` only when status/IP/MAC changes
 
 - Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and queues deep scans.
 - A lock-protected coordinator claims queued jobs and runs no more than four nmap child processes concurrently.
-- Only one queued or running job is allowed per IP; quick jobs are claimed before deep jobs.
+- Only one job runs per IP at a time. A deep job may wait behind a running quick job; queued deep work supersedes queued quick work, and quick requests never downgrade a deep job.
 - Deep scan uses `-A -p- -sS -T3`.
 - Quick scan targets one host with faster flags.
 - Quick-scan API requests return HTTP `202` after enqueueing and start the coordinator in the background.
 - Every nmap command has a 2-hour hard timeout; timed-out scans are recorded with the `timeout` state.
-- XML is saved under `/var/lib/fenping/nmap`.
-- History pruning keeps one week and removes older duplicate scan signatures.
+- Completed XML is stored in `scan_snapshots`; identical results reuse an existing snapshot rather than storing another copy.
+- Quick and deep scans are compared independently. Default scan details prefer the latest changed deep snapshot and fall back to quick only when no deep result exists.
+- Selecting a quick snapshot merges it at read time with the preceding deep snapshot. Quick values override matching ports; deep-only ports and OS data remain and each port carries its source mode.
+- History pruning keeps one week of jobs plus the latest changed result for each mode.
 
 Avoid default inventory scans in tests unless the user accepts LAN scan traffic.
 
@@ -170,9 +172,9 @@ Never place secrets in docs, commits, logs, generated files, or the committed ge
 `backup.php` backs up:
 
 - A MariaDB dump of the configured app DB.
-- nmap XML files and history.
+- Deduplicated nmap snapshots through the database dump.
 - netboot files.
-- JSON indexes and a manifest.
+- A netboot JSON index and a manifest.
 
 Default backups go to `/var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz`, mounted at `data/backups`.
 

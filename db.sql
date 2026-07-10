@@ -77,15 +77,27 @@ CREATE TABLE IF NOT EXISTS `scans` (
   `date_end` datetime DEFAULT NULL,
   `duration` int(11) unsigned DEFAULT NULL,
   `ports_count` int(11) unsigned NOT NULL DEFAULT '0',
-  `xml` varchar(255) DEFAULT NULL,
-  `xml_hash` char(64) DEFAULT NULL,
+  `snapshot_id` int(11) unsigned DEFAULT NULL,
+  `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0,
   `error` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `scans_ip_date` (`ip`, `date_begin`),
   KEY `scans_ip_id` (`ip`, `id`),
-  KEY `scans_ip_xml_hash_id` (`ip`, `xml_hash`, `id`),
+  KEY `scans_snapshot_id` (`snapshot_id`),
   KEY `scans_state` (`state`),
   KEY `scans_queue` (`state`, `mode`, `id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshots` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `ip` varchar(50) NOT NULL,
+  `mode` varchar(20) NOT NULL,
+  `result_hash` char(64) NOT NULL,
+  `xml` mediumblob NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshots_result` (`ip`, `mode`, `result_hash`),
+  KEY `scan_snapshots_ip_mode_id` (`ip`, `mode`, `id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `users` (
@@ -118,14 +130,14 @@ CREATE INDEX IF NOT EXISTS `range_ip_begin` ON `range` (`ip_begin`);
 CREATE INDEX IF NOT EXISTS `stats_ip_date_begin` ON `stats` (`ip`, `date_begin`);
 ALTER TABLE `ips` ADD COLUMN IF NOT EXISTS `netboot_image_id` int(10) unsigned DEFAULT NULL AFTER `dns`;
 CREATE INDEX IF NOT EXISTS `ips_netboot_image_id` ON `ips` (`netboot_image_id`);
-ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `xml_hash` char(64) DEFAULT NULL AFTER `xml`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `snapshot_id` int(11) unsigned DEFAULT NULL AFTER `ports_count`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0 AFTER `snapshot_id`;
 CREATE INDEX IF NOT EXISTS `scans_ip_id` ON `scans` (`ip`, `id`);
-CREATE INDEX IF NOT EXISTS `scans_ip_xml_hash_id` ON `scans` (`ip`, `xml_hash`, `id`);
+CREATE INDEX IF NOT EXISTS `scans_snapshot_id` ON `scans` (`snapshot_id`);
 CREATE INDEX IF NOT EXISTS `scans_queue` ON `scans` (`state`, `mode`, `id`);
-
-UPDATE scans
-SET xml=CONCAT('/var/lib/fenping/nmap/', SUBSTRING(xml, LENGTH('/var/www/html/nmap/') + 1))
-WHERE xml LIKE '/var/www/html/nmap/%';
+DROP INDEX IF EXISTS `scans_ip_xml_hash_id` ON `scans`;
+ALTER TABLE `scans` DROP COLUMN IF EXISTS `xml_hash`;
+ALTER TABLE `scans` DROP COLUMN IF EXISTS `xml`;
 
 UPDATE scans
 SET state=IF(

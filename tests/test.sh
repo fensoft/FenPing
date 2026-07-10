@@ -41,7 +41,6 @@ DENIED_WEB_PATHS=(
   /config.php
   /db.sql
   /backups/test.tgz
-  /nmap/test.xml
   /netboot/test.efi
   /state/test
 )

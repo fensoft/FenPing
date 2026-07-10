@@ -80,9 +80,7 @@ function backupCreateArchive(string $target): void {
     backupGzipFile($sql, $sqlGz);
     @unlink($sql);
 
-    backupCopyDirectory(SCAN_DIR, $stage . '/nmap');
     backupCopyDirectory(backupNetbootDir(), $stage . '/netboot');
-    backupWriteJson($stage . '/nmap-index.json', backupNmapIndex());
     backupWriteJson($stage . '/netboot-index.json', backupNetbootIndex());
     backupWriteJson($stage . '/manifest.json', backupManifest($sqlGz));
 
@@ -112,11 +110,6 @@ function backupRestoreArchive(string $source): void {
       backupImportSql($sql);
     } else {
       throw new RuntimeException('archive does not contain db.sql.gz');
-    }
-
-    if (is_dir($stage . '/nmap')) {
-      backupReplaceDirectory($stage . '/nmap', SCAN_DIR);
-      echo "nmap files restored" . PHP_EOL;
     }
 
     if (is_dir($stage . '/netboot')) {
@@ -283,13 +276,19 @@ function backupMysqlEnv(): array {
   return array('MYSQL_PWD' => $db_pass);
 }
 
-function backupNmapIndex(): array {
+function backupScanCounts(): array {
   $stmt = db()->query("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
-    FROM scans
-    ORDER BY ip ASC, id ASC
+    SELECT
+      (SELECT COUNT(*) FROM scans) AS scan_rows,
+      (SELECT COUNT(*) FROM scan_snapshots) AS snapshot_rows,
+      (SELECT COALESCE(SUM(OCTET_LENGTH(xml)), 0) FROM scan_snapshots) AS snapshot_bytes
   ");
-  return $stmt->fetchAll(PDO::FETCH_ASSOC);
+  $counts = $stmt->fetch(PDO::FETCH_ASSOC);
+  return array(
+    'scan_rows' => (int)($counts['scan_rows'] ?? 0),
+    'snapshot_rows' => (int)($counts['snapshot_rows'] ?? 0),
+    'snapshot_bytes' => (int)($counts['snapshot_bytes'] ?? 0)
+  );
 }
 
 function backupNetbootIndex(): array {
@@ -313,6 +312,7 @@ function backupNetbootIndex(): array {
 
 function backupManifest(string $sqlGz): array {
   global $db_name;
+  $scanCounts = backupScanCounts();
 
   return array(
     'format' => BACKUP_FORMAT,
@@ -321,15 +321,14 @@ function backupManifest(string $sqlGz): array {
     'hostname' => gethostname() ?: 'fenping',
     'includes' => array(
       'db' => 'db.sql.gz',
-      'nmap' => 'nmap/',
       'netboot' => 'netboot/',
-      'nmap_index' => 'nmap-index.json',
       'netboot_index' => 'netboot-index.json'
     ),
     'counts' => array(
-      'nmap_files' => backupCountFiles(SCAN_DIR),
       'netboot_files' => backupCountFiles(backupNetbootDir()),
-      'scan_rows' => count(backupNmapIndex()),
+      'scan_rows' => $scanCounts['scan_rows'],
+      'scan_snapshot_rows' => $scanCounts['snapshot_rows'],
+      'scan_snapshot_bytes' => $scanCounts['snapshot_bytes'],
       'netboot_rows' => count(backupNetbootIndex())
     ),
     'db_sql_gz_bytes' => filesize($sqlGz)
@@ -534,7 +533,7 @@ function backupReplaceDirectory(string $source, string $target): void {
 
 function backupClearDirectory(string $target): void {
   $real = realpath($target);
-  $allowed = array(realpath(SCAN_DIR), realpath(backupNetbootDir()));
+  $allowed = array(realpath(backupNetbootDir()));
   if ($real === false || !in_array($real, $allowed, true))
     throw new RuntimeException("refusing to clear unexpected directory: $target");
 

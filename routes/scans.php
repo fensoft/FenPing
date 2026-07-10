@@ -42,6 +42,16 @@ function startScanWorkerAsync(): void {
 
 function handleScanStatus(array $params): array {
   $ip = $params['ip'];
+  $requestedId = $_GET['id'] ?? null;
+  if ($requestedId !== null) {
+    if (!is_scalar($requestedId) || !ctype_digit((string)$requestedId))
+      jsonError(400, 'invalid scan id');
+    $metadata = scanMetadataById($ip, (int)$requestedId);
+    if ($metadata === null)
+      jsonError(404, 'scan not found');
+    return $metadata;
+  }
+
   return scanMetadataLatest($ip) ?: array(
     'ip' => $ip,
     'state' => 'none',
@@ -78,22 +88,48 @@ function handleLegacyScanHistoryXml(array $params): void {
 }
 
 function scanJsonResponse(string $ip, ?int $id = null): array {
-  $metadata = $id === null ? scanMetadataLatest($ip) : scanMetadataById($ip, $id);
+  $metadata = $id === null ? scanMetadataBestResult($ip) : scanMetadataById($ip, $id);
   if ($id !== null && $metadata === null)
     jsonError(404, 'scan not found');
 
   $xml = scanReadXml($ip, $metadata);
-  if ($xml === null)
+  $deepMetadata = $metadata !== null && ($metadata['mode'] ?? '') === 'quick'
+    ? scanMetadataPreviousResult($ip, 'deep', (int)$metadata['id'])
+    : null;
+  if ($xml === null && $deepMetadata === null)
     jsonError(404, 'scan not found');
 
-  $scan = scanParseXml($xml, $metadata ?: array('ip' => $ip));
+  $scan = $xml === null
+    ? array(
+      'ip' => $ip,
+      'args' => '',
+      'started' => '',
+      'status' => $metadata['status'] ?? '',
+      'uptime' => '',
+      'duration' => $metadata['duration'] ?? null,
+      'ports_count' => 0,
+      'addresses' => array(),
+      'hostnames' => array(),
+      'os' => array(),
+      'ports' => array(),
+      'metadata' => $metadata,
+      'xml' => null
+    )
+    : scanParseXml($xml, $metadata ?: array('ip' => $ip));
+
+  if ($deepMetadata !== null) {
+    $deepXml = scanReadXml($ip, $deepMetadata);
+    if ($deepXml !== null)
+      $scan = scanMergeQuickWithDeep($scan, scanParseXml($deepXml, $deepMetadata), $deepMetadata);
+  }
+
   if ($metadata === null)
     $scan['metadata'] = null;
   return $scan;
 }
 
 function streamScanXml(string $ip, ?int $id = null): void {
-  $metadata = $id === null ? null : scanMetadataById($ip, $id);
+  $metadata = $id === null ? scanMetadataBestResult($ip) : scanMetadataById($ip, $id);
   if ($id !== null && $metadata === null)
     jsonError(404, 'scan not found');
 

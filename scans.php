@@ -1,16 +1,9 @@
 <?php
 
-define('SCAN_DIR', FENPING_DATA_DIR . '/nmap');
 const SCAN_XSL_FROM = 'file:///usr/bin/../share/nmap/';
 const SCAN_XSL_LEGACY = '../res/xsl/';
 const SCAN_XSL_TO = '/res/xsl/';
 const SCAN_HISTORY_DAYS = 7;
-
-function scanXmlPath(string $ip, ?int $id = null): string {
-  if ($id !== null)
-    return SCAN_DIR . '/history/' . $ip . '/' . $id . '.xml';
-  return SCAN_DIR . '/' . $ip . '.xml';
-}
 
 function scanXmlUrl(string $ip, ?int $id = null): string {
   if ($id !== null)
@@ -19,22 +12,19 @@ function scanXmlUrl(string $ip, ?int $id = null): string {
 }
 
 function scanReadXml(string $ip, ?array $metadata = null): ?string {
-  if ($metadata !== null && ($metadata['xml'] ?? '') !== '') {
-    if (!scanMetadataXmlUsable($metadata))
-      return null;
-    $path = $metadata['xml'];
-  } else {
-    $path = scanXmlPath($ip);
+  if ($metadata === null)
+    $metadata = scanMetadataBestResult($ip);
+  if ($metadata === null)
+    return null;
+
+  $snapshotId = (int)($metadata['snapshot_id'] ?? 0);
+  if ($snapshotId > 0) {
+    $stmt = db()->prepare("SELECT xml FROM scan_snapshots WHERE id=:id AND ip=:ip LIMIT 1");
+    $stmt->execute(array('id' => $snapshotId, 'ip' => $ip));
+    $xml = $stmt->fetchColumn();
+    return $xml === false ? null : scanNormalizeXml((string)$xml);
   }
-
-  if (!is_file($path) || !is_readable($path))
-    return null;
-
-  $xml = file_get_contents($path);
-  if ($xml === false)
-    return null;
-
-  return scanNormalizeXml($xml);
+  return null;
 }
 
 function scanNormalizeXml(string $xml): string {
@@ -86,16 +76,9 @@ function scanArrayIsList(array $array): bool {
 }
 
 function scanMetadataXmlUsable(array $metadata): bool {
-  $ip = $metadata['ip'] ?? '';
-  $path = $metadata['xml'] ?? '';
-  if ($ip === '' || $path === '' || !is_file($path) || !is_readable($path))
-    return false;
-
-  if ($path !== scanXmlPath($ip))
-    return true;
-
-  $latest = scanMetadataLatest($ip);
-  return $latest !== null && (int)$latest['id'] === (int)($metadata['id'] ?? 0);
+  if (array_key_exists('xml_usable', $metadata))
+    return (bool)$metadata['xml_usable'];
+  return (int)($metadata['snapshot_id'] ?? 0) > 0;
 }
 
 function scanParseXml(string $xml, ?array $metadata = null): array {
@@ -128,16 +111,29 @@ function scanParseXml(string $xml, ?array $metadata = null): array {
         'type' => $attributes['type'] ?? ''
       );
     }),
-    'os' => array_slice(scanParseTags($host, 'osmatch', function ($attributes) {
+    'os' => scanSelectOsMatches(scanParseTags($host, 'osmatch', function ($attributes) {
       return array(
         'name' => $attributes['name'] ?? '',
         'accuracy' => $attributes['accuracy'] ?? ''
       );
-    }), 0, 5),
+    })),
     'ports' => $ports,
     'metadata' => $metadata,
-    'xml' => isset($metadata['ip']) ? scanXmlUrl($metadata['ip'], $metadata['id'] ?? null) : null
+    'xml' => isset($metadata['ip'], $metadata['id']) ? scanXmlUrl($metadata['ip'], $metadata['id']) : null
   );
+}
+
+function scanSelectOsMatches(array $matches): array {
+  $perfect = array_values(array_filter($matches, fn($match) => (int)($match['accuracy'] ?? 0) === 100));
+  if (count($perfect) !== 0)
+    return $perfect;
+  if (count($matches) === 0)
+    return array();
+
+  usort($matches, function ($left, $right) {
+    return (int)($right['accuracy'] ?? 0) <=> (int)($left['accuracy'] ?? 0);
+  });
+  return array($matches[0]);
 }
 
 function scanPrimaryIp(string $host): string {
@@ -223,21 +219,33 @@ function scanMetadataEnqueue(string $ip, string $mode): array {
 
   try {
     $stmt = db()->prepare("
-      SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+      SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
       FROM scans
       WHERE ip=:ip AND state IN ('queued', 'running')
-      ORDER BY id DESC
-      LIMIT 1
+      ORDER BY CASE state WHEN 'running' THEN 0 ELSE 1 END, id DESC
     ");
     $stmt->execute(array('ip' => $ip));
-    $active = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($active !== false) {
-      if ($mode === 'quick' && $active['state'] === 'queued' && $active['mode'] !== 'quick') {
-        $update = db()->prepare("UPDATE scans SET mode='quick' WHERE id=:id AND state='queued'");
-        $update->execute(array('id' => $active['id']));
-        $active['mode'] = 'quick';
+    $activeJobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($activeJobs as $active) {
+      if ($active['mode'] === $mode)
+        return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
+    }
+
+    if ($mode === 'quick') {
+      foreach ($activeJobs as $active) {
+        if ($active['mode'] === 'deep')
+          return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
       }
-      return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
+    } else {
+      foreach ($activeJobs as $active) {
+        if ($active['mode'] === 'quick' && $active['state'] === 'queued') {
+          $update = db()->prepare("UPDATE scans SET mode='deep' WHERE id=:id AND state='queued'");
+          $update->execute(array('id' => $active['id']));
+          $active['mode'] = 'deep';
+          return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
+        }
+      }
     }
 
     $insert = db()->prepare("
@@ -257,7 +265,7 @@ function scanMetadataEnqueue(string $ip, string $mode): array {
 
 function scanMetadataJobById(int $id): ?array {
   $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
     FROM scans
     WHERE id=:id
     LIMIT 1
@@ -273,10 +281,15 @@ function scanMetadataClaimQueued(int $limit): array {
     return array();
 
   $stmt = db()->prepare("
-    SELECT id
-    FROM scans
-    WHERE state='queued'
-    ORDER BY CASE WHEN mode='quick' THEN 0 ELSE 1 END, id ASC
+    SELECT queued.id
+    FROM scans queued
+    WHERE queued.state='queued'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM scans running
+        WHERE running.ip=queued.ip AND running.state='running'
+      )
+    ORDER BY CASE WHEN queued.mode='quick' THEN 0 ELSE 1 END, queued.id ASC
     LIMIT $limit
   ");
   $stmt->execute();
@@ -330,27 +343,106 @@ function scanMetadataStart(string $ip, string $mode): int {
   return (int)db()->lastInsertId();
 }
 
-function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $duration, ?string $xml, ?string $xmlHash): void {
+function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $duration, ?string $xml, ?string $xmlHash): bool {
+  $database = db();
+  $database->beginTransaction();
+
+  try {
+    $job = scanMetadataRawById($id, true);
+    if ($job === null)
+      throw new RuntimeException("scan job $id not found");
+
+    $snapshotId = null;
+    $changed = 0;
+    if ($xml !== null && $xmlHash !== null) {
+      $snapshot = scanEnsureSnapshot($job, $xml, $xmlHash);
+      $snapshotId = $snapshot['id'];
+      $changed = $snapshot['changed'] ? 1 : 0;
+    }
+
+    $stmt = $database->prepare("
+      UPDATE scans
+      SET state='complete',
+          status=:status,
+          date_end=CURRENT_TIMESTAMP,
+          duration=:duration,
+          ports_count=:ports_count,
+          snapshot_id=:snapshot_id,
+          result_changed=:result_changed,
+          error=NULL
+      WHERE id=:id
+    ");
+    $stmt->execute(array(
+      'id' => $id,
+      'status' => $status,
+      'duration' => $duration,
+      'ports_count' => $portsCount,
+      'snapshot_id' => $snapshotId,
+      'result_changed' => $changed
+    ));
+    $database->commit();
+    return $changed === 1;
+  } catch (Throwable $e) {
+    if ($database->inTransaction())
+      $database->rollBack();
+    throw $e;
+  }
+}
+
+function scanMetadataRawById(int $id, bool $forUpdate = false): ?array {
+  $suffix = $forUpdate ? ' FOR UPDATE' : '';
   $stmt = db()->prepare("
-    UPDATE scans
-    SET state='complete',
-        status=:status,
-        date_end=CURRENT_TIMESTAMP,
-        duration=:duration,
-        ports_count=:ports_count,
-        xml=:xml,
-        xml_hash=:xml_hash,
-        error=NULL
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    FROM scans
     WHERE id=:id
+    LIMIT 1$suffix
   ");
-  $stmt->execute(array(
-    'id' => $id,
-    'status' => $status,
-    'duration' => $duration,
-    'ports_count' => $portsCount,
-    'xml' => $xml,
-    'xml_hash' => $xmlHash
+  $stmt->execute(array('id' => $id));
+  $row = $stmt->fetch(PDO::FETCH_ASSOC);
+  return $row === false ? null : $row;
+}
+
+function scanEnsureSnapshot(array $job, string $xml, string $hash): array {
+  $previous = db()->prepare("
+    SELECT s.snapshot_id, ss.result_hash
+    FROM scans s
+    INNER JOIN scan_snapshots ss ON ss.id=s.snapshot_id
+    WHERE s.ip=:ip
+      AND s.mode=:mode
+      AND s.id<:id
+      AND s.state='complete'
+    ORDER BY s.id DESC
+    LIMIT 1
+  ");
+  $previous->execute(array('ip' => $job['ip'], 'mode' => $job['mode'], 'id' => $job['id']));
+  $previousRow = $previous->fetch(PDO::FETCH_ASSOC);
+
+  $insert = db()->prepare("
+    INSERT IGNORE INTO scan_snapshots (ip, mode, result_hash, xml)
+    VALUES (:ip, :mode, :result_hash, :xml)
+  ");
+  $insert->execute(array(
+    'ip' => $job['ip'],
+    'mode' => $job['mode'],
+    'result_hash' => $hash,
+    'xml' => $xml
   ));
+
+  $find = db()->prepare("
+    SELECT id
+    FROM scan_snapshots
+    WHERE ip=:ip AND mode=:mode AND result_hash=:result_hash
+    LIMIT 1
+  ");
+  $find->execute(array('ip' => $job['ip'], 'mode' => $job['mode'], 'result_hash' => $hash));
+  $snapshotId = (int)$find->fetchColumn();
+  if ($snapshotId <= 0)
+    throw new RuntimeException('failed to persist scan snapshot');
+
+  return array(
+    'id' => $snapshotId,
+    'changed' => $previousRow === false || !hash_equals((string)$previousRow['result_hash'], $hash)
+  );
 }
 
 function scanMetadataFailed(int $id, string $error): void {
@@ -379,7 +471,7 @@ function scanMetadataTimedOut(int $id, string $error): void {
 
 function scanMetadataLatest(string $ip): ?array {
   $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
     ORDER BY id DESC
@@ -390,9 +482,56 @@ function scanMetadataLatest(string $ip): ?array {
   return $metadata === false ? null : scanNormalizeMetadata($metadata);
 }
 
+function scanMetadataBestResult(string $ip, ?string $mode = null): ?array {
+  if ($mode !== null && !in_array($mode, array('quick', 'deep'), true))
+    throw new InvalidArgumentException('invalid scan mode');
+
+  $modeWhere = $mode === null ? '' : ' AND mode=:mode';
+  $order = $mode === null
+    ? "CASE mode WHEN 'deep' THEN 0 ELSE 1 END, id DESC"
+    : 'id DESC';
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    FROM scans
+    WHERE ip=:ip
+      AND state='complete'
+      AND snapshot_id IS NOT NULL
+      AND result_changed=1
+      $modeWhere
+    ORDER BY $order
+    LIMIT 1
+  ");
+  $params = array('ip' => $ip);
+  if ($mode !== null)
+    $params['mode'] = $mode;
+  $stmt->execute($params);
+  $metadata = $stmt->fetch(PDO::FETCH_ASSOC);
+  return $metadata === false ? null : scanNormalizeMetadata($metadata);
+}
+
+function scanMetadataPreviousResult(string $ip, string $mode, int $beforeId): ?array {
+  if (!in_array($mode, array('quick', 'deep'), true))
+    throw new InvalidArgumentException('invalid scan mode');
+
+  $stmt = db()->prepare("
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    FROM scans
+    WHERE ip=:ip
+      AND mode=:mode
+      AND id<:before_id
+      AND state='complete'
+      AND snapshot_id IS NOT NULL
+    ORDER BY id DESC
+    LIMIT 1
+  ");
+  $stmt->execute(array('ip' => $ip, 'mode' => $mode, 'before_id' => $beforeId));
+  $metadata = $stmt->fetch(PDO::FETCH_ASSOC);
+  return $metadata === false ? null : scanNormalizeMetadata($metadata);
+}
+
 function scanMetadataById(string $ip, int $id): ?array {
   $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip AND id=:id
     LIMIT 1
@@ -402,18 +541,89 @@ function scanMetadataById(string $ip, int $id): ?array {
   return $metadata === false ? null : scanNormalizeMetadata($metadata);
 }
 
+function scanMergeQuickWithDeep(array $quick, array $deep, array $deepMetadata): array {
+  $merged = $deep;
+
+  foreach (array('ip', 'args', 'started', 'status') as $field) {
+    if (($quick[$field] ?? '') !== '')
+      $merged[$field] = $quick[$field];
+  }
+  if (($quick['duration'] ?? null) !== null)
+    $merged['duration'] = $quick['duration'];
+  if (($quick['uptime'] ?? '') !== '')
+    $merged['uptime'] = $quick['uptime'];
+
+  $merged['addresses'] = scanMergeResultItems(
+    $deep['addresses'] ?? array(),
+    $quick['addresses'] ?? array(),
+    fn($item) => ($item['type'] ?? '') . '|' . ($item['addr'] ?? '')
+  );
+  $merged['hostnames'] = scanMergeResultItems(
+    $deep['hostnames'] ?? array(),
+    $quick['hostnames'] ?? array(),
+    fn($item) => ($item['type'] ?? '') . '|' . ($item['name'] ?? '')
+  );
+  $merged['ports'] = scanMergeResultItems(
+    $deep['ports'] ?? array(),
+    $quick['ports'] ?? array(),
+    fn($item) => ($item['protocol'] ?? '') . '|' . ($item['port'] ?? '')
+  );
+  usort($merged['ports'], function ($left, $right) {
+    $portOrder = (int)($left['port'] ?? 0) <=> (int)($right['port'] ?? 0);
+    return $portOrder !== 0 ? $portOrder : strcmp((string)($left['protocol'] ?? ''), (string)($right['protocol'] ?? ''));
+  });
+
+  $quickOs = $quick['os'] ?? array();
+  $merged['os'] = scanMarkResultSource(count($quickOs) !== 0 ? $quickOs : ($deep['os'] ?? array()), count($quickOs) !== 0 ? 'quick' : 'deep');
+  $merged['ports_count'] = count($merged['ports']);
+  $merged['metadata'] = $quick['metadata'] ?? null;
+  $merged['xml'] = $quick['xml'] ?? null;
+  $merged['merged'] = true;
+  $merged['merged_with'] = $deepMetadata;
+  return $merged;
+}
+
+function scanMergeResultItems(array $base, array $overlay, callable $key): array {
+  $items = array();
+  foreach (scanMarkResultSource($base, 'deep') as $item)
+    $items[$key($item)] = $item;
+  foreach (scanMarkResultSource($overlay, 'quick') as $item)
+    $items[$key($item)] = $item;
+  return array_values($items);
+}
+
+function scanMarkResultSource(array $items, string $source): array {
+  return array_map(function ($item) use ($source) {
+    $item['source'] = $source;
+    return $item;
+  }, $items);
+}
+
 function scanMetadataHistory(string $ip, int $limit = 30): array {
   $limit = max(1, min(100, $limit));
   $days = SCAN_HISTORY_DAYS;
   $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
-      AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+      AND snapshot_id IS NOT NULL
+      AND result_changed=1
+      AND (
+        COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+        OR id IN (
+          SELECT latest_id
+          FROM (
+            SELECT MAX(id) AS latest_id
+            FROM scans
+            WHERE ip=:latest_ip AND state='complete' AND result_changed=1
+            GROUP BY mode
+          ) latest_results
+        )
+      )
     ORDER BY id DESC
     LIMIT $limit
   ");
-  $stmt->execute(array('ip' => $ip));
+  $stmt->execute(array('ip' => $ip, 'latest_ip' => $ip));
 
   $history = array();
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -428,14 +638,26 @@ function scanMetadataForIp(string $ip, int $limit = 50): array {
   $limit = max(1, min(100, $limit));
   $days = SCAN_HISTORY_DAYS;
   $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
-      AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+      AND (state<>'complete' OR result_changed=1)
+      AND (
+        COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+        OR id IN (
+          SELECT latest_id
+          FROM (
+            SELECT MAX(id) AS latest_id
+            FROM scans
+            WHERE ip=:latest_ip AND state='complete' AND result_changed=1
+            GROUP BY mode
+          ) latest_results
+        )
+      )
     ORDER BY id DESC
     LIMIT $limit
   ");
-  $stmt->execute(array('ip' => $ip));
+  $stmt->execute(array('ip' => $ip, 'latest_ip' => $ip));
 
   $scans = array();
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -460,8 +682,8 @@ function scanMetadataQueue(int $limit = 100): array {
       s.date_end,
       s.duration,
       s.ports_count,
-      s.xml,
-      s.xml_hash,
+      s.snapshot_id,
+      s.result_changed,
       s.error,
       i.id AS host_id,
       COALESCE(i.name, '') AS name,
@@ -494,7 +716,7 @@ function scanMetadataQueue(int $limit = 100): array {
 
 function scanMetadataLatestByIp(): array {
   $stmt = db()->prepare("
-    SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.xml, s.xml_hash, s.error
+    SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.snapshot_id, s.result_changed, s.error
     FROM scans s
     INNER JOIN (
       SELECT ip, MAX(id) id
@@ -514,133 +736,56 @@ function scanNormalizeMetadata(array $metadata): array {
   $metadata['id'] = isset($metadata['id']) ? (int)$metadata['id'] : null;
   $metadata['duration'] = isset($metadata['duration']) && $metadata['duration'] !== null ? (int)$metadata['duration'] : null;
   $metadata['ports_count'] = isset($metadata['ports_count']) ? (int)$metadata['ports_count'] : 0;
-  $metadata['xml_hash'] = $metadata['xml_hash'] ?? null;
+  $metadata['snapshot_id'] = isset($metadata['snapshot_id']) && $metadata['snapshot_id'] !== null ? (int)$metadata['snapshot_id'] : null;
+  $metadata['result_changed'] = (int)($metadata['result_changed'] ?? 0);
+  $metadata['xml_usable'] = (int)($metadata['snapshot_id'] ?? 0) > 0;
+  $metadata['xml_url'] = $metadata['xml_usable'] && isset($metadata['ip'], $metadata['id'])
+    ? scanXmlUrl($metadata['ip'], $metadata['id'])
+    : null;
+  $metadata['xml'] = $metadata['xml_url'];
   return $metadata;
 }
 
 function scanPruneHistory(string $ip): void {
   scanPruneOldHistory($ip);
-  scanPruneUnusableLegacyHistory($ip);
-  scanPruneDuplicateHistory($ip);
-  scanRemoveEmptyHistoryDir($ip);
+  scanPruneOrphanSnapshots();
 }
 
 function scanPruneOldHistory(string $ip): void {
   $days = SCAN_HISTORY_DAYS;
   $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
+    SELECT id
     FROM scans
     WHERE ip=:ip
       AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) < DATE_SUB(NOW(), INTERVAL $days DAY)
+      AND id NOT IN (
+        SELECT keep_id
+        FROM (
+          SELECT MAX(id) AS keep_id
+          FROM scans
+          WHERE ip=:keep_ip AND state='complete' AND result_changed=1
+          GROUP BY mode
+        ) latest_results
+      )
   ");
-  $stmt->execute(array('ip' => $ip));
+  $stmt->execute(array('ip' => $ip, 'keep_ip' => $ip));
 
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC))
-    scanDeleteMetadata(scanNormalizeMetadata($row));
+    scanDeleteMetadata($row);
 }
 
-function scanPruneDuplicateHistory(string $ip): void {
-  $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
-    FROM scans
-    WHERE ip=:ip
-    ORDER BY id DESC
+function scanPruneOrphanSnapshots(): void {
+  db()->exec("
+    DELETE ss
+    FROM scan_snapshots ss
+    LEFT JOIN scans s ON s.snapshot_id=ss.id
+    WHERE s.id IS NULL
   ");
-  $stmt->execute(array('ip' => $ip));
-
-  $seen = array();
-  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $metadata = scanNormalizeMetadata($row);
-    $hash = scanMetadataHash($metadata);
-    if ($hash === null || $hash === '')
-      continue;
-
-    if (isset($seen[$hash])) {
-      scanDeleteMetadata($metadata);
-      continue;
-    }
-
-    $seen[$hash] = $metadata['id'];
-  }
-}
-
-function scanPruneUnusableLegacyHistory(string $ip): void {
-  $latest = scanMetadataLatest($ip);
-  if ($latest === null)
-    return;
-
-  $stmt = db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error
-    FROM scans
-    WHERE ip=:ip
-      AND id<>:latest_id
-      AND xml=:latest_xml
-  ");
-  $stmt->execute(array(
-    'ip' => $ip,
-    'latest_id' => $latest['id'],
-    'latest_xml' => scanXmlPath($ip)
-  ));
-
-  while ($row = $stmt->fetch(PDO::FETCH_ASSOC))
-    scanDeleteMetadata(scanNormalizeMetadata($row));
-}
-
-function scanMetadataHash(array $metadata): ?string {
-  if (($metadata['xml_hash'] ?? '') !== '')
-    return $metadata['xml_hash'];
-
-  if ($metadata['id'] === null)
-    return null;
-
-  if (($metadata['xml'] ?? '') === '' && ($metadata['status'] ?? '') !== '') {
-    $hash = hash('sha256', json_encode(array(
-      'ip' => $metadata['ip'] ?? '',
-      'status' => $metadata['status'] ?? ''
-    ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-    scanUpdateMetadataHash($metadata['id'], $hash);
-    return $hash;
-  }
-
-  $xml = scanReadXml($metadata['ip'], $metadata);
-  if ($xml === null)
-    return null;
-
-  $hash = scanXmlHash($xml, $metadata['ip']);
-  scanUpdateMetadataHash($metadata['id'], $hash);
-  return $hash;
-}
-
-function scanUpdateMetadataHash(int $id, string $hash): void {
-  $stmt = db()->prepare("UPDATE scans SET xml_hash=:xml_hash WHERE id=:id");
-  $stmt->execute(array('id' => $id, 'xml_hash' => $hash));
 }
 
 function scanDeleteMetadata(array $metadata): void {
-  $path = scanMetadataHistoryPath($metadata);
-  if ($path !== null && is_file($path))
-    @unlink($path);
-
-  if ($metadata['id'] !== null) {
+  if (isset($metadata['id']) && $metadata['id'] !== null) {
     $stmt = db()->prepare("DELETE FROM scans WHERE id=:id");
     $stmt->execute(array('id' => $metadata['id']));
   }
-}
-
-function scanMetadataHistoryPath(array $metadata): ?string {
-  if (($metadata['ip'] ?? '') === '' || ($metadata['id'] ?? null) === null)
-    return null;
-
-  $expected = scanXmlPath($metadata['ip'], (int)$metadata['id']);
-  return ($metadata['xml'] ?? '') === $expected ? $expected : null;
-}
-
-function scanRemoveEmptyHistoryDir(string $ip): void {
-  $dir = SCAN_DIR . '/history/' . $ip;
-  if (!is_dir($dir))
-    return;
-
-  $items = scandir($dir);
-  if ($items !== false && count(array_diff($items, array('.', '..'))) === 0)
-    @rmdir($dir);
 }

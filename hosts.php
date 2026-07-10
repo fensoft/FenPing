@@ -74,7 +74,7 @@ function validateDhcpHostEdit($ip, $mac, $name, $router, $dns): array {
   return array(
     'ip' => normalizeDhcpIp($ip, true),
     'mac' => normalizeDhcpMac($mac, true),
-    'name' => normalizeDhcpHostname($name, true),
+    'name' => normalizeDhcpHostname($name, false),
     'router' => normalizeDhcpRouter($router),
     'dns' => normalizeDhcpDnsServers($dns)
   );
@@ -182,11 +182,10 @@ function buildDnsmasqFiles(): array {
     FROM ips
     LEFT JOIN netboot_images ni ON ni.id=ips.netboot_image_id
     WHERE ips.ip IS NOT NULL
-      AND ips.name IS NOT NULL
   ");
 
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $name = normalizeDhcpHostname($row['name'] ?? '', true);
+    $name = normalizeDhcpHostname($row['name'] ?? '', false);
     $mac = normalizeDhcpMac($row['mac'] ?? '', false);
     $ip = normalizeDhcpIp($row['ip'] ?? '', true);
     $router = normalizeDhcpRouter($row['router'] ?? '');
@@ -194,10 +193,16 @@ function buildDnsmasqFiles(): array {
     $netboot = normalizeDhcpBootFilename($row['netboot_filename'] ?? '');
     $tag = hostTag($ip);
 
-    $dnsHosts[] = $ip . ' ' . dnsNames($name);
+    if ($name !== '')
+      $dnsHosts[] = $ip . ' ' . dnsNames($name);
 
-    if ($mac !== '')
-      $dhcpHosts[] = implode(',', array($mac, "set:$tag", $ip, $name, 'infinite'));
+    if ($mac !== '') {
+      $reservation = array($mac, "set:$tag", $ip);
+      if ($name !== '')
+        $reservation[] = $name;
+      $reservation[] = 'infinite';
+      $dhcpHosts[] = implode(',', $reservation);
+    }
 
     if ($router !== null) {
       $routerIp = normalizeDhcpIp(($network ?? '') . '.' . $router, true);
@@ -306,11 +311,13 @@ function validateGeneratedDnsmasqFiles(array $files): void {
 
   foreach (generatedDnsmasqLines($files['dhcpHosts']) as $line) {
     $parts = explode(',', $line);
-    if (count($parts) !== 5 || normalizeDhcpMac($parts[0], true) !== $parts[0]
+    $count = count($parts);
+    $nameAndLeaseValid = ($count === 4 && $parts[3] === 'infinite')
+      || ($count === 5 && normalizeDhcpHostname($parts[3], true) === $parts[3] && $parts[4] === 'infinite');
+    if (($count !== 4 && $count !== 5) || normalizeDhcpMac($parts[0], true) !== $parts[0]
       || preg_match('/^set:[A-Za-z0-9-]+$/', $parts[1]) !== 1
       || normalizeDhcpIp($parts[2], true) !== $parts[2]
-      || normalizeDhcpHostname($parts[3], true) !== $parts[3]
-      || $parts[4] !== 'infinite')
+      || !$nameAndLeaseValid)
       throw new RuntimeException('invalid generated DHCP reservation');
   }
 
