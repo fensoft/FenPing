@@ -125,6 +125,7 @@ Avoid default inventory scans in tests unless the user accepts LAN scan traffic.
 - `/etc/dnsmasq.d/fenping.hosts`
 
 `boot.sh` renders `/etc/dnsmasq.d/fenping.conf` from `dnsmasq.conf.template`.
+The required `IFACE` environment variable selects the host network interface that dnsmasq binds to for DHCP, DNS, and TFTP. Startup fails if it is unset.
 
 `php cli.php hosts` always rewrites generated files and reloads/starts local dnsmasq.
 

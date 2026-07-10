@@ -1,11 +1,10 @@
 #!/bin/bash
 echo -e "\n\n-- booting fenping ... ---"
 grep -q "[[:space:]]$(hostname)\\([[:space:]]\\|$\\)" /etc/hosts || echo "127.0.1.1 $(hostname)" >> /etc/hosts
-IFACE=eth0
-if ! ip link show dev "$IFACE" >/dev/null 2>&1; then
-  IFACE=`ip -o link show 2>/dev/null | awk -F': ' '$2 != "lo" { print $2; exit }' | sed 's#@.*##'`
+if [ -z "${IFACE:-}" ]; then
+  echo "fatal: IFACE is not set; set it to the host interface that dnsmasq should bind to" >&2
+  exit 1
 fi
-IFACE=${IFACE:-eth0}
 echo "host networking enabled on $IFACE; leaving host routes, addresses and iptables unchanged"
 mkdir -p /var/run/mysqld
 chown mysql:mysql /var/run/mysqld

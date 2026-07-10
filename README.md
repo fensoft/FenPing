@@ -80,6 +80,7 @@ Important `.env` values:
 | Variable | Description |
 | --- | --- |
 | `IP` | FenPing LAN address. |
+| `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
 | `NETWORK` | `/24` prefix, for example `10.10.10`. |
 | `DHCP_DEFAULT_ROUTER` | Router handed out by DHCP. |
 | `DHCP_DYNAMIC_BEGIN` | First dynamic DHCP address, last octet only. |

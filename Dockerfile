@@ -20,6 +20,7 @@ COPY routes /var/www/html/routes/
 COPY res/xsl /var/www/html/res/xsl/
 COPY favicon.ico favicon-32x32.png functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php config.php dnsmasq.leases.php db.sql /var/www/html/
 RUN mkdir -p /var/lib/mysql /var/www/html/netboot && chown -R www-data:www-data /var/www/html && chown -R mysql:mysql /var/lib/mysql
+RUN echo 'Defaults env_keep += "DB_HOST DB_PORT DB_USER DB_PASS DB_NAME NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL"' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php hosts' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php ping' >> /etc/sudoers
 RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /var/www/html/cli.php inventory --quick *' >> /etc/sudoers
