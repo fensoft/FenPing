@@ -10,6 +10,7 @@ It uses a static Vue/Vite frontend, a PHP API/CLI backend, MariaDB, dnsmasq, cro
 - Status tracking with `Up`, `Down`, `arp`, and `arp-down` states.
 - Stability, host history, and a 24-hour notify view.
 - Static DHCP/DNS host management through dnsmasq.
+- Transactional DHCP lease history with stable first-seen and last-seen timestamps.
 - Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
 - Category/range separators with collapsible groups and rename support.
 - Quick and deep nmap scans with deduplicated database history; quick results never replace the latest deep snapshot.
@@ -112,7 +113,7 @@ Apache serves only `/var/www/public`, which contains the built frontend and the 
 
 FenPing groups MariaDB redo-log flushes into five-second intervals while retaining InnoDB's doublewrite protection. A host power loss or operating-system crash can therefore lose up to approximately five seconds of recent database changes; a MariaDB process crash remains recoverable from the operating-system cache. DHCP leases, scans, and application data remain persistent.
 
-Routine writes are also limited outside MariaDB: `/tmp` and `/run` use memory-backed filesystems for scan temporaries, MariaDB temporary tablespaces, locks, and PHP sessions; Apache access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; unchanged leases are not reimported every minute; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQL at boot. Login sessions are intentionally cleared when the container restarts because their files live in `/run`.
+Routine writes are also limited outside MariaDB: `/tmp` and `/run` use memory-backed filesystems for scan temporaries, MariaDB temporary tablespaces, locks, PHP sessions, and lease-import staging; Apache access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; lease imports upsert observed rows instead of rebuilding the table; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQL at boot. Login sessions are intentionally cleared when the container restarts because their files live in `/run`.
 
 ## CLI
 

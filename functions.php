@@ -114,7 +114,7 @@ function getInventory() {
     if ($mac != "")
       array_push($macs, $mac);
   }
-  $stmt = $db->prepare("select NULL as id, `client-hostname` as name, ip, `hardware-ethernet` as mac, 'Down' as status, starts as date, 0 as important from leases where convert(ends, datetime) > date_sub(now(), interval 7 day)");
+  $stmt = $db->prepare("select NULL as id, `client-hostname` as name, ip, `hardware-ethernet` as mac, 'Down' as status, last_seen as date, 0 as important from leases where active=1 and ends > date_sub(now(), interval 7 day)");
   $stmt->execute();
   while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $ip = $data["ip"] ?? "";
@@ -380,8 +380,8 @@ function get_notify($hours = 24) {
       ), ''), NULLIF((
         SELECT l.`client-hostname`
         FROM leases l
-        WHERE l.ip=s.ip OR LOWER(l.`hardware-ethernet`) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
-        ORDER BY IF(l.ip=s.ip, 0, 1), l.starts DESC
+        WHERE l.ip=s.ip OR LOWER(CONVERT(l.`hardware-ethernet` USING latin1)) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
+        ORDER BY IF(l.ip=s.ip, 0, 1), l.active DESC, l.last_seen DESC
         LIMIT 1
       ), ''), '') AS name,
       '' AS vendor,

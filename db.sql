@@ -17,18 +17,72 @@ CREATE TABLE IF NOT EXISTS `ips` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `leases` (
-  `ip` varchar(50) DEFAULT NULL,
-  `starts` varchar(50) DEFAULT NULL,
-  `ends` varchar(50) DEFAULT NULL,
-  `tstp` varchar(50) DEFAULT NULL,
-  `cltt` varchar(50) DEFAULT NULL,
-  `hardware-ethernet` varchar(50) DEFAULT NULL,
-  `client-hostname` varchar(50) DEFAULT NULL,
-  `vendor-class-identifier` varchar(50) DEFAULT NULL,
+  `ip` varchar(45) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `hardware-ethernet` char(17) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `client-hostname` varchar(255) DEFAULT NULL,
+  `ends` datetime NOT NULL,
+  `first_seen` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_seen` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `active` tinyint(1) unsigned NOT NULL DEFAULT 1,
+  PRIMARY KEY (`hardware-ethernet`, `ip`),
   KEY `leases_ip` (`ip`),
-  KEY `leases_hardware_ethernet` (`hardware-ethernet`),
-  KEY `leases_ends` (`ends`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+  KEY `leases_ends` (`ends`),
+  KEY `leases_active_last_seen` (`active`, `last_seen`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP PROCEDURE IF EXISTS `migrate_leases_v2`;
+DELIMITER ;;
+CREATE PROCEDURE `migrate_leases_v2`()
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema=DATABASE() AND table_name='leases' AND column_name='starts'
+  ) THEN
+    DROP TABLE IF EXISTS `leases_v2`;
+    CREATE TABLE `leases_v2` (
+      `ip` varchar(45) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      `hardware-ethernet` char(17) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      `client-hostname` varchar(255) DEFAULT NULL,
+      `ends` datetime NOT NULL,
+      `first_seen` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `last_seen` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `active` tinyint(1) unsigned NOT NULL DEFAULT 1,
+      PRIMARY KEY (`hardware-ethernet`, `ip`),
+      KEY `leases_ip` (`ip`),
+      KEY `leases_ends` (`ends`),
+      KEY `leases_active_last_seen` (`active`, `last_seen`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    INSERT INTO `leases_v2`
+      (`ip`, `hardware-ethernet`, `client-hostname`, `ends`, `first_seen`, `last_seen`, `active`)
+    SELECT
+      TRIM(`ip`),
+      LOWER(TRIM(`hardware-ethernet`)),
+      MAX(NULLIF(TRIM(`client-hostname`), '')),
+      MAX(COALESCE(STR_TO_DATE(NULLIF(`ends`, ''), '%Y-%m-%d %H:%i:%s'), CURRENT_TIMESTAMP)),
+      MIN(COALESCE(STR_TO_DATE(NULLIF(`starts`, ''), '%Y-%m-%d %H:%i:%s'), CURRENT_TIMESTAMP)),
+      MAX(COALESCE(
+        STR_TO_DATE(NULLIF(`cltt`, ''), '%Y-%m-%d %H:%i:%s'),
+        STR_TO_DATE(NULLIF(`starts`, ''), '%Y-%m-%d %H:%i:%s'),
+        CURRENT_TIMESTAMP
+      )),
+      1
+    FROM `leases`
+    WHERE INET_ATON(TRIM(`ip`)) IS NOT NULL
+      AND LOWER(TRIM(`hardware-ethernet`)) REGEXP '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'
+    GROUP BY TRIM(`ip`), LOWER(TRIM(`hardware-ethernet`));
+
+    DROP TABLE IF EXISTS `leases_legacy`;
+    RENAME TABLE `leases` TO `leases_legacy`, `leases_v2` TO `leases`;
+    DROP TABLE `leases_legacy`;
+  END IF;
+END;;
+DELIMITER ;
+CALL `migrate_leases_v2`();
+DROP PROCEDURE IF EXISTS `migrate_leases_v2`;
+DROP TABLE IF EXISTS `leases_legacy`;
+DROP TABLE IF EXISTS `leases_v2`;
 
 CREATE TABLE IF NOT EXISTS `ping` (
   `ip` varchar(50) NOT NULL,
@@ -124,8 +178,8 @@ CREATE TABLE IF NOT EXISTS `netboot_images` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 CREATE INDEX IF NOT EXISTS `leases_ip` ON `leases` (`ip`);
-CREATE INDEX IF NOT EXISTS `leases_hardware_ethernet` ON `leases` (`hardware-ethernet`);
 CREATE INDEX IF NOT EXISTS `leases_ends` ON `leases` (`ends`);
+CREATE INDEX IF NOT EXISTS `leases_active_last_seen` ON `leases` (`active`, `last_seen`);
 CREATE INDEX IF NOT EXISTS `ping_mac` ON `ping` (`mac`);
 CREATE INDEX IF NOT EXISTS `range_ip_begin` ON `range` (`ip_begin`);
 CREATE INDEX IF NOT EXISTS `stats_ip_date_begin` ON `stats` (`ip`, `date_begin`);

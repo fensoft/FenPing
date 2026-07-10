@@ -4,9 +4,12 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/database.php';
 
 $leaseFile = '/var/lib/misc/dnsmasq.leases';
-$lines = is_readable($leaseFile) ? file($leaseFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : array();
+if (!is_readable($leaseFile))
+  throw new RuntimeException('dnsmasq lease file is not readable');
+
+$lines = file($leaseFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 if ($lines === false)
-  $lines = array();
+  throw new RuntimeException('failed to read dnsmasq lease file');
 
 $leases = array();
 foreach ($lines as $line) {
@@ -17,12 +20,12 @@ foreach ($lines as $line) {
   $expiry = (int)$parts[0];
   $mac = strtolower($parts[1]);
   $ip = $parts[2];
-  $hostname = $parts[3] === '*' ? '' : $parts[3];
+  $hostname = $parts[3] === '*' ? null : $parts[3];
   if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
     || preg_match('/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac) !== 1)
     continue;
 
-  $leases[] = array(
+  $leases[$mac . "\0" . $ip] = array(
     'ip' => $ip,
     'ends' => $expiry === 0 ? '9999-12-31 23:59:59' : date('Y-m-d H:i:s', $expiry),
     'mac' => $mac,
@@ -30,43 +33,54 @@ foreach ($lines as $line) {
   );
 }
 
-usort($leases, 'compareLeaseRows');
+if (count($lines) > 0 && count($leases) === 0)
+  throw new RuntimeException('dnsmasq lease file contains no valid IPv4 leases');
+
 $db = db();
-$current = $db->query("
-  SELECT ip, ends, LOWER(`hardware-ethernet`) AS mac, IFNULL(`client-hostname`, '') AS hostname
-  FROM leases
-")->fetchAll(PDO::FETCH_ASSOC);
-usort($current, 'compareLeaseRows');
+$db->exec('DROP TEMPORARY TABLE IF EXISTS lease_import_stage');
+$db->exec("
+  CREATE TEMPORARY TABLE lease_import_stage (
+    ip varchar(45) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    mac char(17) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    hostname varchar(255) DEFAULT NULL,
+    ends datetime NOT NULL,
+    PRIMARY KEY (mac, ip)
+  ) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+");
 
-if ($leases === $current)
-  exit(0);
+$stage = $db->prepare("
+  INSERT INTO lease_import_stage (ip, mac, hostname, ends)
+  VALUES (:ip, :mac, :hostname, :ends)
+");
+foreach ($leases as $lease)
+  $stage->execute($lease);
 
+$observedAt = date('Y-m-d H:i:s');
 $db->beginTransaction();
 try {
-  $db->exec('DELETE FROM leases');
-  $stmt = $db->prepare("
-    INSERT INTO leases (`ip`, `starts`, `ends`, `cltt`, `hardware-ethernet`, `client-hostname`)
-    VALUES (:ip, :starts, :ends, :cltt, :mac, :hostname)
+  $upsert = $db->prepare("
+    INSERT INTO leases
+      (ip, `hardware-ethernet`, `client-hostname`, ends, first_seen, last_seen, active)
+    SELECT ip, mac, hostname, ends, :first_seen, :last_seen, 1
+    FROM lease_import_stage
+    ON DUPLICATE KEY UPDATE
+      `client-hostname`=VALUES(`client-hostname`),
+      ends=VALUES(ends),
+      last_seen=VALUES(last_seen),
+      active=1
   ");
-  $now = date('Y-m-d H:i:s');
-  foreach ($leases as $lease) {
-    $stmt->execute(array(
-      'ip' => $lease['ip'],
-      'starts' => $now,
-      'ends' => $lease['ends'],
-      'cltt' => $now,
-      'mac' => $lease['mac'],
-      'hostname' => $lease['hostname']
-    ));
-  }
+  $upsert->execute(array('first_seen' => $observedAt, 'last_seen' => $observedAt));
+
+  $db->exec("
+    UPDATE leases current
+    LEFT JOIN lease_import_stage imported
+      ON imported.mac=current.`hardware-ethernet` AND imported.ip=current.ip
+    SET current.active=0
+    WHERE current.active=1 AND imported.mac IS NULL
+  ");
   $db->commit();
 } catch (Throwable $e) {
   if ($db->inTransaction())
     $db->rollBack();
   throw $e;
-}
-
-function compareLeaseRows(array $a, array $b): int {
-  return array($a['ip'], $a['mac'], $a['ends'], $a['hostname'])
-    <=> array($b['ip'], $b['mac'], $b['ends'], $b['hostname']);
 }

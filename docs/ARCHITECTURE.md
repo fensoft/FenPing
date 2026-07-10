@@ -45,7 +45,7 @@ Avoid destructive edits in `data/` unless explicitly requested.
 
 `mariadb-fenping.cnf` uses `innodb_flush_log_at_trx_commit=2` and a five-second `innodb_flush_log_at_timeout`. This groups durable redo flushes, with the explicit tradeoff that an operating-system crash or power loss can discard approximately five seconds of recent transactions. InnoDB doublewrite remains enabled for torn-page protection, binary/general/slow logging is disabled, and buffer-pool state is not dumped on shutdown.
 
-`restart.sh` mounts `/tmp` and `/run` as size-limited tmpfs filesystems. MariaDB's temporary tablespace, scan output, locks, and PHP sessions therefore avoid disk writes. Login sessions are cleared on container restart. Apache discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP leases are retained, but `dnsmasq.leases.php` compares normalized lease data and updates MariaDB only when the lease set changes. Generated dnsmasq files use content comparison to avoid identical replacements.
+`restart.sh` mounts `/tmp` and `/run` as size-limited tmpfs filesystems. MariaDB's temporary tablespace, scan output, locks, PHP sessions, and lease-import staging therefore avoid disk writes. Login sessions are cleared on container restart. Apache discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP lease history is retained, while `dnsmasq.leases.php` upserts observed rows instead of rebuilding the table. Generated dnsmasq files use content comparison to avoid identical replacements.
 
 Stable ping records update their activity timestamp at most once per day; actual status, IP, or MAC changes are still written immediately. The boot-time IEEE sync hashes both registries and skips the 57,000-row transaction when SQL is already current. Backups, netboot uploads, DHCP leases, changed scan results, and actual application mutations remain persistent by design.
 
@@ -97,7 +97,7 @@ Important tables:
 - `ping`: latest ping status per IP.
 - `stats`: status history used for stability and notifications.
 - `range`: category separators keyed by starting IP.
-- `leases`: imported dnsmasq lease data.
+- `leases`: current and historical dnsmasq assignments keyed by MAC/IP, with first-seen, last-seen, expiry, and active state.
 - `oui_vendors`: locally imported IEEE assignments keyed by 24-, 28-, or 36-bit prefix.
 - `scans`: nmap job metadata and references to stored results.
 - `scan_snapshots`: deduplicated nmap XML keyed by host, mode, and semantic result hash.
@@ -153,6 +153,8 @@ The required `IFACE` environment variable selects the host network interface tha
 Host create, edit, and delete requests hold a shared dnsmasq update lock and a MariaDB transaction while generating and testing a candidate configuration. The candidate is applied before the SQL commit; an apply failure rolls back SQL, while a commit failure regenerates dnsmasq from the committed database state. Netboot image deletion uses the same path because it clears per-host boot assignments. Host names, MAC addresses, router octets, DNS server addresses, IP addresses, and netboot filenames are validated before they can be rendered into dnsmasq files.
 
 Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_images`. Browser downloads are streamed through `/api/netboot/images/{id}/file`; Apache never serves the storage directory directly.
+
+`dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a memory-backed staging table. One InnoDB transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
 
 ## Frontend
 
