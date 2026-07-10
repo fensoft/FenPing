@@ -1,6 +1,6 @@
 <?php
 
-const INVENTORY_SCAN_TIMEOUT_SECONDS = 1800;
+const INVENTORY_SCAN_TIMEOUT_SECONDS = 7200;
 
 class InventoryTimeoutException extends RuntimeException {}
 
@@ -110,7 +110,7 @@ function inventoryScan(string $ip, bool $quick = false): array {
   try {
     $command = $quick
       ? array('nmap', $ip, '-T4', '-F', '-sS', '-v', '-oX', $tmp)
-      : array('nmap', $ip, '-T2', '-A', '-p-', '-sS', '-v', '-oX', $tmp);
+      : array('nmap', $ip, '-T3', '-A', '-p-', '-sS', '-v', '-oX', $tmp);
 
     inventoryExec($command, true);
     $xml = file_get_contents($tmp);

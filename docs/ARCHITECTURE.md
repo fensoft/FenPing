@@ -109,9 +109,9 @@ The `update_status` procedure appends to `stats` only when status/IP/MAC changes
 `inventory.php` performs nmap scans:
 
 - Default mode discovers live hosts with `nmap -n -sn`, then deep scans discovered hosts.
-- Deep scan uses `-A -p- -sS -T2`.
+- Deep scan uses `-A -p- -sS -T3`.
 - Quick scan targets one host with faster flags.
-- Every nmap command has a 30-minute hard timeout; timed-out scans are recorded with the `timeout` state.
+- Every nmap command has a 2-hour hard timeout; timed-out scans are recorded with the `timeout` state.
 - XML is saved under `/var/www/html/nmap`.
 - History pruning keeps one week and removes older duplicate scan signatures.
 

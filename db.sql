@@ -123,15 +123,15 @@ CREATE INDEX IF NOT EXISTS `scans_ip_xml_hash_id` ON `scans` (`ip`, `xml_hash`, 
 
 UPDATE scans
 SET state=IF(
-      date_begin IS NOT NULL AND date_begin <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 MINUTE),
+      date_begin IS NOT NULL AND date_begin <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 2 HOUR),
       'timeout',
       'cancelled'
     ),
     date_end=COALESCE(date_end, CURRENT_TIMESTAMP),
     duration=COALESCE(duration, IF(date_begin IS NULL, 0, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP)))),
     error=COALESCE(NULLIF(error, ''), IF(
-      date_begin IS NOT NULL AND date_begin <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 MINUTE),
-      'nmap timed out after 30 minutes',
+      date_begin IS NOT NULL AND date_begin <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 2 HOUR),
+      'nmap timed out after 2 hours',
       'cancelled at boot'
     ))
 WHERE state='running';

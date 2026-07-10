@@ -427,7 +427,7 @@
                       {{ item.status || '-' }}
                     </td>
                     <td class="font-monospace">{{ formatMac(item.mac) }}</td>
-                    <td>{{ item.date_begin }}</td>
+                    <td>{{ formatServerDate(item.date_begin) }}</td>
                     <td>{{ formatDuration(item.duration) }}</td>
                   </tr>
                 </tbody>
@@ -548,7 +548,7 @@
                 </td>
                 <td>{{ formatBytes(image.size) }}</td>
                 <td>{{ image.hosts || 0 }}</td>
-                <td class="text-nowrap">{{ image.created_at }}</td>
+                <td class="text-nowrap">{{ formatServerDate(image.created_at) }}</td>
                 <td v-if="isAuthenticated" class="text-end">
                   <button class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete image" :disabled="netbootLoading" @click="deleteNetbootImage(image)">
                     <i class="ti ti-trash"></i>
@@ -1007,7 +1007,7 @@
                         <i :class="statusIcon(item.status)"></i>
                       </span>
                     </td>
-                    <td>{{ item.date_begin }} for {{ formatDuration(item.duration) }}</td>
+                    <td>{{ formatServerDate(item.date_begin) }} for {{ formatDuration(item.duration) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1860,7 +1860,7 @@ function scanButtonTitle(host) {
   if (host?.scan?.state === 'timeout')
     return `Scan timed out${host.scan.error ? `: ${host.scan.error}` : ''}`;
   if (host?.scan?.date_end)
-    return `Quick scan, last ${host.scan.date_end}`;
+    return `Quick scan, last ${formatServerDate(host.scan.date_end)}`;
   return 'Quick scan';
 }
 
@@ -1986,7 +1986,7 @@ function activeScanDuration(scan) {
   if (!scan.date_begin)
     return null;
 
-  const started = Date.parse(String(scan.date_begin).replace(' ', 'T'));
+  const started = parseServerDate(scan.date_begin);
   if (Number.isNaN(started))
     return null;
   return Math.max(0, Math.floor((Date.now() - started) / 1000));
@@ -2119,11 +2119,45 @@ function formatScanDuration(value) {
 }
 
 function formatScanDate(value) {
-  return value || '-';
+  return formatServerDate(value);
 }
 
 function formatNotifyDate(value) {
-  return value || '-';
+  return formatServerDate(value);
+}
+
+function parseServerDate(value) {
+  const text = String(value || '').trim();
+  if (text === '')
+    return NaN;
+
+  const withoutTimezone = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/;
+  const normalized = withoutTimezone.test(text)
+    ? `${text.replace(' ', 'T')}Z`
+    : text;
+  return Date.parse(normalized);
+}
+
+function formatServerDate(value) {
+  const text = String(value || '').trim();
+  if (text === '')
+    return '-';
+
+  const timestamp = parseServerDate(text);
+  if (Number.isNaN(timestamp))
+    return text;
+
+  const date = new Date(timestamp);
+  const pad = (part) => String(part).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join('-') + ' ' + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds())
+  ].join(':');
 }
 
 function formatRelativeAge(value) {
@@ -2412,7 +2446,7 @@ async function toggleScanRaw() {
 }
 
 function scanHistoryLabel(scan) {
-  const date = scan.date_end || scan.date_begin || '';
+  const date = formatServerDate(scan.date_end || scan.date_begin || '');
   const status = scan.status || scan.state || '-';
   const ports = Number(scan.ports_count || 0);
   return `${date} ${scan.mode} ${status} ${ports}p`;
