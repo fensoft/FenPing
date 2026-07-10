@@ -4,12 +4,6 @@
       <div class="container-xl d-flex align-items-center justify-content-between gap-2">
         <div><h1 class="app-title">FenPing</h1><div class="text-secondary small">{{ network || 'Network' }}</div></div>
         <div class="toolbar">
-          <button class="btn btn-outline-secondary icon-btn" :class="{ active: isInventoryRoute }" type="button" title="Inventory" @click="go('/')"><i class="ti ti-list-details"></i></button>
-          <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.ipam }" type="button" title="IPAM" @click="go('/ipam')"><i class="ti ti-address-book"></i></button>
-          <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.notify }" type="button" title="Notify" @click="go('/notify')"><i class="ti ti-bell"></i></button>
-          <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" @click="go('/scans')"><i class="ti ti-radar"></i></button>
-          <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.services }" type="button" title="Services" @click="go('/services')"><i class="ti ti-world-www"></i></button>
-          <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.netboot }" type="button" title="Netboot images" @click="go('/netboot-images')"><i class="ti ti-server"></i></button>
           <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span>
           <button class="btn btn-outline-primary auth-button" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><i :class="isAuthenticated ? 'ti ti-logout' : 'ti ti-login'"></i><span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span></button>
           <button class="btn btn-outline-secondary icon-btn" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><i :class="darkMode ? 'ti ti-sun' : 'ti ti-moon'"></i></button>
@@ -19,33 +13,50 @@
       </div>
     </header>
 
-    <main class="container-xl py-3" :inert="modal ? true : undefined" :aria-hidden="modal ? 'true' : undefined">
-      <div v-if="globalError" class="alert alert-danger mb-3" role="alert">{{ globalError }}</div>
-      <div v-if="notice" class="alert alert-success mb-3" role="status">{{ notice }}</div>
-      <RouterView v-slot="{ Component }">
-        <component
-          :is="Component"
-          :is-authenticated="isAuthenticated"
-          :scanning="scanning"
-          :refresh-queued="refreshQueued"
-          :scanning-hosts="scanningHosts"
-          @network="network = $event"
-          @login="openLogin"
-          @notice="setNotice"
-          @ping-refresh="refreshScan"
-          @quick-scan="quickScanHost"
-          @host-detail="navigateHostDetail"
-          @open-history="openHistory"
-          @open-scan="openScan"
-          @open-edit="openEdit"
-          @open-create="openCreate"
-          @reserve-device="openReserve"
-          @add-category="openAddCategory"
-          @rename-category="openRenameCategory"
-          @delete-category="openDeleteCategory"
-        />
-      </RouterView>
-    </main>
+    <div class="app-layout" :inert="modal ? true : undefined" :aria-hidden="modal ? 'true' : undefined">
+      <aside class="app-sidebar">
+        <nav class="app-nav" aria-label="Primary navigation">
+          <div class="app-nav-group">
+            <button class="app-nav-link" :class="{ active: isInventoryRoute }" type="button" title="Inventory" :aria-current="isInventoryRoute ? 'page' : undefined" @click="go('/')"><i class="ti ti-list-details"></i><span>Inventory</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.services }" type="button" title="Services" :aria-current="route.name === routeNames.services ? 'page' : undefined" @click="go('/services')"><i class="ti ti-world-www"></i><span>Services</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.notify }" type="button" title="Notify" :aria-current="route.name === routeNames.notify ? 'page' : undefined" @click="go('/notify')"><i class="ti ti-bell"></i><span>Notify</span></button>
+          </div>
+          <div class="app-nav-group app-nav-bottom">
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.ipam }" type="button" title="IPAM" :aria-current="route.name === routeNames.ipam ? 'page' : undefined" @click="go('/ipam')"><i class="ti ti-address-book"></i><span>IPAM</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" :aria-current="route.name === routeNames.scans ? 'page' : undefined" @click="go('/scans')"><i class="ti ti-radar"></i><span>Scans</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.netboot }" type="button" title="Netboot images" :aria-current="route.name === routeNames.netboot ? 'page' : undefined" @click="go('/netboot-images')"><i class="ti ti-server"></i><span>Netboot</span></button>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="app-content container-xl py-3">
+        <div v-if="globalError" class="alert alert-danger mb-3" role="alert">{{ globalError }}</div>
+        <div v-if="notice" class="alert alert-success mb-3" role="status">{{ notice }}</div>
+        <RouterView v-slot="{ Component }">
+          <component
+            :is="Component"
+            :is-authenticated="isAuthenticated"
+            :scanning="scanning"
+            :refresh-queued="refreshQueued"
+            :scanning-hosts="scanningHosts"
+            @network="network = $event"
+            @login="openLogin"
+            @notice="setNotice"
+            @ping-refresh="refreshScan"
+            @quick-scan="quickScanHost"
+            @host-detail="navigateHostDetail"
+            @open-history="openHistory"
+            @open-scan="openScan"
+            @open-edit="openEdit"
+            @open-create="openCreate"
+            @reserve-device="openReserve"
+            @add-category="openAddCategory"
+            @rename-category="openRenameCategory"
+            @delete-category="openDeleteCategory"
+          />
+        </RouterView>
+      </main>
+    </div>
 
     <AppModal
       v-if="modal"

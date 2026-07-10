@@ -19,6 +19,72 @@ body {
   border-bottom: 1px solid #dce1e7;
 }
 
+.app-layout {
+  display: flex;
+  min-height: calc(100vh - 3.4rem);
+}
+
+.app-sidebar {
+  background: #ffffff;
+  border-right: 1px solid #dce1e7;
+  flex: 0 0 11rem;
+  width: 11rem;
+}
+
+.app-nav {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 3.4rem);
+  padding: 0.75rem;
+  position: sticky;
+  top: 0;
+}
+
+.app-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.app-nav-bottom {
+  margin-top: auto;
+}
+
+.app-nav-link {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #4b5563;
+  display: flex;
+  font-weight: 600;
+  gap: 0.65rem;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+  width: 100%;
+}
+
+.app-nav-link:hover {
+  background: #f0f3f7;
+  color: #182433;
+}
+
+.app-nav-link.active {
+  background: #e6f0ff;
+  color: #1d4ed8;
+}
+
+.app-nav-link .ti {
+  flex: 0 0 auto;
+  font-size: 1.15rem;
+}
+
+.app-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .app-title {
   font-size: 1.1rem;
   font-weight: 650;
@@ -1113,6 +1179,25 @@ html[data-bs-theme='dark'] .app-header {
   border-bottom-color: #273444;
 }
 
+html[data-bs-theme='dark'] .app-sidebar {
+  background: #18212c;
+  border-right-color: #273444;
+}
+
+html[data-bs-theme='dark'] .app-nav-link {
+  color: #aebacc;
+}
+
+html[data-bs-theme='dark'] .app-nav-link:hover {
+  background: #202c3a;
+  color: #ffffff;
+}
+
+html[data-bs-theme='dark'] .app-nav-link.active {
+  background: #1e3a5f;
+  color: #9ec5fe;
+}
+
 html[data-bs-theme='dark'] .table-wrap {
   background: #18212c;
   border-color: #273444;
@@ -1334,6 +1419,24 @@ html[data-bs-theme='dark'] .scan-state-filtered {
 
   .toolbar {
     width: 100%;
+  }
+
+  .app-sidebar {
+    flex-basis: 3.5rem;
+    width: 3.5rem;
+  }
+
+  .app-nav {
+    padding: 0.5rem;
+  }
+
+  .app-nav-link {
+    justify-content: center;
+    padding: 0.45rem;
+  }
+
+  .app-nav-link span {
+    display: none;
   }
 
   .filter-search {
