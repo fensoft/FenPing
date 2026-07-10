@@ -1,5 +1,9 @@
 <?php
 
+const INVENTORY_SCAN_TIMEOUT_SECONDS = 1800;
+
+class InventoryTimeoutException extends RuntimeException {}
+
 function runInventoryCommand(array $args): int {
   try {
     $options = inventoryOptions($args);
@@ -130,6 +134,10 @@ function inventoryScan(string $ip, bool $quick = false): array {
       'saved' => $saved,
       'status' => $status
     );
+  } catch (InventoryTimeoutException $e) {
+    scanMetadataTimedOut($scanId, $e->getMessage());
+    scanPruneHistory($ip);
+    throw $e;
   } catch (Throwable $e) {
     scanMetadataFailed($scanId, $e->getMessage());
     scanPruneHistory($ip);
@@ -173,8 +181,15 @@ function ensureInventoryDir(): void {
     throw new RuntimeException('failed to create nmap directory');
 }
 
-function inventoryExec(array $command, bool $quiet = false): array {
-  $line = implode(' ', array_map('escapeshellarg', $command));
+function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds = INVENTORY_SCAN_TIMEOUT_SECONDS): array {
+  $timeoutSeconds = max(1, $timeoutSeconds);
+  $timedCommand = array_merge(array(
+    'timeout',
+    '--signal=TERM',
+    '--kill-after=10s',
+    $timeoutSeconds . 's'
+  ), $command);
+  $line = implode(' ', array_map('escapeshellarg', $timedCommand));
   if ($quiet)
     $line .= ' >/dev/null 2>/dev/null';
   else
@@ -183,6 +198,13 @@ function inventoryExec(array $command, bool $quiet = false): array {
   $output = array();
   $code = 0;
   exec($line, $output, $code);
+  if ($code === 124 || $code === 137) {
+    $duration = $timeoutSeconds % 60 === 0
+      ? ($timeoutSeconds / 60) . ' minute' . ($timeoutSeconds === 60 ? '' : 's')
+      : $timeoutSeconds . ' second' . ($timeoutSeconds === 1 ? '' : 's');
+    $name = basename($command[0] ?? 'command');
+    throw new InventoryTimeoutException("$name timed out after $duration");
+  }
   if ($code !== 0)
     throw new RuntimeException(trim(implode(PHP_EOL, $output)) ?: "command failed: " . implode(' ', $command));
 

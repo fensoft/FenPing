@@ -332,7 +332,19 @@ function get_notify($hours = 24) {
     SELECT
       s.id,
       s.ip,
-      s.mac,
+      COALESCE(NULLIF(s.mac, ''), (
+        SELECT known.mac
+        FROM stats known
+        WHERE known.ip=s.ip AND known.mac IS NOT NULL AND known.mac<>''
+        ORDER BY known.id DESC
+        LIMIT 1
+      ), (
+        SELECT i.mac
+        FROM ips i
+        WHERE i.ip=s.ip AND i.mac IS NOT NULL AND i.mac<>''
+        ORDER BY i.id DESC
+        LIMIT 1
+      ), '') AS mac,
       s.status,
       s.date_begin,
       s.date_end,
@@ -347,13 +359,36 @@ function get_notify($hours = 24) {
       END) - UNIX_TIMESTAMP(s.date_begin)) AS duration,
       IF(s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip), 1, 0) AS current,
       (SELECT prev.status FROM stats prev WHERE prev.ip=s.ip AND prev.id<s.id ORDER BY prev.id DESC LIMIT 1) AS previous_status,
-      COALESCE((
+      COALESCE(NULLIF((
         SELECT i.name
         FROM ips i
         WHERE i.ip=s.ip OR LOWER(i.mac) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
         ORDER BY IF(i.ip=s.ip, 0, 1), i.id DESC
         LIMIT 1
-      ), '') AS name,
+      ), ''), NULLIF((
+        SELECT l.`client-hostname`
+        FROM leases l
+        WHERE l.ip=s.ip OR LOWER(l.`hardware-ethernet`) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
+        ORDER BY IF(l.ip=s.ip, 0, 1), l.starts DESC
+        LIMIT 1
+      ), ''), '') AS name,
+      COALESCE(NULLIF((
+        SELECT v.vendors
+        FROM stats known
+        INNER JOIN vendors v
+          ON LOWER(v.mac) COLLATE latin1_general_ci=LOWER(known.mac) COLLATE latin1_general_ci
+        WHERE known.ip=s.ip AND known.mac IS NOT NULL AND known.mac<>''
+        ORDER BY known.id DESC
+        LIMIT 1
+      ), ''), NULLIF((
+        SELECT v.vendors
+        FROM ips i
+        INNER JOIN vendors v
+          ON LOWER(v.mac) COLLATE latin1_general_ci=LOWER(i.mac) COLLATE latin1_general_ci
+        WHERE i.ip=s.ip
+        ORDER BY i.id DESC
+        LIMIT 1
+      ), ''), '') AS vendor,
       COALESCE((
         SELECT i.important
         FROM ips i

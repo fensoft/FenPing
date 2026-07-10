@@ -252,6 +252,18 @@ function scanMetadataFailed(int $id, string $error): void {
   $stmt->execute(array('id' => $id, 'error' => $error));
 }
 
+function scanMetadataTimedOut(int $id, string $error): void {
+  $stmt = db()->prepare("
+    UPDATE scans
+    SET state='timeout',
+        date_end=CURRENT_TIMESTAMP,
+        duration=IF(date_begin IS NULL, NULL, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP))),
+        error=:error
+    WHERE id=:id
+  ");
+  $stmt->execute(array('id' => $id, 'error' => $error));
+}
+
 function scanMetadataLatest(string $ip): ?array {
   $stmt = db()->prepare("
     SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, xml, xml_hash, error

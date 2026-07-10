@@ -140,6 +140,7 @@
                   </button>
                   <span class="font-monospace">{{ change.ip }}</span>
                   <span class="font-monospace text-secondary">{{ formatMac(change.mac) }}</span>
+                  <span v-if="change.vendor" class="notify-vendor" :title="change.vendor">{{ change.vendor }}</span>
                 </td>
                 <td>
                   <div class="notify-change">
@@ -182,6 +183,17 @@
 
         <div class="table-wrap">
           <table class="table table-sm scan-queue-table">
+            <colgroup>
+              <col class="scan-col-state" />
+              <col class="scan-col-host" />
+              <col class="scan-col-mode" />
+              <col class="scan-col-status" />
+              <col class="scan-col-ports" />
+              <col class="scan-col-started" />
+              <col class="scan-col-duration" />
+              <col class="scan-col-error" />
+              <col class="scan-col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>State</th>
@@ -190,7 +202,7 @@
                 <th>Status</th>
                 <th>Ports</th>
                 <th>Started</th>
-                <th>Ended</th>
+                <th>Duration</th>
                 <th>Error</th>
                 <th class="text-end">Actions</th>
               </tr>
@@ -225,10 +237,7 @@
                 <td>{{ scan.status || '-' }}</td>
                 <td>{{ Number(scan.ports_count || 0) }}</td>
                 <td class="text-nowrap">{{ formatScanDate(scan.date_begin) }}</td>
-                <td class="text-nowrap">
-                  <span v-if="scan.date_end">{{ formatScanDate(scan.date_end) }}</span>
-                  <span v-else>{{ formatScanDuration(activeScanDuration(scan)) }}</span>
-                </td>
+                <td class="text-nowrap">{{ formatScanDuration(activeScanDuration(scan)) }}</td>
                 <td class="text-truncate-cell" :title="scan.error || ''">{{ scan.error || '-' }}</td>
                 <td class="text-end action-cell">
                   <button
@@ -485,73 +494,70 @@
             <h2>Netboot Images</h2>
             <div class="text-secondary small">Boot files served from /netboot</div>
           </div>
-          <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="netbootLoading || !isAuthenticated" @click="loadNetbootImages">
+          <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="netbootLoading" @click="loadNetbootImages">
             <i class="ti ti-refresh me-1" :class="{ 'is-spinning': netbootLoading }"></i>
             Refresh
           </button>
         </div>
 
         <div v-if="!isAuthenticated" class="alert alert-info" role="alert">
-          Guest mode is read only.
-          <button class="btn btn-link p-0 ms-1" type="button" @click="openLogin">Login</button>
+          Guest mode is read only. You can browse and download images.
         </div>
 
-        <template v-else>
-          <form class="netboot-upload" @submit.prevent="uploadNetbootImage">
-            <label class="form-label netboot-name-field">
-              Name
-              <input v-model.trim="netbootUpload.name" class="form-control form-control-sm" type="text" placeholder="Optional display name" />
-            </label>
-            <label class="form-label netboot-file-field">
-              File
-              <input ref="netbootFileInput" class="form-control form-control-sm" type="file" @change="onNetbootFile" />
-            </label>
-            <button class="btn btn-primary btn-sm" type="submit" :disabled="netbootUploading">
-              <i class="ti ti-upload me-1" :class="{ 'is-spinning': netbootUploading }"></i>
-              Upload
-            </button>
-          </form>
+        <form v-if="isAuthenticated" class="netboot-upload" @submit.prevent="uploadNetbootImage">
+          <label class="form-label netboot-name-field">
+            Name
+            <input v-model.trim="netbootUpload.name" class="form-control form-control-sm" type="text" placeholder="Optional display name" />
+          </label>
+          <label class="form-label netboot-file-field">
+            File
+            <input ref="netbootFileInput" class="form-control form-control-sm" type="file" @change="onNetbootFile" />
+          </label>
+          <button class="btn btn-primary btn-sm" type="submit" :disabled="netbootUploading">
+            <i class="ti ti-upload me-1" :class="{ 'is-spinning': netbootUploading }"></i>
+            Upload
+          </button>
+        </form>
 
-          <div class="table-wrap">
-            <table class="table table-sm netboot-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>File</th>
-                  <th>Size</th>
-                  <th>Hosts</th>
-                  <th>Created</th>
-                  <th class="text-end">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="netbootLoading && netbootImages.length === 0">
-                  <td class="text-secondary text-center py-4" colspan="6">Loading</td>
-                </tr>
-                <tr v-else-if="!netbootLoading && netbootImages.length === 0">
-                  <td class="text-secondary text-center py-4" colspan="6">No images</td>
-                </tr>
-                <tr v-for="image in netbootImages" :key="image.id">
-                  <td class="text-truncate-cell" :title="image.name">
-                    <strong>{{ image.name }}</strong>
-                    <small v-if="image.original_name && image.original_name !== image.name" class="text-secondary">{{ image.original_name }}</small>
-                  </td>
-                  <td class="text-truncate-cell font-monospace" :title="image.filename">
-                    <a :href="image.url" target="_blank" rel="noopener noreferrer">{{ image.filename }}</a>
-                  </td>
-                  <td>{{ formatBytes(image.size) }}</td>
-                  <td>{{ image.hosts || 0 }}</td>
-                  <td class="text-nowrap">{{ image.created_at }}</td>
-                  <td class="text-end">
-                    <button class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete image" :disabled="netbootLoading" @click="deleteNetbootImage(image)">
-                      <i class="ti ti-trash"></i>
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </template>
+        <div class="table-wrap">
+          <table class="table table-sm netboot-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>File</th>
+                <th>Size</th>
+                <th>Hosts</th>
+                <th>Created</th>
+                <th v-if="isAuthenticated" class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="netbootLoading && netbootImages.length === 0">
+                <td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">Loading</td>
+              </tr>
+              <tr v-else-if="!netbootLoading && netbootImages.length === 0">
+                <td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">No images</td>
+              </tr>
+              <tr v-for="image in netbootImages" :key="image.id">
+                <td class="text-truncate-cell" :title="image.name">
+                  <strong>{{ image.name }}</strong>
+                  <small v-if="image.original_name && image.original_name !== image.name" class="text-secondary">{{ image.original_name }}</small>
+                </td>
+                <td class="text-truncate-cell font-monospace" :title="image.filename">
+                  <a :href="image.url" target="_blank" rel="noopener noreferrer">{{ image.filename }}</a>
+                </td>
+                <td>{{ formatBytes(image.size) }}</td>
+                <td>{{ image.hosts || 0 }}</td>
+                <td class="text-nowrap">{{ image.created_at }}</td>
+                <td v-if="isAuthenticated" class="text-end">
+                  <button class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete image" :disabled="netbootLoading" @click="deleteNetbootImage(image)">
+                    <i class="ti ti-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </template>
 
       <div v-else class="table-wrap">
@@ -1245,7 +1251,7 @@ const refreshTitle = computed(() => {
   if (isNotifyPage.value) return 'Refresh notifications';
   if (isScansPage.value) return 'Refresh scans';
   if (isHostPage.value) return 'Refresh host';
-  if (isNetbootPage.value) return isAuthenticated.value ? 'Refresh netboot images' : 'Login to refresh';
+  if (isNetbootPage.value) return 'Refresh netboot images';
   return isAuthenticated.value ? 'Refresh' : 'Login to refresh';
 });
 
@@ -1253,6 +1259,7 @@ const refreshDisabled = computed(() => {
   if (isNotifyPage.value) return false;
   if (isScansPage.value) return false;
   if (isHostPage.value) return false;
+  if (isNetbootPage.value) return false;
   return !isAuthenticated.value;
 });
 
@@ -1427,8 +1434,7 @@ async function loadCurrentView(options = {}) {
   }
 
   if (isNetbootPage.value) {
-    if (isAuthenticated.value)
-      await loadNetbootImages();
+    await loadNetbootImages();
     return;
   }
 
@@ -1580,7 +1586,6 @@ async function logout() {
   authLoading.value = true;
   try {
     auth.value = await apiJson('/api/auth/logout', { method: 'POST' }) || { authenticated: false, configured: auth.value.configured };
-    netbootImages.value = [];
     notice.value = 'Logged out';
   } catch (error) {
     inventoryError.value = error.message;
@@ -1658,11 +1663,6 @@ async function loadHostDetail(id) {
 }
 
 async function loadNetbootImages() {
-  if (!isAuthenticated.value) {
-    netbootImages.value = [];
-    return;
-  }
-
   netbootLoading.value = true;
   netbootError.value = '';
   inventoryError.value = '';
@@ -1762,10 +1762,6 @@ function requestRefresh() {
   }
 
   if (isNetbootPage.value) {
-    if (!isAuthenticated.value) {
-      openLogin();
-      return;
-    }
     loadNetbootImages();
     return;
   }
@@ -1850,7 +1846,8 @@ function scanActionClass(host) {
   return {
     'btn-outline-primary': isScanRunning(host),
     'btn-outline-danger': host?.scan?.state === 'failed',
-    'btn-outline-secondary': !isScanRunning(host) && host?.scan?.state !== 'failed',
+    'btn-outline-warning': host?.scan?.state === 'timeout',
+    'btn-outline-secondary': !isScanRunning(host) && !['failed', 'timeout'].includes(host?.scan?.state),
     'is-spinning': isScanRunning(host)
   };
 }
@@ -1860,6 +1857,8 @@ function scanButtonTitle(host) {
     return 'Scanning';
   if (host?.scan?.state === 'failed')
     return `Scan failed${host.scan.error ? `: ${host.scan.error}` : ''}`;
+  if (host?.scan?.state === 'timeout')
+    return `Scan timed out${host.scan.error ? `: ${host.scan.error}` : ''}`;
   if (host?.scan?.date_end)
     return `Quick scan, last ${host.scan.date_end}`;
   return 'Quick scan';
@@ -1958,6 +1957,7 @@ function scanRunStateClass(state) {
   if (state === 'running') return 'scan-run-state scan-run-running';
   if (state === 'complete') return 'scan-run-state scan-run-complete';
   if (state === 'failed') return 'scan-run-state scan-run-failed';
+  if (state === 'timeout') return 'scan-run-state scan-run-timeout';
   if (state === 'cancelled') return 'scan-run-state scan-run-cancelled';
   return 'scan-run-state';
 }
@@ -1965,6 +1965,7 @@ function scanRunStateClass(state) {
 function scanRunStateIcon(state) {
   if (state === 'complete') return 'ti ti-check';
   if (state === 'failed') return 'ti ti-alert-triangle';
+  if (state === 'timeout') return 'ti ti-clock-exclamation';
   if (state === 'cancelled') return 'ti ti-ban';
   return 'ti ti-point';
 }
@@ -1972,6 +1973,7 @@ function scanRunStateIcon(state) {
 function scanQueueRowClass(scan) {
   if (scan?.state === 'running') return 'scan-row-running';
   if (scan?.state === 'failed') return 'scan-row-failed';
+  if (scan?.state === 'timeout') return 'scan-row-timeout';
   if (scan?.important == 1 && scan?.status !== 'up') return 'important-down';
   return '';
 }
@@ -2094,7 +2096,26 @@ function formatBytes(value) {
 function formatScanDuration(value) {
   if (value === null || value === undefined || value === '')
     return '-';
-  return formatDuration(value);
+
+  let remaining = Math.max(0, Math.floor(Number(value) || 0));
+  const parts = [];
+  const units = [
+    [86400, 'd'],
+    [3600, 'h'],
+    [60, 'm'],
+    [1, 's']
+  ];
+
+  for (const [size, suffix] of units) {
+    const amount = Math.floor(remaining / size);
+    if (amount > 0 || (size === 1 && parts.length === 0))
+      parts.push(`${amount}${suffix}`);
+    remaining %= size;
+    if (parts.length === 2)
+      break;
+  }
+
+  return parts.join('');
 }
 
 function formatScanDate(value) {

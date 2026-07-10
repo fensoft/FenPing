@@ -2,9 +2,9 @@
 
 function netbootApiRoutes(): array {
   return array(
-    apiRoute('GET', '/netboot/images', 'handleNetbootImagesList', 'session'),
+    apiRoute('GET', '/netboot/images', 'handleNetbootImagesList'),
     apiRoute('POST', '/netboot/images', 'handleNetbootImageCreate', 'session'),
-    apiRoute('GET', '/netboot/images/{id:int}', 'handleNetbootImageGet', 'session'),
+    apiRoute('GET', '/netboot/images/{id:int}', 'handleNetbootImageGet'),
     apiRoute('DELETE', '/netboot/images/{id:int}', 'handleNetbootImageDelete', 'session')
   );
 }

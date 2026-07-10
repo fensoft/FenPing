@@ -217,6 +217,20 @@ body {
   table-layout: fixed;
 }
 
+.scan-queue-table {
+  min-width: 68rem;
+}
+
+.scan-col-state { width: 8%; }
+.scan-col-host { width: 18%; }
+.scan-col-mode { width: 6%; }
+.scan-col-status { width: 6%; }
+.scan-col-ports { width: 5%; }
+.scan-col-started { width: 14%; }
+.scan-col-duration { width: 7%; }
+.scan-col-error { width: 27%; }
+.scan-col-actions { width: 9%; }
+
 .scan-queue-table th,
 .scan-queue-table td,
 .detail-table th,
@@ -282,6 +296,11 @@ body {
   color: #b91c1c;
 }
 
+.scan-run-timeout {
+  background: #fef3c7;
+  color: #b45309;
+}
+
 .scan-run-cancelled {
   background: #f3f4f6;
   color: #4b5563;
@@ -293,6 +312,10 @@ body {
 
 .scan-row-failed td {
   background: #fff0f0;
+}
+
+.scan-row-timeout td {
+  background: #fffbeb;
 }
 
 .detail-empty {
@@ -671,6 +694,13 @@ body {
   white-space: nowrap;
 }
 
+.notify-vendor {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .notify-change {
   align-items: center;
   display: inline-flex;
@@ -998,6 +1028,10 @@ html[data-bs-theme='dark'] .scan-row-failed td {
   background: #482528;
 }
 
+html[data-bs-theme='dark'] .scan-row-timeout td {
+  background: #422f16;
+}
+
 html[data-bs-theme='dark'] .scan-row-running td {
   background: #172438;
 }
@@ -1020,6 +1054,11 @@ html[data-bs-theme='dark'] .scan-run-running {
 html[data-bs-theme='dark'] .scan-run-failed {
   background: #7f1d1d;
   color: #fee2e2;
+}
+
+html[data-bs-theme='dark'] .scan-run-timeout {
+  background: #78350f;
+  color: #fef3c7;
 }
 
 html[data-bs-theme='dark'] .modal {
