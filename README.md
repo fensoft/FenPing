@@ -13,6 +13,7 @@ It uses a static Vue/Vite frontend, a PHP API/CLI backend, MariaDB, dnsmasq, cro
 - Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
 - Category/range separators with collapsible groups and rename support.
 - Quick and deep nmap scans with deduplicated database history; quick results never replace the latest deep snapshot.
+- Local MAC vendor resolution from the IEEE MA-L, MA-M, MA-S, and IAB registries, without sending device addresses to a third party.
 - Netboot image upload, delete, and per-host boot image selection.
 - Guest read-only mode and admin login.
 - Dark mode.
@@ -103,7 +104,7 @@ Do not delete `data/` casually. It is the appliance state.
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | Generated dnsmasq config files. |
 | `data/netboot` | `/var/lib/fenping/netboot` | Uploaded netboot files. |
 | `data/backups` | `/var/lib/fenping/backups` | Backup archives and imported dumps. |
-| `data/state` | `/var/lib/fenping/state` | Optional state/health files. |
+| `data/state` | `/var/lib/fenping/state` | Refreshed IEEE vendor registry and optional state/health files. |
 
 Apache serves only `/var/www/public`, which contains the built frontend and the small API entrypoint. PHP application code lives in `/opt/fenping`; runtime files under `/var/lib/fenping` are not directly web-accessible.
 
@@ -118,6 +119,8 @@ docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory
 docker exec fenping php /opt/fenping/cli.php inventory --quick 10.10.10.10
 docker exec fenping php /opt/fenping/cli.php inventory --work
+docker exec fenping php /opt/fenping/cli.php oui-refresh
+docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup
 docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 docker exec fenping php /opt/fenping/cli.php discord-restart
@@ -128,7 +131,10 @@ Cron inside the container runs:
 - `ping` every 15 minutes.
 - inventory discovery every hour; discovered hosts are queued for deep scans.
 - the inventory worker runs queued scans with a maximum concurrency of four.
+- the local IEEE OUI registry is refreshed monthly on the first day at 03:17.
 - dnsmasq lease import every minute.
+
+The image includes a vendor registry seed downloaded from the [IEEE Registration Authority public listings](https://standards.ieee.org/products-programs/regauth/). Every boot transactionally loads the last validated registry into MariaDB. A monthly background job downloads and validates the complete public MA-L, MA-M, MA-S, and historical IAB CSV files, atomically replaces `data/state/ieee-oui.json`, and refreshes the SQL table. Inventory requests query this local prefix index; individual LAN MAC addresses are never sent outside the appliance. If a download or SQL import fails, FenPing retains the previous registry and can fall back to the image seed.
 
 Completed nmap output is stored in MariaDB. FenPing keeps one XML snapshot per distinct semantic result and scan mode, so unchanged scans reuse the existing snapshot. Quick and deep scans have separate change baselines, and the normal detail view prefers the latest deep result. Selecting a quick result merges it over the preceding deep snapshot: quick observations replace matching ports while deep-only ports and OS data remain visible with source labels. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
 

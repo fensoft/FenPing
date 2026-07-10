@@ -30,7 +30,7 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `restart.sh`: builds and starts the single host-networked container.
 - `boot.sh`: single-container service bootstrap.
 - `config.php`: committed generic PHP config that reads runtime values from environment variables.
-- `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `backup`, `restore`, `discord-restart`.
+- `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `oui-refresh`, `oui-sync`, `backup`, `restore`, `discord-restart`.
 - `api.php`: JSON API front controller.
 - `routes/`: route modules for auth, system, hosts/categories, scans, netboot.
 - `functions.php`: domain helpers for inventory, host CRUD, categories, history, notify, netboot.
@@ -39,6 +39,7 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `ping.php`: ping scanner and status writer.
 - `hosts.php`: DHCP field validation, transactional dnsmasq candidate generation, and local reload/start logic.
 - `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history.
+- `oui.php`: local IEEE MA-L/MA-M/MA-S/IAB vendor index loading and atomic refresh.
 - `backup.php`: backup/restore implementation.
 - `frontend/`: Vue app source.
 - `docs/ARCHITECTURE.md`: deeper project overview.
@@ -65,6 +66,8 @@ docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
 docker exec fenping php /opt/fenping/cli.php inventory --work
+docker exec fenping php /opt/fenping/cli.php oui-refresh
+docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
 docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
 docker exec fenping php /opt/fenping/cli.php discord-restart
@@ -91,7 +94,7 @@ bash -n boot.sh restart.sh tests/test.sh
 docker build --check .
 docker build -t fenping-check .
 npm run build
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php oui.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
 ```
 
@@ -106,6 +109,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - Keep `db.sql` idempotent.
 - API-triggered sudo calls expect `/usr/bin/php` in Dockerfile sudoers.
 - Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.
+- MAC vendor lookups must remain local; refresh the complete public IEEE registries through `oui-refresh` instead of sending individual LAN MAC addresses to an external API.
 - dnsmasq generation happens through `php cli.php hosts`.
 - Cron is inside the container; do not look for Ofelia.
 - Avoid full `/24` inventory scans unless the user accepts LAN scan traffic.

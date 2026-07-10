@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/oui.php';
 require_once __DIR__ . '/discord.php';
 require_once __DIR__ . '/ping.php';
 require_once __DIR__ . '/hosts.php';
@@ -21,6 +22,14 @@ if ($command === 'inventory') {
   exit(runInventoryCommand(array_slice($argv, 2)));
 }
 
+if ($command === 'oui-refresh') {
+  exit(runIeeeOuiRefreshCommand(array_slice($argv, 2)));
+}
+
+if ($command === 'oui-sync') {
+  exit(runIeeeOuiSyncCommand(array_slice($argv, 2)));
+}
+
 if ($command === 'discord-restart') {
   exit(runDiscordRestartCommand());
 }
@@ -37,6 +46,8 @@ fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
 fwrite(STDERR, "       php cli.php inventory [--quick] [1-254|IPv4] (queue scans)" . PHP_EOL);
 fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);
+fwrite(STDERR, "       php cli.php oui-refresh" . PHP_EOL);
+fwrite(STDERR, "       php cli.php oui-sync" . PHP_EOL);
 fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
 fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php restore <backup.tgz|dump.sql.gz>" . PHP_EOL);

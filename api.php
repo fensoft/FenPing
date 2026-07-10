@@ -8,6 +8,7 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/oui.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/hosts.php';
 require_once __DIR__ . '/health.php';

@@ -190,13 +190,7 @@ function normalizeHostDetail(array $host): array {
 }
 
 function hostVendorFromCache(string $mac): string {
-  if ($mac === '')
-    return '';
-
-  $stmt = getDb()->prepare("SELECT vendors FROM vendors WHERE mac=:mac LIMIT 1");
-  $stmt->execute(array('mac' => $mac));
-  $vendor = $stmt->fetchColumn();
-  return $vendor === false ? '' : (string)$vendor;
+  return getVendor($mac);
 }
 
 function hostPingState(array $host): array {

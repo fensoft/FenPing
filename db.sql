@@ -105,11 +105,12 @@ CREATE TABLE IF NOT EXISTS `users` (
   `pass` varchar(128) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
-CREATE TABLE IF NOT EXISTS `vendors` (
-  `mac` varchar(50) NOT NULL,
-  `vendors` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`mac`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+CREATE TABLE IF NOT EXISTS `oui_vendors` (
+  `prefix_length` tinyint(3) unsigned NOT NULL,
+  `prefix` varchar(9) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `vendor` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  PRIMARY KEY (`prefix_length`, `prefix`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `netboot_images` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -128,6 +129,7 @@ CREATE INDEX IF NOT EXISTS `leases_ends` ON `leases` (`ends`);
 CREATE INDEX IF NOT EXISTS `ping_mac` ON `ping` (`mac`);
 CREATE INDEX IF NOT EXISTS `range_ip_begin` ON `range` (`ip_begin`);
 CREATE INDEX IF NOT EXISTS `stats_ip_date_begin` ON `stats` (`ip`, `date_begin`);
+DROP TABLE IF EXISTS `vendors`;
 ALTER TABLE `ips` ADD COLUMN IF NOT EXISTS `netboot_image_id` int(10) unsigned DEFAULT NULL AFTER `dns`;
 CREATE INDEX IF NOT EXISTS `ips_netboot_image_id` ON `ips` (`netboot_image_id`);
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `snapshot_id` int(11) unsigned DEFAULT NULL AFTER `ports_count`;

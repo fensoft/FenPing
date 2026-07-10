@@ -1,33 +1,31 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/oui.php';
 
 function getVendor($mac) {
-  $db = getDb();
-  $stmt = $db->prepare("select * from vendors where mac=:mac");
-  $stmt->execute(array("mac" => $mac));
-  $data = $stmt->fetch();
-  if ($data == false) {
-    $url = "https://api.macvendors.com/" . urlencode($mac);
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    $res = curl_exec($ch);
-    if ($res === false)
-      $res = "";
-    if (strpos($res, "Too Many Requests") !== false)
-      $res = "";
-    if (strpos($res, "Page not found") !== false)
-      $res = "Unknown";
-    if (strpos($res, "Not Found") !== false)
-      $res = "Unknown";
-    sleep(1);
-    $stmt = $db->prepare("INSERT INTO vendors (mac, vendors) VALUES (:mac, :vendor)");
-    if ($res != "")
-      $stmt->execute(array("mac" => $mac, "vendor" => $res));
-    return $res;
-  } else {
-    return $data[1];
+  static $cache = array();
+  static $databaseAvailable = true;
+
+  $normalized = ieeeOuiNormalizeMac((string)$mac);
+  if ($normalized === '')
+    return '';
+  if (array_key_exists($normalized, $cache))
+    return $cache[$normalized];
+
+  $firstOctet = hexdec(substr($normalized, 0, 2));
+  if (($firstOctet & 0x02) !== 0)
+    return $cache[$normalized] = '';
+
+  if ($databaseAvailable) {
+    try {
+      $vendor = ieeeOuiDatabaseVendor(getDb(), $normalized);
+      if ($vendor !== null)
+        return $cache[$normalized] = $vendor;
+    } catch (Throwable $e) {
+      $databaseAvailable = false;
+    }
   }
+  return $cache[$normalized] = ieeeOuiVendor($normalized);
 }
 
 function getDb() {
@@ -386,23 +384,7 @@ function get_notify($hours = 24) {
         ORDER BY IF(l.ip=s.ip, 0, 1), l.starts DESC
         LIMIT 1
       ), ''), '') AS name,
-      COALESCE(NULLIF((
-        SELECT v.vendors
-        FROM stats known
-        INNER JOIN vendors v
-          ON LOWER(v.mac) COLLATE latin1_general_ci=LOWER(known.mac) COLLATE latin1_general_ci
-        WHERE known.ip=s.ip AND known.mac IS NOT NULL AND known.mac<>''
-        ORDER BY known.id DESC
-        LIMIT 1
-      ), ''), NULLIF((
-        SELECT v.vendors
-        FROM ips i
-        INNER JOIN vendors v
-          ON LOWER(v.mac) COLLATE latin1_general_ci=LOWER(i.mac) COLLATE latin1_general_ci
-        WHERE i.ip=s.ip
-        ORDER BY i.id DESC
-        LIMIT 1
-      ), ''), '') AS vendor,
+      '' AS vendor,
       COALESCE((
         SELECT i.important
         FROM ips i
@@ -433,6 +415,7 @@ function get_notify($hours = 24) {
     $row["duration"] = (int)$row["duration"];
     $row["current"] = (int)$row["current"];
     $row["important"] = (int)$row["important"];
+    $row["vendor"] = getVendor((string)($row["mac"] ?? ""));
     $row["previous_status"] = ($row["previous_status"] ?? "") === "" ? null : $row["previous_status"];
     $changes[] = $row;
   }

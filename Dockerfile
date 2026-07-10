@@ -12,6 +12,8 @@ RUN npm run build
 FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends cron nano apache2 mariadb-server mariadb-client libapache2-mod-php php-mysql dnsmasq-base libxml-xpath-perl nmap iputils-ping iputils-arping net-tools php-curl sudo iptables && apt-get clean && rm -rf /var/lib/apt/lists/* /var/www/html
+COPY config.php oui.php /opt/fenping/
+RUN mkdir -p /usr/share/fenping && php -r 'require "/opt/fenping/config.php"; require "/opt/fenping/oui.php"; $result=ieeeOuiRefresh(IEEE_OUI_SEED_PATH); printf("IEEE OUI registry seed: %d assignments from %d registries\n", $result["assignments"], $result["registries"]);'
 RUN PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')" && printf "upload_max_filesize=512M\npost_max_size=512M\nmax_file_uploads=20\n" > "/etc/php/$PHP_VERSION/apache2/conf.d/99-fenping-upload.ini"
 RUN a2enmod rewrite && echo 'ServerName 127.0.0.1' >> /etc/apache2/apache2.conf
 COPY apache-fenping.conf /etc/apache2/sites-available/000-default.conf
@@ -19,7 +21,7 @@ COPY --from=frontend /app/dist/ /var/www/public/
 COPY public/api.php favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/
-COPY functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php config.php dnsmasq.leases.php db.sql /opt/fenping/
+COPY functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
 COPY netboot.htaccess /.netboot-htaccess
 RUN mkdir -p /var/lib/mysql /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state && chown -R www-data:www-data /var/lib/fenping/netboot && chown -R mysql:mysql /var/lib/mysql
 RUN echo 'Defaults env_keep += "DB_HOST DB_PORT DB_USER DB_PASS DB_NAME NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE"' >> /etc/sudoers

@@ -48,6 +48,7 @@ export PASSWORD
 export SECRET
 export DISCORD_WEBHOOK_URL
 export FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
+php /opt/fenping/cli.php oui-sync
 mkdir -p /etc/dnsmasq.d
 cp dnsmasq.conf.template /etc/dnsmasq.d/fenping.conf
 for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sort -r -n -s | cut -d" " -f2-` IFACE ME; do
@@ -73,6 +74,7 @@ FENPING_DATA_DIR=$FENPING_DATA_DIR
 
 0 * * * * root flock -n /tmp/inventory-discovery.lck -c "php /opt/fenping/cli.php inventory"
 * * * * * root php /opt/fenping/cli.php inventory --work
+17 3 1 * * root flock -n /tmp/oui-refresh.lck -c "php /opt/fenping/cli.php oui-refresh"
 */15 * * * * root flock -n /tmp/ping.lck -c "php /opt/fenping/cli.php ping"
 * * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /opt/fenping/dnsmasq.leases.php"
 EOF

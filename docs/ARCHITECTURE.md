@@ -10,7 +10,7 @@ The current runtime is one host-networked Docker container named `fenping`. The 
 2. `restart.sh` builds `fensoft/fenping:1.5`.
 3. `restart.sh` removes the old `fenping` container if present, then starts one `fenping` container with host networking and reduced capabilities.
 4. `boot.sh` starts MariaDB, initializes the DB if needed, and applies `db.sql`.
-5. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
+5. `boot.sh` transactionally loads the local IEEE vendor registry into MariaDB, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
 6. Apache serves the static Vue app from `/var/www/public` and rewrites `/api/...` to the public `api.php` entrypoint, which loads private application code from `/opt/fenping`.
 
 ## Docker Build
@@ -35,7 +35,7 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | generated dnsmasq config |
 | `data/netboot` | `/var/lib/fenping/netboot` | uploaded netboot files |
 | `data/backups` | `/var/lib/fenping/backups` | backup archives and imported dumps |
-| `data/state` | `/var/lib/fenping/state` | optional state files |
+| `data/state` | `/var/lib/fenping/state` | refreshed IEEE vendor registry and optional state files |
 
 The web root contains only the built frontend, static scan stylesheet assets, favicons, and the public API entrypoint. PHP modules, CLI code, templates, schema files, `.env` in development, and all persistent state remain outside the web root. Apache also explicitly denies dotfiles, source/config extensions, and legacy runtime URL paths.
 
@@ -70,6 +70,8 @@ docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
 docker exec fenping php /opt/fenping/cli.php inventory --work
+docker exec fenping php /opt/fenping/cli.php oui-refresh
+docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
 docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
 docker exec fenping php /opt/fenping/cli.php discord-restart
@@ -88,7 +90,7 @@ Important tables:
 - `stats`: status history used for stability and notifications.
 - `range`: category separators keyed by starting IP.
 - `leases`: imported dnsmasq lease data.
-- `vendors`: cached MAC vendor lookups.
+- `oui_vendors`: locally imported IEEE assignments keyed by 24-, 28-, or 36-bit prefix.
 - `scans`: nmap job metadata and references to stored results.
 - `scan_snapshots`: deduplicated nmap XML keyed by host, mode, and semantic result hash.
 - `netboot_images`: uploaded netboot file metadata.
@@ -122,6 +124,8 @@ The `update_status` procedure appends to `stats` only when status/IP/MAC changes
 - Quick and deep scans are compared independently. Default scan details prefer the latest changed deep snapshot and fall back to quick only when no deep result exists.
 - Selecting a quick snapshot merges it at read time with the preceding deep snapshot. Quick values override matching ports; deep-only ports and OS data remain and each port carries its source mode.
 - History pruning keeps one week of jobs plus the latest changed result for each mode.
+
+`oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains a validated seed at `/usr/share/fenping/ieee-oui.json`; the monthly refresh command downloads the complete registries with short timeouts and atomically writes `/var/lib/fenping/state/ieee-oui.json`. Boot runs `oui-sync` after schema setup to transactionally replace `oui_vendors`, and a successful monthly download also imports the new data. Invalid or failed refreshes leave the previous data untouched. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the JSON registry remains a lookup fallback if SQL is unavailable.
 
 Avoid default inventory scans in tests unless the user accepts LAN scan traffic.
 
@@ -187,6 +191,7 @@ Restore supports FenPing `.tgz` archives and raw `.sql` or `.sql.gz` dumps. Afte
 - Ping scan every 15 minutes.
 - Inventory discovery and enqueueing every hour.
 - Queue worker every minute; its internal lock prevents duplicate coordinators.
+- IEEE vendor registry refresh on the first day of each month at 03:17.
 - dnsmasq lease import every minute.
 
 Locks use `flock` under `/tmp` to prevent overlapping jobs.
@@ -222,6 +227,8 @@ Useful commands:
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php ping 1
 docker exec fenping php /opt/fenping/cli.php inventory --quick 1
+docker exec fenping php /opt/fenping/cli.php oui-refresh
+docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup
 docker logs -f fenping
 ```
