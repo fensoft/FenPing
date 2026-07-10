@@ -26,6 +26,15 @@ function sendDiscordStatusChangesSince(?int $afterId): void {
     discordPostPayload($payload);
 }
 
+function sendDiscordPortChangesForScan(int $scanId): void {
+  if (!discordNotificationsEnabled())
+    return;
+
+  $changes = discordPortChangesForScan($scanId);
+  foreach (discordPortNotificationPayloads($changes) as $payload)
+    discordPostPayload($payload);
+}
+
 function sendDiscordRestartNotification(): bool {
   if (!discordNotificationsEnabled())
     return false;
@@ -117,6 +126,74 @@ function discordNotificationPayloads(array $changes): array {
     );
   }
   return $payloads;
+}
+
+function discordPortChangesForScan(int $scanId): array {
+  $stmt = db()->prepare("
+    SELECT
+      c.*,
+      COALESCE(NULLIF((SELECT i.name FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1), ''), '') AS name,
+      COALESCE(NULLIF((SELECT i.mac FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1), ''), '') AS mac
+    FROM scan_port_changes c
+    WHERE c.scan_id=:scan_id
+    ORDER BY c.port ASC, c.protocol ASC
+  ");
+  $stmt->execute(array('scan_id' => $scanId));
+  return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function discordPortNotificationPayloads(array $changes): array {
+  $payloads = array();
+  foreach (array_chunk($changes, 10) as $chunk) {
+    $embeds = array();
+    foreach ($chunk as $change)
+      $embeds[] = discordPortChangeEmbed($change);
+    $payloads[] = array('username' => 'FenPing', 'embeds' => $embeds);
+  }
+  return $payloads;
+}
+
+function discordPortChangeEmbed(array $change): array {
+  $name = trim((string)($change['name'] ?? ''));
+  $ip = (string)($change['ip'] ?? '');
+  $protocol = strtolower((string)($change['protocol'] ?? ''));
+  $port = (int)($change['port'] ?? 0);
+  $type = (string)($change['change_type'] ?? 'changed');
+  $label = $name !== '' ? $name : ($ip !== '' ? $ip : 'Unknown host');
+  $action = array('appeared' => 'appeared', 'disappeared' => 'disappeared', 'changed' => 'changed version')[$type] ?? 'changed';
+  $timestamp = strtotime((string)($change['created_at'] ?? ''));
+
+  $embed = array(
+    'title' => $label . ': ' . $port . '/' . $protocol . ' ' . $action,
+    'description' => 'A network service changed.',
+    'color' => discordPortChangeColor($type),
+    'fields' => array(
+      discordEmbedField('Host', $label, true),
+      discordEmbedField('IP', $ip, true),
+      discordEmbedField('Port', $port . '/' . $protocol, true),
+      discordEmbedField('Previous', discordPortServiceLabel($change, 'previous'), false),
+      discordEmbedField('Current', discordPortServiceLabel($change, 'current'), false),
+      discordEmbedField('Scan', (string)($change['mode'] ?? '-'), true)
+    )
+  );
+  if ($timestamp !== false)
+    $embed['timestamp'] = date(DATE_ATOM, $timestamp);
+  return $embed;
+}
+
+function discordPortServiceLabel(array $change, string $prefix): string {
+  $service = trim((string)($change[$prefix . '_service'] ?? ''));
+  $version = trim((string)($change[$prefix . '_version'] ?? ''));
+  $value = trim($service . ' ' . $version);
+  return $value === '' ? '-' : $value;
+}
+
+function discordPortChangeColor(string $type): int {
+  if ($type === 'appeared')
+    return 0x16a34a;
+  if ($type === 'disappeared')
+    return 0xdc2626;
+  return 0xf59e0b;
 }
 
 function discordChangeEmbed(array $change): array {

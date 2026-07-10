@@ -3,6 +3,7 @@
 function scansApiRoutes(): array {
   return array(
     apiRoute('GET', '/scans', 'handleScansQueue'),
+    apiRoute('GET', '/services', 'handleServices'),
     apiRoute('POST', '/scans/{ip:ipv4}/quick', 'handleScanQuick', 'session'),
     apiRoute('GET', '/scans/{ip:ipv4}/status', 'handleScanStatus'),
     apiRoute('GET', '/scans/{ip:ipv4}/history', 'handleScanHistory'),
@@ -19,6 +20,56 @@ function scansApiRoutes(): array {
 
 function handleScansQueue(array $params): array {
   return array('scans' => scanMetadataQueue());
+}
+
+function handleServices(array $params): array {
+  $services = array();
+  $hosts = array();
+
+  foreach (scanMetadataLatestUsableByIp() as $metadata) {
+    $scan = scanJsonResponse($metadata['ip'], $metadata['id']);
+    $hostServices = 0;
+    $vendor = getVendor($metadata['mac']);
+    foreach ($scan['ports'] ?? array() as $port) {
+      if (strtolower((string)($port['state'] ?? '')) !== 'open')
+        continue;
+      $source = (string)($port['source'] ?? $metadata['mode']);
+      $sourceMetadata = $source === 'deep' && !empty($scan['merged_with'])
+        ? $scan['merged_with']
+        : $metadata;
+      $services[] = array(
+        'host_id' => $metadata['host_id'],
+        'name' => $metadata['name'],
+        'ip' => $metadata['ip'],
+        'mac' => $metadata['mac'],
+        'vendor' => $vendor,
+        'scan_id' => $metadata['id'],
+        'scan_mode' => $metadata['mode'],
+        'scan_date' => $sourceMetadata['date_end'] ?? $sourceMetadata['date_begin'],
+        'merged' => !empty($scan['merged']),
+        'protocol' => strtolower((string)($port['protocol'] ?? '')),
+        'port' => (int)($port['port'] ?? 0),
+        'service' => (string)($port['service'] ?? ''),
+        'version' => (string)($port['details'] ?? ''),
+        'tunnel' => (string)($port['tunnel'] ?? ''),
+        'source' => $source
+      );
+      $hostServices++;
+    }
+    $hosts[] = array(
+      'host_id' => $metadata['host_id'],
+      'name' => $metadata['name'],
+      'ip' => $metadata['ip'],
+      'services' => $hostServices
+    );
+  }
+
+  return array(
+    'network' => $GLOBALS['network'] ?? '',
+    'summary' => array('hosts' => count($hosts), 'services' => count($services)),
+    'hosts' => $hosts,
+    'services' => $services
+  );
 }
 
 function handleScanQuick(array $params): void {

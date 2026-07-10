@@ -78,6 +78,7 @@ docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
 docker exec fenping php /opt/fenping/cli.php inventory --work
+docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
@@ -101,6 +102,7 @@ Important tables:
 - `oui_vendors`: locally imported IEEE assignments keyed by 24-, 28-, or 36-bit prefix.
 - `scans`: nmap job metadata and references to stored results.
 - `scan_snapshots`: deduplicated nmap XML keyed by host, mode, and semantic result hash.
+- `scan_port_changes`: appeared, disappeared, and service/version-change events linked to the scan that observed them.
 - `netboot_images`: uploaded netboot file metadata.
 - `users`: legacy table still present in schema.
 
@@ -131,6 +133,9 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 - Completed XML is stored in `scan_snapshots`; identical results reuse an existing snapshot rather than storing another copy.
 - Quick and deep scans are compared independently. Default scan details prefer the latest changed deep snapshot and fall back to quick only when no deep result exists.
 - Selecting a quick snapshot merges it at read time with the preceding deep snapshot. Quick values override matching ports; deep-only ports and OS data remain and each port carries its source mode.
+- Port-change detection builds an effective view from the latest deep snapshot plus newer quick observations. It removes only ports included in the current scan scope, retains richer deep-scan version data when quick detection is incomplete, and records services in the first usable result as newly appeared.
+- Service-change events are retained for one week, returned by `/api/notify`, rendered alongside host-status changes, and optionally posted to Discord after the scan transaction commits.
+- Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
 - History pruning keeps one week of jobs plus the latest changed result for each mode.
 
 `oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains a validated seed at `/usr/share/fenping/ieee-oui.json`; the monthly refresh command downloads the complete registries with short timeouts and atomically writes `/var/lib/fenping/state/ieee-oui.json`. Boot runs `oui-sync` after schema setup, hashes the source and SQL rows, and transactionally replaces `oui_vendors` only when they differ. A successful monthly download also performs this sync. Invalid or failed refreshes leave the previous data untouched. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the JSON registry remains a lookup fallback if SQL is unavailable.
@@ -164,9 +169,9 @@ Important files:
 
 - `index.html`: Vite HTML entry.
 - `frontend/main.js`: app bootstrap and Tabler imports.
-- `frontend/router.js`: named routes for inventory, notifications, scans, host detail, and netboot.
+- `frontend/router.js`: named routes for inventory, services, notifications, scans, host detail, and netboot.
 - `frontend/App.vue`: application shell, authentication, cross-page actions, and modal orchestration.
-- `frontend/pages/`: independent inventory, notifications, scans, host detail, and netboot route components.
+- `frontend/pages/`: independent inventory, services, notifications, scans, host detail, and netboot route components.
 - `frontend/components/`: accessible application modal and smaller shared view components.
 - `frontend/composables/`: abort-controller lifecycle, page refresh registration, reactive time, and modal focus management.
 - `frontend/lib/api.js`: the only frontend `fetch` boundary, with consistent JSON/text errors and `AbortSignal` support.
@@ -175,6 +180,8 @@ Important files:
 - `package.json`: Vue, Vite, Tabler Core, Tabler Icons Webfont.
 
 Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock for running durations and relative times. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
+
+The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest quick result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
 
 Apache serves real public files directly and falls back all other non-API paths to `index.html`.
 

@@ -19,7 +19,7 @@ This repo currently uses a single container, not a split Compose stack.
 
 - `restart.sh` builds `fensoft/fenping:1.5`.
 - `restart.sh` runs one container named `fenping` with host networking.
-- `boot.sh` starts MariaDB, applies `db.sql`, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
+- `boot.sh` starts MariaDB, applies `db.sql`, backfills service-change notifications from retained scans, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
 - Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
 Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/dnsmasq containers unless the user explicitly asks for the split architecture again.
@@ -31,7 +31,7 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `boot.sh`: single-container service bootstrap.
 - `config.php`: committed generic PHP config that reads runtime values from environment variables.
 - `mariadb-fenping.cnf`: low-write MariaDB durability/logging policy; preserves InnoDB doublewrite protection.
-- `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `oui-refresh`, `oui-sync`, `backup`, `restore`, `discord-restart`.
+- `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `scan-port-backfill`, `oui-refresh`, `oui-sync`, `backup`, `restore`, `discord-restart`.
 - `api.php`: JSON API front controller.
 - `routes/`: route modules for auth, system, hosts/categories, scans, netboot.
 - `functions.php`: domain helpers for inventory, host CRUD, categories, history, notify, netboot.
@@ -39,11 +39,11 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 - `db.sql`: idempotent schema/migration SQL and `update_status`.
 - `ping.php`: ping scanner and status writer.
 - `hosts.php`: DHCP field validation, transactional dnsmasq candidate generation, and local reload/start logic.
-- `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history.
+- `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history, and effective port-change detection.
 - `oui.php`: local IEEE MA-L/MA-M/MA-S/IAB vendor index loading and atomic refresh.
 - `backup.php`: backup/restore implementation.
 - `frontend/App.vue`: Vue application shell and cross-page orchestration.
-- `frontend/router.js`, `frontend/pages/`: Vue Router configuration and route-level page components.
+- `frontend/router.js`, `frontend/pages/`: Vue Router configuration and route-level inventory, services, scans, notifications, host-detail, and netboot components.
 - `frontend/components/`, `frontend/composables/`, `frontend/lib/`: shared UI, lifecycle, API, and formatting modules.
 - `docs/ARCHITECTURE.md`: deeper project overview.
 
@@ -69,6 +69,7 @@ docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
 docker exec fenping php /opt/fenping/cli.php inventory --work
+docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]

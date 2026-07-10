@@ -43,7 +43,13 @@ function scanXmlHash(string $xml, string $ip = ''): string {
     'addresses' => $scan['addresses'] ?? array(),
     'hostnames' => $scan['hostnames'] ?? array(),
     'os' => $scan['os'] ?? array(),
-    'ports' => $scan['ports'] ?? array()
+    'ports' => array_map(fn($port) => array(
+      'protocol' => $port['protocol'] ?? '',
+      'port' => $port['port'] ?? '',
+      'state' => $port['state'] ?? '',
+      'service' => $port['service'] ?? '',
+      'details' => $port['details'] ?? ''
+    ), $scan['ports'] ?? array())
   );
   scanSortRecursive($signature);
   return hash('sha256', json_encode($signature, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
@@ -165,8 +171,39 @@ function scanParsePortBlock(string $block): array {
     'port' => $port['portid'] ?? '',
     'state' => $state['state'] ?? '',
     'service' => $service['name'] ?? '',
-    'details' => $details
+    'details' => $details,
+    'tunnel' => $service['tunnel'] ?? ''
   );
+}
+
+function scanParsePortScope(string $xml): array {
+  $scope = array();
+  $scanInfo = scanParseTags($xml, 'scaninfo', fn($attributes) => $attributes);
+
+  foreach ($scanInfo as $info) {
+    $protocol = strtolower(trim((string)($info['protocol'] ?? '')));
+    $services = trim((string)($info['services'] ?? ''));
+    if ($protocol === '' || $services === '')
+      continue;
+
+    foreach (explode(',', $services) as $item) {
+      $item = trim($item);
+      if ($item === '')
+        continue;
+      if (preg_match('/^(\d+)-(\d+)$/', $item, $matches)) {
+        $from = max(0, (int)$matches[1]);
+        $to = min(65535, (int)$matches[2]);
+      } elseif (ctype_digit($item)) {
+        $from = $to = min(65535, (int)$item);
+      } else {
+        continue;
+      }
+      if ($from <= $to)
+        $scope[$protocol][] = array($from, $to);
+    }
+  }
+
+  return $scope;
 }
 
 function scanParseTags(string $xml, string $tag, callable $map): array {
@@ -358,6 +395,7 @@ function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $du
       $snapshot = scanEnsureSnapshot($job, $xml, $xmlHash);
       $snapshotId = $snapshot['id'];
       $changed = $snapshot['changed'] ? 1 : 0;
+      scanRecordPortChanges($job, $xml);
     }
 
     $stmt = $database->prepare("
@@ -369,6 +407,7 @@ function scanMetadataComplete(int $id, string $status, int $portsCount, ?int $du
           ports_count=:ports_count,
           snapshot_id=:snapshot_id,
           result_changed=:result_changed,
+          port_changes_processed=1,
           error=NULL
       WHERE id=:id
     ");
@@ -443,6 +482,237 @@ function scanEnsureSnapshot(array $job, string $xml, string $hash): array {
     'id' => $snapshotId,
     'changed' => $previousRow === false || !hash_equals((string)$previousRow['result_hash'], $hash)
   );
+}
+
+function scanRecordPortChanges(array $job, string $xml, ?string $createdAt = null): int {
+  $previous = scanEffectivePortsBefore((string)$job['ip'], (int)$job['id']);
+  $currentScan = scanParsePortObservation($xml, (string)$job['ip']);
+  $current = scanApplyPortObservation($previous, $currentScan, (string)$job['mode']);
+  $changes = scanComparePorts($previous, $current);
+  if (count($changes) === 0)
+    return 0;
+
+  $insert = db()->prepare("
+    INSERT IGNORE INTO scan_port_changes (
+      scan_id, ip, mode, change_type, protocol, port,
+      previous_service, previous_version, current_service, current_version, created_at
+    ) VALUES (
+      :scan_id, :ip, :mode, :change_type, :protocol, :port,
+      :previous_service, :previous_version, :current_service, :current_version,
+      COALESCE(:created_at, CURRENT_TIMESTAMP)
+    )
+  ");
+  $inserted = 0;
+  foreach ($changes as $change) {
+    $insert->execute(array(
+      'scan_id' => $job['id'],
+      'ip' => $job['ip'],
+      'mode' => $job['mode'],
+      'change_type' => $change['change_type'],
+      'protocol' => $change['protocol'],
+      'port' => $change['port'],
+      'previous_service' => scanNullIfEmpty($change['previous_service']),
+      'previous_version' => scanNullIfEmpty($change['previous_version']),
+      'current_service' => scanNullIfEmpty($change['current_service']),
+      'current_version' => scanNullIfEmpty($change['current_version']),
+      'created_at' => $createdAt
+    ));
+    $inserted += $insert->rowCount();
+  }
+  return $inserted;
+}
+
+function scanPortChangesBackfill(): int {
+  $database = db();
+  $stmt = $database->query("
+    SELECT
+      s.id,
+      s.ip,
+      s.mode,
+      COALESCE(s.date_end, s.date_begin) AS change_date,
+      ss.xml
+    FROM scans s
+    INNER JOIN scan_snapshots ss ON ss.id=s.snapshot_id
+    WHERE s.state='complete'
+      AND s.port_changes_processed=0
+    ORDER BY s.id ASC
+  ");
+  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  if (count($rows) === 0) {
+    scanPrunePortChanges();
+    return 0;
+  }
+
+  $database->beginTransaction();
+  try {
+    $inserted = 0;
+    $mark = $database->prepare("UPDATE scans SET port_changes_processed=1 WHERE id=:id");
+    foreach ($rows as $row) {
+      $inserted += scanRecordPortChanges(
+        array('id' => (int)$row['id'], 'ip' => $row['ip'], 'mode' => $row['mode']),
+        (string)$row['xml'],
+        ($row['change_date'] ?? '') === '' ? null : (string)$row['change_date']
+      );
+      $mark->execute(array('id' => $row['id']));
+    }
+    $database->commit();
+    scanPrunePortChanges();
+    return $inserted;
+  } catch (Throwable $e) {
+    if ($database->inTransaction())
+      $database->rollBack();
+    throw $e;
+  }
+}
+
+function scanEffectivePortsBefore(string $ip, int $beforeId): array {
+  $deep = scanPreviousSnapshotXml($ip, 'deep', $beforeId);
+  $quick = scanPreviousSnapshotXml($ip, 'quick', $beforeId);
+  if ($deep === null && $quick === null)
+    return array();
+
+  if ($deep === null) {
+    $quickScan = scanParsePortObservation($quick['xml'], $ip);
+    return scanOpenPortMap($quickScan);
+  }
+
+  $deepScan = scanParsePortObservation($deep['xml'], $ip);
+  $ports = scanOpenPortMap($deepScan);
+  if ($quick !== null && $quick['id'] > $deep['id']) {
+    $quickScan = scanParsePortObservation($quick['xml'], $ip);
+    $ports = scanApplyPortObservation($ports, $quickScan, 'quick');
+  }
+
+  return $ports;
+}
+
+function scanParsePortObservation(string $xml, string $ip): array {
+  $scan = scanParseXml($xml, array('ip' => $ip));
+  $scan['port_scope'] = scanParsePortScope($xml);
+  return $scan;
+}
+
+function scanPreviousSnapshotXml(string $ip, string $mode, int $beforeId): ?array {
+  $stmt = db()->prepare("
+    SELECT s.id, ss.xml
+    FROM scans s
+    INNER JOIN scan_snapshots ss ON ss.id=s.snapshot_id
+    WHERE s.ip=:ip
+      AND s.mode=:mode
+      AND s.id<:before_id
+      AND s.state='complete'
+    ORDER BY s.id DESC
+    LIMIT 1
+  ");
+  $stmt->execute(array('ip' => $ip, 'mode' => $mode, 'before_id' => $beforeId));
+  $row = $stmt->fetch(PDO::FETCH_ASSOC);
+  if ($row === false)
+    return null;
+  return array('id' => (int)$row['id'], 'xml' => (string)$row['xml']);
+}
+
+function scanOpenPortMap(array $scan): array {
+  $ports = array();
+  foreach ($scan['ports'] ?? array() as $port) {
+    if (strtolower((string)($port['state'] ?? '')) !== 'open')
+      continue;
+    $key = scanPortKey($port);
+    if ($key !== null)
+      $ports[$key] = $port;
+  }
+  return $ports;
+}
+
+function scanApplyPortObservation(array $base, array $scan, string $mode): array {
+  $scope = $scan['port_scope'] ?? array();
+  if (count($scope) === 0 && $mode === 'deep')
+    $scope = array('tcp' => array(array(1, 65535)));
+  $known = $base;
+
+  foreach ($base as $key => $port) {
+    if (scanPortIsInScope($port, $scope))
+      unset($base[$key]);
+  }
+
+  foreach (scanOpenPortMap($scan) as $key => $observed)
+    $base[$key] = scanMergePortKnowledge($known[$key] ?? null, $observed);
+  ksort($base);
+  return $base;
+}
+
+function scanPortIsInScope(array $port, array $scope): bool {
+  $protocol = strtolower((string)($port['protocol'] ?? ''));
+  $number = (int)($port['port'] ?? 0);
+  foreach ($scope[$protocol] ?? array() as $range) {
+    if ($number >= $range[0] && $number <= $range[1])
+      return true;
+  }
+  return false;
+}
+
+function scanPortKey(array $port): ?string {
+  $protocol = strtolower(trim((string)($port['protocol'] ?? '')));
+  $number = (int)($port['port'] ?? 0);
+  if ($protocol === '' || $number < 1 || $number > 65535)
+    return null;
+  return $protocol . '|' . $number;
+}
+
+function scanMergePortKnowledge(?array $known, array $observed): array {
+  if ($known === null)
+    return $observed;
+  if (trim((string)($observed['service'] ?? '')) === '')
+    $observed['service'] = $known['service'] ?? '';
+  if (trim((string)($observed['details'] ?? '')) === '')
+    $observed['details'] = $known['details'] ?? '';
+  if (trim((string)($observed['tunnel'] ?? '')) === '')
+    $observed['tunnel'] = $known['tunnel'] ?? '';
+  return $observed;
+}
+
+function scanComparePorts(array $previous, array $current): array {
+  $changes = array();
+  foreach (array_unique(array_merge(array_keys($previous), array_keys($current))) as $key) {
+    $before = $previous[$key] ?? null;
+    $after = $current[$key] ?? null;
+    if ($before === null) {
+      $changes[] = scanPortChange('appeared', null, $after);
+    } elseif ($after === null) {
+      $changes[] = scanPortChange('disappeared', $before, null);
+    } elseif (scanPortVersionChanged($before, $after)) {
+      $changes[] = scanPortChange('changed', $before, $after);
+    }
+  }
+  return $changes;
+}
+
+function scanPortVersionChanged(array $before, array $after): bool {
+  $beforeService = trim((string)($before['service'] ?? ''));
+  $afterService = trim((string)($after['service'] ?? ''));
+  if ($beforeService !== '' && $afterService !== '' && $beforeService !== $afterService)
+    return true;
+
+  $beforeVersion = trim((string)($before['details'] ?? ''));
+  $afterVersion = trim((string)($after['details'] ?? ''));
+  return $beforeVersion !== '' && $afterVersion !== '' && $beforeVersion !== $afterVersion;
+}
+
+function scanPortChange(string $type, ?array $before, ?array $after): array {
+  $port = $after ?? $before ?? array();
+  return array(
+    'change_type' => $type,
+    'protocol' => strtolower((string)($port['protocol'] ?? '')),
+    'port' => (int)($port['port'] ?? 0),
+    'previous_service' => (string)($before['service'] ?? ''),
+    'previous_version' => (string)($before['details'] ?? ''),
+    'current_service' => (string)($after['service'] ?? ''),
+    'current_version' => (string)($after['details'] ?? '')
+  );
+}
+
+function scanNullIfEmpty(string $value): ?string {
+  $value = trim($value);
+  return $value === '' ? null : $value;
 }
 
 function scanMetadataFailed(int $id, string $error): void {
@@ -563,11 +833,7 @@ function scanMergeQuickWithDeep(array $quick, array $deep, array $deepMetadata):
     $quick['hostnames'] ?? array(),
     fn($item) => ($item['type'] ?? '') . '|' . ($item['name'] ?? '')
   );
-  $merged['ports'] = scanMergeResultItems(
-    $deep['ports'] ?? array(),
-    $quick['ports'] ?? array(),
-    fn($item) => ($item['protocol'] ?? '') . '|' . ($item['port'] ?? '')
-  );
+  $merged['ports'] = scanMergePorts($deep['ports'] ?? array(), $quick['ports'] ?? array());
   usort($merged['ports'], function ($left, $right) {
     $portOrder = (int)($left['port'] ?? 0) <=> (int)($right['port'] ?? 0);
     return $portOrder !== 0 ? $portOrder : strcmp((string)($left['protocol'] ?? ''), (string)($right['protocol'] ?? ''));
@@ -589,6 +855,19 @@ function scanMergeResultItems(array $base, array $overlay, callable $key): array
     $items[$key($item)] = $item;
   foreach (scanMarkResultSource($overlay, 'quick') as $item)
     $items[$key($item)] = $item;
+  return array_values($items);
+}
+
+function scanMergePorts(array $deep, array $quick): array {
+  $items = array();
+  foreach (scanMarkResultSource($deep, 'deep') as $item) {
+    $key = ($item['protocol'] ?? '') . '|' . ($item['port'] ?? '');
+    $items[$key] = $item;
+  }
+  foreach (scanMarkResultSource($quick, 'quick') as $item) {
+    $key = ($item['protocol'] ?? '') . '|' . ($item['port'] ?? '');
+    $items[$key] = scanMergePortKnowledge($items[$key] ?? null, $item);
+  }
   return array_values($items);
 }
 
@@ -732,6 +1011,64 @@ function scanMetadataLatestByIp(): array {
   return $scans;
 }
 
+function scanMetadataLatestUsableByIp(): array {
+  $stmt = db()->query("
+    SELECT
+      s.id,
+      s.ip,
+      s.mode,
+      s.state,
+      s.status,
+      s.date_begin,
+      s.date_end,
+      s.duration,
+      s.ports_count,
+      s.snapshot_id,
+      s.result_changed,
+      s.error,
+      i.id AS host_id,
+      COALESCE(NULLIF(i.name, ''), NULLIF((
+        SELECT l.`client-hostname`
+        FROM leases l
+        WHERE l.ip=s.ip
+        ORDER BY l.active DESC, l.last_seen DESC
+        LIMIT 1
+      ), ''), '') AS name,
+      COALESCE(NULLIF(i.mac, ''), NULLIF((
+        SELECT known.mac
+        FROM stats known
+        WHERE known.ip=s.ip AND known.mac IS NOT NULL AND known.mac<>''
+        ORDER BY known.id DESC
+        LIMIT 1
+      ), ''), NULLIF((
+        SELECT l.`hardware-ethernet`
+        FROM leases l
+        WHERE l.ip=s.ip
+        ORDER BY l.active DESC, l.last_seen DESC
+        LIMIT 1
+      ), ''), '') AS mac
+    FROM scans s
+    INNER JOIN (
+      SELECT ip, MAX(id) AS id
+      FROM scans
+      WHERE state='complete' AND snapshot_id IS NOT NULL
+      GROUP BY ip
+    ) latest ON latest.id=s.id
+    LEFT JOIN ips i ON i.ip=s.ip
+    ORDER BY INET_ATON(s.ip), s.ip
+  ");
+
+  $results = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $metadata = scanNormalizeMetadata($row);
+    $metadata['host_id'] = $row['host_id'] === null ? null : (int)$row['host_id'];
+    $metadata['name'] = (string)($row['name'] ?? '');
+    $metadata['mac'] = strtolower((string)($row['mac'] ?? ''));
+    $results[] = $metadata;
+  }
+  return $results;
+}
+
 function scanNormalizeMetadata(array $metadata): array {
   $metadata['id'] = isset($metadata['id']) ? (int)$metadata['id'] : null;
   $metadata['duration'] = isset($metadata['duration']) && $metadata['duration'] !== null ? (int)$metadata['duration'] : null;
@@ -749,6 +1086,12 @@ function scanNormalizeMetadata(array $metadata): array {
 function scanPruneHistory(string $ip): void {
   scanPruneOldHistory($ip);
   scanPruneOrphanSnapshots();
+  scanPrunePortChanges();
+}
+
+function scanPrunePortChanges(): void {
+  $days = SCAN_HISTORY_DAYS;
+  db()->exec("DELETE FROM scan_port_changes WHERE created_at < DATE_SUB(NOW(), INTERVAL $days DAY)");
 }
 
 function scanPruneOldHistory(string $ip): void {

@@ -337,6 +337,55 @@ function get_history_response($ip) {
   );
 }
 
+function get_port_notify($hours = 24) {
+  $hours = max(1, min(168, (int)$hours));
+  $stmt = getDb()->prepare("
+    SELECT
+      c.id,
+      c.scan_id,
+      c.ip,
+      c.mode,
+      c.change_type,
+      c.protocol,
+      c.port,
+      c.previous_service,
+      c.previous_version,
+      c.current_service,
+      c.current_version,
+      c.created_at,
+      UNIX_TIMESTAMP(c.created_at) AS created,
+      COALESCE(NULLIF((
+        SELECT i.mac FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1
+      ), ''), NULLIF((
+        SELECT s.mac FROM stats s WHERE s.ip=c.ip AND s.mac IS NOT NULL AND s.mac<>'' ORDER BY s.id DESC LIMIT 1
+      ), ''), '') AS mac,
+      COALESCE(NULLIF((
+        SELECT i.name FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1
+      ), ''), NULLIF((
+        SELECT l.`client-hostname` FROM leases l WHERE l.ip=c.ip ORDER BY l.active DESC, l.last_seen DESC LIMIT 1
+      ), ''), '') AS name,
+      COALESCE((
+        SELECT i.important FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1
+      ), 0) AS important
+    FROM scan_port_changes c
+    WHERE c.created_at >= DATE_SUB(NOW(), INTERVAL $hours HOUR)
+    ORDER BY c.created_at DESC, c.id DESC
+  ");
+  $stmt->execute();
+
+  $changes = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $row['id'] = (int)$row['id'];
+    $row['scan_id'] = (int)$row['scan_id'];
+    $row['port'] = (int)$row['port'];
+    $row['created'] = (int)$row['created'];
+    $row['important'] = (int)$row['important'];
+    $row['vendor'] = getVendor((string)($row['mac'] ?? ''));
+    $changes[] = $row;
+  }
+  return $changes;
+}
+
 function get_notify($hours = 24) {
   global $network;
   $hours = max(1, min(168, (int)$hours));
@@ -420,16 +469,30 @@ function get_notify($hours = 24) {
     $changes[] = $row;
   }
 
+  $portChanges = get_port_notify($hours);
+  $portChangeCounts = array();
+  foreach ($portChanges as $change) {
+    $type = (string)($change['change_type'] ?? '');
+    $portChangeCounts[$type] = ($portChangeCounts[$type] ?? 0) + 1;
+    $ip = (string)($change['ip'] ?? '');
+    if ($ip !== '')
+      $hosts[$ip] = true;
+  }
+
   return array(
     "network" => $network,
     "since" => date("Y-m-d H:i:s", time() - $hours * 60 * 60),
     "hours" => $hours,
     "summary" => array(
-      "total" => count($changes),
+      "total" => count($changes) + count($portChanges),
+      "status_total" => count($changes),
+      "port_total" => count($portChanges),
       "hosts" => count($hosts),
-      "status_counts" => $statusCounts
+      "status_counts" => $statusCounts,
+      "port_change_counts" => $portChangeCounts
     ),
-    "changes" => $changes
+    "changes" => $changes,
+    "port_changes" => $portChanges
   );
 }
 

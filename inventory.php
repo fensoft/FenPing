@@ -250,6 +250,8 @@ function inventoryScan(string $ip, bool $quick = false, ?int $scanId = null): ar
       $saved ? $xml : null,
       $saved ? $xmlHash : null
     );
+    if ($saved && function_exists('sendDiscordPortChangesForScan'))
+      sendDiscordPortChangesForScan($scanId);
     scanPruneHistory($ip);
     return array(
       'saved' => $saved,

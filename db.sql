@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS `scans` (
   `ports_count` int(11) unsigned NOT NULL DEFAULT '0',
   `snapshot_id` int(11) unsigned DEFAULT NULL,
   `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0,
+  `port_changes_processed` tinyint(1) unsigned NOT NULL DEFAULT 0,
   `error` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `scans_ip_date` (`ip`, `date_begin`),
@@ -153,6 +154,25 @@ CREATE TABLE IF NOT EXISTS `scan_snapshots` (
   UNIQUE KEY `scan_snapshots_result` (`ip`, `mode`, `result_hash`),
   KEY `scan_snapshots_ip_mode_id` (`ip`, `mode`, `id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
+
+CREATE TABLE IF NOT EXISTS `scan_port_changes` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `scan_id` int(11) unsigned NOT NULL,
+  `ip` varchar(50) NOT NULL,
+  `mode` varchar(20) NOT NULL,
+  `change_type` varchar(20) NOT NULL,
+  `protocol` varchar(10) NOT NULL,
+  `port` int(11) unsigned NOT NULL,
+  `previous_service` varchar(255) DEFAULT NULL,
+  `previous_version` text DEFAULT NULL,
+  `current_service` varchar(255) DEFAULT NULL,
+  `current_version` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_port_changes_scan_port` (`scan_id`, `protocol`, `port`),
+  KEY `scan_port_changes_created` (`created_at`),
+  KEY `scan_port_changes_ip_created` (`ip`, `created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `users` (
   `login` varchar(50) DEFAULT NULL,
@@ -188,9 +208,12 @@ ALTER TABLE `ips` ADD COLUMN IF NOT EXISTS `netboot_image_id` int(10) unsigned D
 CREATE INDEX IF NOT EXISTS `ips_netboot_image_id` ON `ips` (`netboot_image_id`);
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `snapshot_id` int(11) unsigned DEFAULT NULL AFTER `ports_count`;
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0 AFTER `snapshot_id`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `port_changes_processed` tinyint(1) unsigned NOT NULL DEFAULT 0 AFTER `result_changed`;
 CREATE INDEX IF NOT EXISTS `scans_ip_id` ON `scans` (`ip`, `id`);
 CREATE INDEX IF NOT EXISTS `scans_snapshot_id` ON `scans` (`snapshot_id`);
 CREATE INDEX IF NOT EXISTS `scans_queue` ON `scans` (`state`, `mode`, `id`);
+CREATE INDEX IF NOT EXISTS `scan_port_changes_created` ON `scan_port_changes` (`created_at`);
+CREATE INDEX IF NOT EXISTS `scan_port_changes_ip_created` ON `scan_port_changes` (`ip`, `created_at`);
 DROP INDEX IF EXISTS `scans_ip_xml_hash_id` ON `scans`;
 ALTER TABLE `scans` DROP COLUMN IF EXISTS `xml_hash`;
 ALTER TABLE `scans` DROP COLUMN IF EXISTS `xml`;

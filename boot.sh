@@ -48,6 +48,7 @@ export PASSWORD
 export SECRET
 export DISCORD_WEBHOOK_URL
 export FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
+php /opt/fenping/cli.php scan-port-backfill
 php /opt/fenping/cli.php oui-sync
 mkdir -p /etc/dnsmasq.d
 DNSMASQ_RENDERED=/run/fenping/dnsmasq.conf

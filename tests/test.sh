@@ -33,6 +33,7 @@ PUBLIC_GET_ROUTES=(
   /api/auth/session
   /api/inventory
   /api/notify
+  /api/services
   /api/netboot/images
 )
 

@@ -7,6 +7,7 @@
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: isInventoryRoute }" type="button" title="Inventory" @click="go('/')"><i class="ti ti-list-details"></i></button>
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.notify }" type="button" title="Notify" @click="go('/notify')"><i class="ti ti-bell"></i></button>
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" @click="go('/scans')"><i class="ti ti-radar"></i></button>
+          <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.services }" type="button" title="Services" @click="go('/services')"><i class="ti ti-world-www"></i></button>
           <button class="btn btn-outline-secondary icon-btn" :class="{ active: route.name === routeNames.netboot }" type="button" title="Netboot images" @click="go('/netboot-images')"><i class="ti ti-server"></i></button>
           <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span>
           <button class="btn btn-outline-primary auth-button" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><i :class="isAuthenticated ? 'ti ti-logout' : 'ti ti-login'"></i><span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span></button>
