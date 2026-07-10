@@ -9,26 +9,29 @@ FenPing is a LAN appliance for inventory, DHCP/DNS management, ping status histo
 Main stack:
 - PHP API and CLI with a hand-written front controller in `api.php`.
 - Static Vue 3 + Vite frontend styled with Tabler.
-- One Docker container running Apache/PHP, MariaDB, dnsmasq, cron, nmap, ping, ARP/arping tools.
+- A host-networked application container running Apache/PHP, dnsmasq, cron, nmap, ping, and ARP/arping tools.
+- A separate MariaDB 11.8 container managed by Docker Compose.
 - MariaDB stores app data.
 - dnsmasq provides DHCP, DNS, TFTP, and leases.
 
 ## Runtime Shape
 
-This repo currently uses a single container, not a split Compose stack.
+This repo uses Docker Compose with an application service and a database service.
 
-- `restart.sh` builds `fensoft/fenping:1.5`.
-- `restart.sh` runs one container named `fenping` with host networking.
-- `boot.sh` starts MariaDB, applies `db.sql`, backfills service-change notifications from retained scans, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
+- `restart.sh` builds and starts the Compose project.
+- `fenping` uses host networking for DHCP/DNS/TFTP and the web UI.
+- `fenping-db` uses the official `mariadb:11.8` image, has networking disabled, shares only its Unix socket with the app, and owns `data/db`.
+- `boot.sh` waits for MariaDB, applies `db.sql`, backfills service-change notifications from retained scans, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
 - Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
-Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/dnsmasq containers unless the user explicitly asks for the split architecture again.
+Do not fold MariaDB back into the application image or split dnsmasq into another container unless the user explicitly asks.
 
 ## Important Files
 
-- `Dockerfile`: multi-stage build; Vite frontend first, then Ubuntu runtime with Apache/PHP/MariaDB/dnsmasq/cron.
-- `restart.sh`: builds and starts the single host-networked container.
-- `boot.sh`: single-container service bootstrap.
+- `docker-compose.yml`: application and MariaDB services, mounts, capabilities, health checks, and logging limits.
+- `Dockerfile`: multi-stage build; Vite frontend first, then Ubuntu application runtime with Apache/PHP/dnsmasq/cron, networking tools, and the MariaDB client. Keep direct runtime dependencies explicit instead of relying on MariaDB server transitive packages.
+- `restart.sh`: validates, builds, and starts the Compose project.
+- `boot.sh`: application-service bootstrap and database schema application.
 - `config.php`: committed generic PHP config that reads runtime values from environment variables.
 - `mariadb-fenping.cnf`: low-write MariaDB durability/logging policy; preserves InnoDB doublewrite protection.
 - `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `scan-port-backfill`, `oui-refresh`, `oui-sync`, `backup`, `restore`, `discord-restart`.
@@ -52,7 +55,7 @@ Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/d
 
 Do not casually delete or rewrite files under `data/`.
 
-- `data/db` -> `/var/lib/mysql`
+- `data/db` -> `fenping-db:/var/lib/mysql`
 - `data/dnsmasq` -> `/var/lib/misc`
 - `data/dnsmasq.d` -> `/etc/dnsmasq.d`
 - `data/netboot` -> `/var/lib/fenping/netboot`
@@ -63,7 +66,7 @@ Apache's document root is `/var/www/public`. Application code lives in `/opt/fen
 
 ## CLI
 
-Run commands through the single container:
+Run application commands through the `fenping` container:
 
 ```bash
 docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
@@ -96,6 +99,7 @@ Use the applicable subset:
 
 ```bash
 bash -n boot.sh restart.sh tests/test.sh
+docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
 npm run build
@@ -113,6 +117,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - `data/` is live state.
 - Keep `db.sql` idempotent.
 - The MariaDB five-second flush window is an intentional SSD-endurance tradeoff. Do not disable InnoDB doublewrite protection.
+- MariaDB networking must remain disabled; the app connects through the shared `/run/mysqld` Unix socket and SQL must not be exposed to the host or LAN.
 - `/tmp` and `/run` are tmpfs; persistent state must remain under the documented bind mounts.
 - API-triggered sudo calls expect `/usr/bin/php` in Dockerfile sudoers.
 - Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.

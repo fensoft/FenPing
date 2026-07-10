@@ -6,8 +6,6 @@ if [ -z "${IFACE:-}" ]; then
   exit 1
 fi
 echo "host networking enabled on $IFACE; leaving host routes, addresses and iptables unchanged"
-mkdir -p /var/run/mysqld
-chown mysql:mysql /var/run/mysqld
 cd /opt/fenping
 mkdir -p /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
 chown www-data:www-data /var/lib/fenping/netboot
@@ -16,32 +14,32 @@ install -d -o www-data -g www-data -m 0700 /run/fenping/sessions
 install -d -o root -g root -m 0755 /run/lock/apache2
 install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock
 cmp -s /.netboot-htaccess /var/lib/fenping/netboot/.htaccess || install -o root -g root -m 0644 /.netboot-htaccess /var/lib/fenping/netboot/.htaccess
-mkdir -p /var/lib/mysql
-chown mysql:mysql /var/lib/mysql
-MYSQL_AUTH="-proot"
-if [ ! -d /var/lib/mysql/mysql ]; then
-  echo "initializing MariaDB data directory"
-  mariadb-install-db --user=mysql --datadir=/var/lib/mysql --auth-root-authentication-method=normal
-  MYSQL_AUTH=""
-fi
-MYSQLD=`command -v mariadbd || command -v mysqld`
 MYSQL=`command -v mariadb || command -v mysql`
 MYSQLADMIN=`command -v mariadb-admin || command -v mysqladmin`
-sudo -u mysql $MYSQLD --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock&
-for i in `seq 30`; do
-  $MYSQLADMIN --socket=/var/run/mysqld/mysqld.sock -uroot $MYSQL_AUTH ping > /dev/null 2>&1 && break
-  sleep 1
-done
-MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot $MYSQL_AUTH"
-$MYSQL_ROOT -e "CREATE DATABASE IF NOT EXISTS ping; ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; FLUSH PRIVILEGES;"
-MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot"
-$MYSQL_ROOT ping < db.sql
-export IP=${IP:-`ip -4 a show dev $IFACE | awk '/inet/ {print $2}' | head -n1 | sed "s#/.*##"`}
 export DB_HOST=${DB_HOST:-localhost}
 export DB_PORT=${DB_PORT:-3306}
 export DB_USER=${DB_USER:-root}
 export DB_PASS=${DB_PASS:-root}
 export DB_NAME=${DB_NAME:-ping}
+if [ "$DB_HOST" = "localhost" ] && [ -S /run/mysqld/mysqld.sock ]; then
+  MYSQL_CONNECTION=(--protocol=SOCKET --socket=/run/mysqld/mysqld.sock)
+else
+  MYSQL_CONNECTION=(--protocol=TCP --host="$DB_HOST" --port="$DB_PORT")
+fi
+DB_READY=0
+for i in `seq 60`; do
+  if MYSQL_PWD="$DB_PASS" $MYSQLADMIN "${MYSQL_CONNECTION[@]}" --user="$DB_USER" ping > /dev/null 2>&1; then
+    DB_READY=1
+    break
+  fi
+  sleep 1
+done
+if [ "$DB_READY" -ne 1 ]; then
+  echo "fatal: MariaDB connection did not become ready" >&2
+  exit 1
+fi
+MYSQL_PWD="$DB_PASS" $MYSQL "${MYSQL_CONNECTION[@]}" --user="$DB_USER" "$DB_NAME" < db.sql
+export IP=${IP:-`ip -4 a show dev $IFACE | awk '/inet/ {print $2}' | head -n1 | sed "s#/.*##"`}
 export NETWORK
 export IFACE
 export PASSWORD

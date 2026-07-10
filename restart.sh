@@ -1,52 +1,28 @@
 #!/bin/bash
-VERSION=1.5
 set -e
-export DOCKER_BUILDKIT=1
+
 if [ ! -f .env ]; then
   echo ".env not found; copy env.template to .env and edit it first" >&2
   exit 1
 fi
-mkdir -p `pwd`/data/db
-mkdir -p `pwd`/data/dnsmasq
-mkdir -p `pwd`/data/dnsmasq.d
-mkdir -p `pwd`/data/netboot
-mkdir -p `pwd`/data/backups
-mkdir -p `pwd`/data/state
-DOCKER_BUILDKIT=1 docker build --network=host -t fensoft/fenping:$VERSION .
-. .env
-docker stop fenping || true
-docker rm fenping || true
-if [ "$DEV" ]; then
-  EXTRA="-v `pwd`:/opt/fenping"
+
+for dir in db dnsmasq dnsmasq.d netboot backups state; do
+  mkdir -p "$(pwd)/data/$dir"
+done
+
+docker compose config --quiet
+DOCKER_BUILDKIT=1 docker compose build
+
+# Stop the legacy embedded database cleanly before the first split-container
+# upgrade. On later runs the Compose-managed app has no local database server.
+if docker inspect fenping >/dev/null 2>&1; then
+  COMPOSE_SERVICE=`docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' fenping 2>/dev/null || true`
+  if [ -z "$COMPOSE_SERVICE" ]; then
+    docker exec fenping mariadb-admin --socket=/var/run/mysqld/mysqld.sock --user=root --password=root shutdown >/dev/null 2>&1 || true
+  fi
+  docker stop --time 30 fenping >/dev/null 2>&1 || true
+  docker rm fenping >/dev/null 2>&1 || true
 fi
-docker run -d \
-  --name fenping \
-  --cap-drop ALL \
-  --cap-add AUDIT_WRITE \
-  --cap-add CHOWN \
-  --cap-add DAC_OVERRIDE \
-  --cap-add FOWNER \
-  --cap-add SETGID \
-  --cap-add SETUID \
-  --cap-add NET_ADMIN \
-  --cap-add NET_BIND_SERVICE \
-  --cap-add NET_BROADCAST \
-  --cap-add NET_RAW \
-  --env-file .env \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
-  --tmpfs /run:rw,nosuid,nodev,size=64m,mode=0755 \
-  --log-driver local \
-  --log-opt max-size=5m \
-  --log-opt max-file=2 \
-  -v `pwd`/data/dnsmasq:/var/lib/misc \
-  -v `pwd`/data/dnsmasq.d:/etc/dnsmasq.d \
-  -v `pwd`/data/netboot:/var/lib/fenping/netboot \
-  -v `pwd`/data/backups:/var/lib/fenping/backups \
-  -v `pwd`/data/state:/var/lib/fenping/state \
-  -v `pwd`/data/db:/var/lib/mysql \
-  $EXTRA \
-  --network host \
-  --restart unless-stopped \
-  -h fenping \
-  fensoft/fenping:$VERSION
-docker ps --filter name=fenping
+
+docker compose up -d --remove-orphans
+docker compose ps

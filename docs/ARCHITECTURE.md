@@ -2,27 +2,32 @@
 
 FenPing is a small LAN appliance that combines host inventory, DHCP/DNS management, ping history, nmap scan history, notifications, backup/restore, and netboot image selection in one web UI.
 
-The current runtime is one host-networked Docker container named `fenping`. The container runs Apache/PHP, MariaDB, dnsmasq, cron, and scanner tools together. This is intentionally not the split Compose architecture.
+The runtime is managed by Docker Compose. The host-networked `fenping` container runs Apache/PHP, dnsmasq, cron, and scanner tools. The separate `fenping-db` container uses the official MariaDB 11.8 image and owns the persistent SQL data.
 
 ## High-Level Flow
 
 1. `restart.sh` creates persistent directories under `data/`.
-2. `restart.sh` builds `fensoft/fenping:1.5`.
-3. `restart.sh` removes the old `fenping` container if present, then starts one `fenping` container with host networking and reduced capabilities.
-4. `boot.sh` starts MariaDB, initializes the DB if needed, and applies `db.sql`.
-5. `boot.sh` verifies the local IEEE vendor registry in MariaDB and imports it only when changed, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
-6. Apache serves the static Vue app from `/var/www/public` and rewrites `/api/...` to the public `api.php` entrypoint, which loads private application code from `/opt/fenping`.
+2. `restart.sh` validates the Compose model and builds `fensoft/fenping:1.5`.
+3. Compose starts the network-disabled `fenping-db`, mounting `data/db`, the shared SQL socket, and the low-write MariaDB configuration. The official entrypoint upgrades a reused MariaDB data directory when needed, then Compose waits for its authenticated health check.
+4. Compose starts `fenping` with host networking, reduced capabilities, and the remaining persistent mounts.
+5. `boot.sh` waits for MariaDB over loopback and applies `db.sql`.
+6. `boot.sh` verifies the local IEEE vendor registry in MariaDB and imports it only when changed, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
+7. Apache serves the static Vue app from `/var/www/public` and rewrites `/api/...` to the public `api.php` entrypoint, which loads private application code from `/opt/fenping`.
 
 ## Docker Build
 
 `Dockerfile` has two stages:
 
 - `frontend`: uses `ubuntu:26.04` with Node/npm to run `npm ci` and `npm run build`.
-- runtime: uses `ubuntu:26.04`, installs Apache, PHP, MariaDB server/client, dnsmasq, cron, nmap, ping/arping tools, sudo, and iptables.
+- runtime: uses `ubuntu:26.04` and installs Apache, PHP, the MariaDB client, dnsmasq, cron, nmap, ping/arping tools, sudo, and iptables.
 
-The runtime image contains the full app and all services needed by FenPing.
+The application image no longer contains a MariaDB server. Compose uses the smaller purpose-built `mariadb:11.8` image for SQL.
 
 `config.php` is committed as a generic, environment-driven config file. Runtime values should come from `.env`/container environment variables; do not hardcode machine-specific secrets in `config.php`.
+
+For compatibility with the former embedded database, the default application login remains `root`. `DB_PASS` initializes the root password only when `data/db` is empty; an existing data directory keeps its stored credentials, so changing `.env` alone does not rotate that password.
+
+MariaDB has no container network. The app and database share the named `db-socket` volume mounted at `/run/mysqld`, so SQL stays inaccessible over both the LAN and host loopback.
 
 ## Persistent Data
 
@@ -30,7 +35,7 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 
 | Host path | Container path | Purpose |
 | --- | --- | --- |
-| `data/db` | `/var/lib/mysql` | MariaDB data directory |
+| `data/db` | `fenping-db:/var/lib/mysql` | MariaDB data directory |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | generated dnsmasq config |
 | `data/netboot` | `/var/lib/fenping/netboot` | uploaded netboot files |
@@ -45,7 +50,7 @@ Avoid destructive edits in `data/` unless explicitly requested.
 
 `mariadb-fenping.cnf` uses `innodb_flush_log_at_trx_commit=2` and a five-second `innodb_flush_log_at_timeout`. This groups durable redo flushes, with the explicit tradeoff that an operating-system crash or power loss can discard approximately five seconds of recent transactions. InnoDB doublewrite remains enabled for torn-page protection, binary/general/slow logging is disabled, and buffer-pool state is not dumped on shutdown.
 
-`restart.sh` mounts `/tmp` and `/run` as size-limited tmpfs filesystems. MariaDB's temporary tablespace, scan output, locks, PHP sessions, and lease-import staging therefore avoid disk writes. Login sessions are cleared on container restart. Apache discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP lease history is retained, while `dnsmasq.leases.php` upserts observed rows instead of rebuilding the table. Generated dnsmasq files use content comparison to avoid identical replacements.
+Compose mounts size-limited tmpfs filesystems for both services. MariaDB's temporary tablespace, scan output, locks, PHP sessions, and lease-import staging therefore avoid persistent writes. Login sessions are cleared on app-container restart. Apache discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP lease history is retained, while `dnsmasq.leases.php` upserts observed rows instead of rebuilding the table. Generated dnsmasq files use content comparison to avoid identical replacements.
 
 Stable ping records update their activity timestamp at most once per day; actual status, IP, or MAC changes are still written immediately. The boot-time IEEE sync hashes both registries and skips the 57,000-row transaction when SQL is already current. Backups, netboot uploads, DHCP leases, changed scan results, and actual application mutations remain persistent by design.
 
@@ -244,6 +249,7 @@ Typical checks:
 
 ```bash
 bash -n boot.sh restart.sh tests/test.sh
+docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php

@@ -2,7 +2,7 @@
 
 FenPing is a compact LAN appliance for device discovery, uptime history, DHCP/DNS host management, nmap scan history, notifications, backups, and netboot image assignment.
 
-It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, MariaDB, dnsmasq, cron, nmap, ping, ARP, and arping. The default runtime is one Docker container.
+It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, MariaDB, dnsmasq, cron, nmap, ping, ARP, and arping. Docker Compose runs the appliance and database as separate containers.
 
 ## Features
 
@@ -46,17 +46,12 @@ It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, Maria
 
 ## Runtime Layout
 
-FenPing currently runs as one host-networked container named `fenping`.
+FenPing runs through Docker Compose with two containers:
 
-Inside that container:
+- `fenping` uses host networking and runs Apache/PHP, dnsmasq, cron, nmap, ping/ARP tools, and the application CLI.
+- `fenping-db` runs the official MariaDB 11.8 image and owns `data/db`.
 
-- Apache serves the static Vue app and routes `/api/...` to PHP.
-- MariaDB stores inventory, ping, stats, scan jobs/snapshots, category, auth, and netboot metadata.
-- dnsmasq serves DHCP, DNS, leases, and TFTP/netboot settings.
-- cron runs ping scans, inventory scans, and lease imports.
-- PHP CLI commands handle host generation, scanning, backup/restore, and notifications.
-
-This intentionally is not a split Compose deployment.
+MariaDB has networking disabled. The app connects through a shared Unix socket, preserving compatibility with the existing `root@localhost` account without exposing an SQL port. Compose waits for an authenticated database health check before starting the app, and `boot.sh` applies the idempotent schema before Apache starts.
 
 ## Install
 
@@ -88,6 +83,10 @@ Important `.env` values:
 | --- | --- |
 | `IP` | FenPing LAN address. |
 | `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
+| `DB_PORT` | TCP port used only when connecting to an external database instead of the Compose Unix socket. Defaults to `3306`. |
+| `DB_USER` | MariaDB application login. Defaults to `root` for compatibility with existing installations. |
+| `DB_PASS` | MariaDB login password and initial root password for a new data directory. Keep it equal to the existing root password when reusing `data/db`; changing this value alone does not rotate an initialized database password. |
+| `DB_NAME` | Application database. Defaults to `ping`. |
 | `NETWORK` | `/24` prefix, for example `10.10.10`. |
 | `DHCP_DEFAULT_ROUTER` | Router handed out by DHCP. |
 | `DHCP_DYNAMIC_BEGIN` | First dynamic DHCP address, last octet only. |
@@ -104,7 +103,7 @@ Do not delete `data/` casually. It is the appliance state.
 
 | Host path | Container path | Purpose |
 | --- | --- | --- |
-| `data/db` | `/var/lib/mysql` | MariaDB data. |
+| `data/db` | `fenping-db:/var/lib/mysql` | MariaDB data. |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases. |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | Generated dnsmasq config files. |
 | `data/netboot` | `/var/lib/fenping/netboot` | Uploaded netboot files. |
@@ -117,7 +116,7 @@ Apache serves only `/var/www/public`, which contains the built frontend and the 
 
 FenPing groups MariaDB redo-log flushes into five-second intervals while retaining InnoDB's doublewrite protection. A host power loss or operating-system crash can therefore lose up to approximately five seconds of recent database changes; a MariaDB process crash remains recoverable from the operating-system cache. DHCP leases, scans, and application data remain persistent.
 
-Routine writes are also limited outside MariaDB: `/tmp` and `/run` use memory-backed filesystems for scan temporaries, MariaDB temporary tablespaces, locks, PHP sessions, and lease-import staging; Apache access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; lease imports upsert observed rows instead of rebuilding the table; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQL at boot. Login sessions are intentionally cleared when the container restarts because their files live in `/run`.
+Routine writes are also limited outside MariaDB: both services use memory-backed `/tmp`, while the app also uses memory-backed `/run` for scan temporaries, locks, PHP sessions, and lease-import staging; Apache access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; lease imports upsert observed rows instead of rebuilding the table; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQL at boot. Login sessions are intentionally cleared when the app container restarts because their files live in `/run`.
 
 ## CLI
 
@@ -225,6 +224,7 @@ Useful checks before committing:
 
 ```bash
 bash -n boot.sh restart.sh tests/test.sh
+docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php
