@@ -643,7 +643,16 @@
                   </button>
                 </td>
                 <td class="category-name" colspan="4">{{ row.name }}</td>
-                <td class="text-end">
+                <td class="text-end category-actions">
+                  <button
+                    v-if="isAuthenticated && row.categoryIp"
+                    class="btn btn-outline-secondary btn-sm icon-btn"
+                    type="button"
+                    title="Rename category"
+                    @click="openRenameCategory(row)"
+                  >
+                    <i class="ti ti-pencil"></i>
+                  </button>
                   <button
                     v-if="isAuthenticated && row.categoryIp"
                     class="btn btn-outline-danger btn-sm icon-btn"
@@ -897,6 +906,29 @@
               <button class="btn btn-primary" type="submit" :disabled="saving">
                 <i class="ti ti-folder-plus me-1"></i>
                 Add
+              </button>
+            </div>
+          </form>
+
+          <form v-else-if="modal.type === 'renameCategory'" @submit.prevent="submitRenameCategory">
+            <div class="modal-body">
+              <div v-if="modalError" class="alert alert-danger">{{ modalError }}</div>
+              <div class="modal-body-grid">
+                <label class="form-label">
+                  Start IP
+                  <input :value="modal.ip" class="form-control font-monospace" name="ip" type="text" disabled />
+                </label>
+                <label class="form-label">
+                  Name
+                  <input v-model.trim="modal.form.name" class="form-control" name="name" type="text" />
+                </label>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-link" type="button" @click="closeModal">Cancel</button>
+              <button class="btn btn-primary" type="submit" :disabled="saving">
+                <i class="ti ti-device-floppy me-1"></i>
+                Save
               </button>
             </div>
           </form>
@@ -1231,6 +1263,7 @@ const modalTitle = computed(() => {
     edit: 'Edit host',
     create: 'Create host',
     category: 'Add category',
+    renameCategory: 'Rename category',
     deleteHost: 'Delete host',
     deleteCategory: 'Delete category',
     history: `History ${modal.value.ip || ''}`,
@@ -2129,6 +2162,23 @@ function openAddCategory() {
   };
 }
 
+function openRenameCategory(row) {
+  if (!isAuthenticated.value) {
+    openLogin();
+    return;
+  }
+
+  clearMessages();
+  modal.value = {
+    type: 'renameCategory',
+    name: row.name,
+    ip: row.categoryIp,
+    form: {
+      name: row.name || ''
+    }
+  };
+}
+
 function openCreate(host) {
   if (!isAuthenticated.value) {
     openLogin();
@@ -2418,6 +2468,21 @@ async function submitCategory() {
       })
     });
     notice.value = 'Category added';
+    closeModal();
+    await loadInventory();
+  });
+}
+
+async function submitRenameCategory() {
+  await saveModal(async () => {
+    await apiJson('/api/categories', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ip: modal.value.ip,
+        name: modal.value.form.name
+      })
+    });
+    notice.value = 'Category renamed';
     closeModal();
     await loadInventory();
   });

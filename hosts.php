@@ -144,6 +144,11 @@ function dnsmasqRunning(): bool {
 }
 
 function reloadDnsmasq(): void {
+  if ((getenv('DNSMASQ_RELOAD_MODE') ?: 'local') === 'none') {
+    echo "dnsmasq reload delegated" . PHP_EOL;
+    return;
+  }
+
   if (!dnsmasqRunning()) {
     @unlink(DNSMASQ_PID);
     runCommand(array('dnsmasq', '--test', '--conf-file=' . DNSMASQ_CONF));

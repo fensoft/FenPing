@@ -1,10 +1,20 @@
 #!/bin/bash
-VERSION=1.4
+VERSION=1.5
 set -e
-DOCKER_BUILDKIT=1 docker build --progress=plain --network=host -t fensoft/fenping:$VERSION .
-. .env
+export DOCKER_BUILDKIT=1
+if [ ! -f .env ]; then
+  echo ".env not found; copy env.template to .env and edit it first" >&2
+  exit 1
+fi
+mkdir -p `pwd`/data/db
+mkdir -p `pwd`/data/dnsmasq
+mkdir -p `pwd`/data/dnsmasq.d
 mkdir -p `pwd`/data/nmap
 mkdir -p `pwd`/data/netboot
+mkdir -p `pwd`/data/backups
+mkdir -p `pwd`/data/state
+DOCKER_BUILDKIT=1 docker build --network=host -t fensoft/fenping:$VERSION .
+. .env
 docker stop fenping || true
 docker rm fenping || true
 if [ "$DEV" ]; then
@@ -24,15 +34,16 @@ docker run -d \
   --cap-add NET_BROADCAST \
   --cap-add NET_RAW \
   --env-file .env \
-  -e HOST_INTERFACE=end0 \
-  -e FENPING_NETWORK_MODE=host \
   -v `pwd`/data/dnsmasq:/var/lib/misc \
+  -v `pwd`/data/dnsmasq.d:/etc/dnsmasq.d \
   -v `pwd`/data/nmap:/var/www/html/nmap \
   -v `pwd`/data/netboot:/var/www/html/netboot \
+  -v `pwd`/data/backups:/var/www/html/backups \
+  -v `pwd`/data/state:/var/www/html/state \
   -v `pwd`/data/db:/var/lib/mysql \
   $EXTRA \
   --network host \
   --restart unless-stopped \
   -h fenping \
   fensoft/fenping:$VERSION
- 
+docker ps --filter name=fenping

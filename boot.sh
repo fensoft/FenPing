@@ -1,17 +1,12 @@
 #!/bin/bash
 echo -e "\n\n-- booting fenping ... ---"
 grep -q "[[:space:]]$(hostname)\\([[:space:]]\\|$\\)" /etc/hosts || echo "127.0.1.1 $(hostname)" >> /etc/hosts
-if [ "$FENPING_NETWORK_MODE" = "host" ]; then
-  IFACE=${HOST_INTERFACE:-`ip route show default 2>/dev/null | awk '{ print $5; exit }'`}
-  IFACE=${IFACE:-eth0}
-  echo "host networking enabled on $IFACE; leaving host routes, addresses and iptables unchanged"
-else
-  IFACE=eth0
-  ip route del default
-  route add default gw ${DEFAULT_GATEWAY}
-  iptables -A FORWARD -i $IFACE -j ACCEPT
-  iptables -t nat -A POSTROUTING -o $IFACE -j MASQUERADE
+IFACE=eth0
+if ! ip link show dev "$IFACE" >/dev/null 2>&1; then
+  IFACE=`ip -o link show 2>/dev/null | awk -F': ' '$2 != "lo" { print $2; exit }' | sed 's#@.*##'`
 fi
+IFACE=${IFACE:-eth0}
+echo "host networking enabled on $IFACE; leaving host routes, addresses and iptables unchanged"
 mkdir -p /var/run/mysqld
 chown mysql:mysql /var/run/mysqld
 mkdir -p /var/log/mysql
@@ -39,14 +34,14 @@ MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot $MYSQL_AUTH"
 $MYSQL_ROOT -e "CREATE DATABASE IF NOT EXISTS ping; ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; FLUSH PRIVILEGES;"
 MYSQL_ROOT="$MYSQL --socket=/var/run/mysqld/mysqld.sock -uroot -proot"
 $MYSQL_ROOT ping < db.sql
-ME=${IP:-`ip -4 a show dev $IFACE | awk '/inet/ {print $2}' | head -n1 | sed "s#/.*##"`}
+export IP=${IP:-`ip -4 a show dev $IFACE | awk '/inet/ {print $2}' | head -n1 | sed "s#/.*##"`}
 export DB_HOST=${DB_HOST:-localhost}
+export DB_PORT=${DB_PORT:-3306}
 export DB_USER=${DB_USER:-root}
 export DB_PASS=${DB_PASS:-root}
 export DB_NAME=${DB_NAME:-ping}
 export NETWORK
 export IFACE
-export ME
 export PASSWORD
 export SECRET
 export DISCORD_WEBHOOK_URL
@@ -56,26 +51,20 @@ for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sor
   eval "CURRENT=\${$i}"
   sed -i.bak "s#ENV_$i#$CURRENT#g" /etc/dnsmasq.d/fenping.conf
 done
-if [ "$FENPING_NETWORK_MODE" != "host" ]; then
-  IFS=","
-  for i in ${OTHER_NETWORKS}; do
-    ip address add $i dev $IFACE
-  done
-fi
 touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts
 mkdir -p /var/lib/misc
 touch /var/lib/misc/dnsmasq.leases
-cp config.php.template config.php
 cat > /etc/cron.d/fenping <<EOF
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 DB_HOST=$DB_HOST
+DB_PORT=$DB_PORT
 DB_USER=$DB_USER
 DB_PASS=$DB_PASS
 DB_NAME=$DB_NAME
 NETWORK=$NETWORK
 IFACE=$IFACE
-ME=$ME
+IP=$IP
 DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
 
 0 * * * * root flock -n /tmp/inv.lck -c "php /var/www/html/cli.php inventory"

@@ -9,6 +9,7 @@ function hostsApiRoutes(): array {
     apiRoute('PUT', '/hosts/{id:int}', 'handleHostEdit', 'body'),
     apiRoute('DELETE', '/hosts/{id:int}', 'handleHostDelete', 'body'),
     apiRoute('POST', '/categories', 'handleCategoryCreate', 'body'),
+    apiRoute('PUT', '/categories', 'handleCategoryRename', 'body'),
     apiRoute('DELETE', '/categories', 'handleCategoryDelete', 'body')
   );
 }
@@ -90,6 +91,20 @@ function handleCategoryCreate(array $params): array {
   $body = requestBody();
   addCategory($body['ip'] ?? '', $body['name'] ?? '');
   return array('created' => true);
+}
+
+function handleCategoryRename(array $params): array {
+  $body = requestBody();
+  try {
+    $updated = renameCategory($body['ip'] ?? '', $body['name'] ?? '');
+  } catch (InvalidArgumentException $e) {
+    jsonError(400, $e->getMessage());
+  }
+
+  if ($updated < 1)
+    jsonError(404, 'category not found');
+
+  return array('renamed' => true);
 }
 
 function handleCategoryDelete(array $params): array {

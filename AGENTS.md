@@ -1,0 +1,106 @@
+# AGENTS.md
+
+Operational notes for future Codex sessions in this repository.
+
+## Project Snapshot
+
+FenPing is a LAN appliance for inventory, DHCP/DNS management, ping status history, nmap scan history, notifications, backups/restores, and netboot image assignment.
+
+Main stack:
+- PHP API and CLI with a hand-written front controller in `api.php`.
+- Static Vue 3 + Vite frontend styled with Tabler.
+- One Docker container running Apache/PHP, MariaDB, dnsmasq, cron, nmap, ping, ARP/arping tools.
+- MariaDB stores app data.
+- dnsmasq provides DHCP, DNS, TFTP, and leases.
+
+## Runtime Shape
+
+This repo currently uses a single container, not a split Compose stack.
+
+- `restart.sh` builds `fensoft/fenping:1.5`.
+- `restart.sh` runs one container named `fenping` with host networking.
+- `boot.sh` starts MariaDB, applies `db.sql`, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
+- Cron inside the container runs ping, inventory, and lease import jobs.
+
+Do not reintroduce `docker-compose.yml`, nginx/PHP-FPM, Ofelia, or separate DB/dnsmasq containers unless the user explicitly asks for the split architecture again.
+
+## Important Files
+
+- `Dockerfile`: multi-stage build; Vite frontend first, then Ubuntu runtime with Apache/PHP/MariaDB/dnsmasq/cron.
+- `restart.sh`: builds and starts the single host-networked container.
+- `boot.sh`: single-container service bootstrap.
+- `config.php`: committed generic PHP config that reads runtime values from environment variables.
+- `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `backup`, `restore`, `discord-restart`.
+- `api.php`: JSON API front controller.
+- `routes/`: route modules for auth, system, hosts/categories, scans, netboot.
+- `functions.php`: domain helpers for inventory, host CRUD, categories, history, notify, netboot.
+- `database.php`: PDO singleton.
+- `db.sql`: idempotent schema/migration SQL and `update_status`.
+- `ping.php`: ping scanner and status writer.
+- `hosts.php`: dnsmasq generated file writer and local reload/start logic.
+- `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history.
+- `backup.php`: backup/restore implementation.
+- `frontend/`: Vue app source.
+- `docs/ARCHITECTURE.md`: deeper project overview.
+
+## Persistent Data
+
+Do not casually delete or rewrite files under `data/`.
+
+- `data/db` -> `/var/lib/mysql`
+- `data/dnsmasq` -> `/var/lib/misc`
+- `data/dnsmasq.d` -> `/etc/dnsmasq.d`
+- `data/nmap` -> `/var/www/html/nmap`
+- `data/netboot` -> `/var/www/html/netboot`
+- `data/backups` -> `/var/www/html/backups`
+- `data/state` -> `/var/www/html/state`
+
+## CLI
+
+Run commands through the single container:
+
+```bash
+docker exec fenping php /var/www/html/cli.php ping [1-254|DEBUG]
+docker exec fenping php /var/www/html/cli.php hosts
+docker exec fenping php /var/www/html/cli.php inventory [--quick] [1-254|IPv4]
+docker exec fenping php /var/www/html/cli.php backup [backup.tgz]
+docker exec fenping php /var/www/html/cli.php restore <backup.tgz|dump.sql.gz>
+docker exec fenping php /var/www/html/cli.php discord-restart
+```
+
+## API Shape
+
+Routes are declared in `routes/*.php` and merged in `api.php`. Success responses are direct JSON with HTTP 200. Errors use 4xx/5xx plus:
+
+```json
+{ "error": "message" }
+```
+
+Guest mode is read-only. Mutating routes require authenticated session/body auth.
+
+## Tests Before Commit
+
+Use the applicable subset:
+
+```bash
+bash -n boot.sh restart.sh tests/test.sh
+docker build --check .
+docker build -t fenping-check .
+npm run build
+php -l api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
+php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
+```
+
+If PHP or Node is unavailable on the host, run syntax checks inside the container/image.
+
+## Gotchas
+
+- Never commit `.env`, cookies, DB dumps, webhook URLs, or machine-specific private values.
+- Keep `config.php` generic and environment-driven; do not hardcode local secrets or host-specific values in it.
+- Do not revert unrelated dirty work.
+- `data/` is live state.
+- Keep `db.sql` idempotent.
+- API-triggered sudo calls expect `/usr/bin/php` in Dockerfile sudoers.
+- dnsmasq generation happens through `php cli.php hosts`.
+- Cron is inside the container; do not look for Ofelia.
+- Avoid full `/24` inventory scans unless the user accepts LAN scan traffic.

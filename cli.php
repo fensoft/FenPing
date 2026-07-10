@@ -6,6 +6,7 @@ require_once __DIR__ . '/ping.php';
 require_once __DIR__ . '/hosts.php';
 require_once __DIR__ . '/scans.php';
 require_once __DIR__ . '/inventory.php';
+require_once __DIR__ . '/backup.php';
 
 $command = $argv[1] ?? '';
 if ($command === 'ping') {
@@ -24,10 +25,20 @@ if ($command === 'discord-restart') {
   exit(runDiscordRestartCommand());
 }
 
+if ($command === 'backup') {
+  exit(runBackupCommand(array_slice($argv, 2)));
+}
+
+if ($command === 'restore') {
+  exit(runRestoreCommand(array_slice($argv, 2)));
+}
+
 fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
 fwrite(STDERR, "       php cli.php inventory [--quick] [1-254|IPv4]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
+fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
+fwrite(STDERR, "       php cli.php restore <backup.tgz|dump.sql.gz>" . PHP_EOL);
 exit(2);
 
 function runPingCommand($args) {

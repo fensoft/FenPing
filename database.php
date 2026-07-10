@@ -1,11 +1,12 @@
 <?php
 
 function db() {
-  global $db_host, $db_user, $db_pass, $db_name;
+  global $db_host, $db_port, $db_user, $db_pass, $db_name;
   static $db = null;
 
   if ($db === null) {
-    $db = new PDO('mysql:host=' . $db_host . ';dbname=' . $db_name, $db_user, $db_pass);
+    $dsn = 'mysql:host=' . $db_host . ';port=' . ($db_port ?? '3306') . ';dbname=' . $db_name;
+    $db = new PDO($dsn, $db_user, $db_pass);
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
   }
 

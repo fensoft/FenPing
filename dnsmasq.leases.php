@@ -7,7 +7,7 @@ $lines = is_readable($leaseFile) ? file($leaseFile, FILE_IGNORE_NEW_LINES | FILE
 if ($lines === false)
   $lines = array();
 
-$db = new PDO('mysql:host=' . $db_host . ';dbname=' . $db_name, $db_user, $db_pass);
+$db = new PDO('mysql:host=' . $db_host . ';port=' . ($db_port ?? '3306') . ';dbname=' . $db_name, $db_user, $db_pass);
 $stmt = $db->prepare("truncate leases");
 $stmt->execute();
 

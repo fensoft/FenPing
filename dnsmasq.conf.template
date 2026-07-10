@@ -6,12 +6,12 @@ local=/lan/
 
 interface=ENV_IFACE
 bind-interfaces
-listen-address=ENV_ME
+listen-address=ENV_IP
 
 dhcp-authoritative
 dhcp-range=ENV_NETWORK.ENV_DHCP_DYNAMIC_BEGIN,ENV_NETWORK.ENV_DHCP_DYNAMIC_END,255.255.255.0,2h
 dhcp-option=option:router,ENV_DHCP_DEFAULT_ROUTER
-dhcp-option=option:dns-server,ENV_ME
+dhcp-option=option:dns-server,ENV_IP
 dhcp-option=option:domain-name,lan
 dhcp-hostsfile=/etc/dnsmasq.d/fenping.dhcp-hosts
 dhcp-optsfile=/etc/dnsmasq.d/fenping.dhcp-opts

@@ -33,11 +33,12 @@ function getVendor($mac) {
 function getDb() {
   global $db;
   global $db_host;
+  global $db_port;
   global $db_name;
   global $db_user;
   global $db_pass;
   if (!isset($db))
-    $db = new PDO('mysql:host=' . $db_host . ';dbname=' . $db_name, $db_user, $db_pass);
+    $db = new PDO('mysql:host=' . $db_host . ';port=' . ($db_port ?? '3306') . ';dbname=' . $db_name, $db_user, $db_pass);
   return $db;
 }
 
@@ -224,6 +225,28 @@ function getLatestScans() {
 function addCategory($ip, $name) {
   $stmt = getDb()->prepare("INSERT INTO `range` (ip_begin,`type`) VALUES (:ip, :name)");
   $stmt->execute(array("ip" => normalizeCategoryIp($ip), "name" => $name));
+}
+
+function renameCategory($category, $name) {
+  global $network;
+  $category = trim((string)$category);
+  if ($category == "")
+    throw new InvalidArgumentException("category ip is required");
+
+  $name = trim((string)$name);
+  if ($name == "")
+    throw new InvalidArgumentException("category name is required");
+
+  $normalized = normalizeCategoryIp($category);
+  $short = str_replace($network . ".", "", $normalized);
+  $exists = getDb()->prepare("SELECT COUNT(*) FROM `range` WHERE ip_begin=:ip OR ip_begin=:normalized OR ip_begin=:short");
+  $exists->execute(array("ip" => $category, "normalized" => $normalized, "short" => $short));
+  if ((int)$exists->fetchColumn() < 1)
+    return 0;
+
+  $stmt = getDb()->prepare("UPDATE `range` SET `type`=:name WHERE ip_begin=:ip OR ip_begin=:normalized OR ip_begin=:short");
+  $stmt->execute(array("name" => $name, "ip" => $category, "normalized" => $normalized, "short" => $short));
+  return 1;
 }
 
 function delCategory($category) {

@@ -9,12 +9,13 @@ if (!function_exists('fenping_env')) {
 }
 
 $db_host = fenping_env('DB_HOST', 'localhost');
+$db_port = fenping_env('DB_PORT', '3306');
 $db_user = fenping_env('DB_USER', 'root');
 $db_pass = fenping_env('DB_PASS', 'root');
 $db_name = fenping_env('DB_NAME', 'ping');
 $network = fenping_env('NETWORK', '192.168.0');
 $interface = fenping_env('IFACE', fenping_env('INTERFACE', fenping_env('HOST_INTERFACE', 'eth0')));
-$myself = fenping_env('ME', fenping_env('IP', '192.168.0.100'));
+$myself = fenping_env('IP', '192.168.0.100');
 $password = fenping_env('PASSWORD', '');
 $secret = fenping_env('SECRET', 'token');
 $discord_webhook_url = fenping_env('DISCORD_WEBHOOK_URL', '');

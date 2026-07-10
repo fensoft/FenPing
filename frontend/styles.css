@@ -494,6 +494,14 @@ body {
   text-align: left;
 }
 
+.category-actions {
+  white-space: nowrap;
+}
+
+.category-actions .btn + .btn {
+  margin-left: 0.25rem;
+}
+
 .important-down td {
   background: #fff0f0;
 }
