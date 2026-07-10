@@ -1,20 +1,11 @@
 <template>
   <div class="app-shell">
-    <header class="app-header py-2" :inert="modal ? true : undefined" :aria-hidden="modal ? 'true' : undefined">
-      <div class="container-xl d-flex align-items-center justify-content-between gap-2">
-        <div><h1 class="app-title">FenPing</h1><div class="text-secondary small">{{ network || 'Network' }}</div></div>
-        <div class="toolbar">
-          <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span>
-          <button class="btn btn-outline-primary auth-button" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><i :class="isAuthenticated ? 'ti ti-logout' : 'ti ti-login'"></i><span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span></button>
-          <button class="btn btn-outline-secondary icon-btn" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><i :class="darkMode ? 'ti ti-sun' : 'ti ti-moon'"></i></button>
-          <button class="btn btn-outline-primary icon-btn refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><i class="ti ti-refresh"></i></button>
-          <span class="text-secondary small">{{ refreshLabel }}</span>
-        </div>
-      </div>
-    </header>
-
     <div class="app-layout" :inert="modal ? true : undefined" :aria-hidden="modal ? 'true' : undefined">
       <aside class="app-sidebar">
+        <div class="app-brand">
+          <img class="app-brand-icon" :src="'/icon.png'" alt="FenPing" />
+          <img class="app-brand-favicon" :src="'/favicon-32x32.png'" alt="FenPing" />
+        </div>
         <nav class="app-nav" aria-label="Primary navigation">
           <div class="app-nav-group">
             <button class="app-nav-link" :class="{ active: isInventoryRoute }" type="button" title="Inventory" :aria-current="isInventoryRoute ? 'page' : undefined" @click="go('/')"><i class="ti ti-list-details"></i><span>Inventory</span></button>
@@ -29,7 +20,20 @@
         </nav>
       </aside>
 
-      <main class="app-content container-xl py-3">
+      <div class="app-main">
+        <header class="app-header py-2">
+          <div class="container-xl d-flex align-items-center justify-content-end gap-2">
+            <div class="toolbar">
+              <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span>
+              <button class="btn btn-outline-primary auth-button" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><i :class="isAuthenticated ? 'ti ti-logout' : 'ti ti-login'"></i><span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span></button>
+              <button class="btn btn-outline-secondary icon-btn" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><i :class="darkMode ? 'ti ti-sun' : 'ti ti-moon'"></i></button>
+              <button class="btn btn-outline-primary icon-btn refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><i class="ti ti-refresh"></i></button>
+              <span class="text-secondary small">{{ refreshLabel }}</span>
+            </div>
+          </div>
+        </header>
+
+        <main class="app-content container-xl py-3">
         <div v-if="globalError" class="alert alert-danger mb-3" role="alert">{{ globalError }}</div>
         <div v-if="notice" class="alert alert-success mb-3" role="status">{{ notice }}</div>
         <RouterView v-slot="{ Component }">
@@ -55,7 +59,8 @@
             @delete-category="openDeleteCategory"
           />
         </RouterView>
-      </main>
+        </main>
+      </div>
     </div>
 
     <AppModal

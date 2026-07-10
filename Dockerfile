@@ -18,7 +18,9 @@ RUN PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')" 
 RUN a2enmod rewrite && echo 'ServerName 127.0.0.1' >> /etc/apache2/apache2.conf
 COPY apache-fenping.conf /etc/apache2/sites-available/000-default.conf
 COPY --from=frontend /app/dist/ /var/www/public/
-COPY public/api.php favicon.ico favicon-32x32.png /var/www/public/
+COPY public/api.php /var/www/public/
+COPY img/icon.png /var/www/public/icon.png
+COPY favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/
 COPY functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php ipam.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
