@@ -18,7 +18,7 @@ dhcp-optsfile=/etc/dnsmasq.d/fenping.dhcp-opts
 dhcp-leasefile=/var/lib/misc/dnsmasq.leases
 
 enable-tftp
-tftp-root=/var/www/html/netboot
+tftp-root=/var/lib/fenping/netboot
 
 addn-hosts=/etc/dnsmasq.d/fenping.hosts
 pid-file=/var/run/dnsmasq.pid

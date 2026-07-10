@@ -492,7 +492,7 @@
         <div class="netboot-header">
           <div>
             <h2>Netboot Images</h2>
-            <div class="text-secondary small">Boot files served from /netboot</div>
+            <div class="text-secondary small">Private boot files served by dnsmasq TFTP</div>
           </div>
           <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="netbootLoading" @click="loadNetbootImages">
             <i class="ti ti-refresh me-1" :class="{ 'is-spinning': netbootLoading }"></i>

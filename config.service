@@ -2,7 +2,7 @@
 Description=Network FenPing configuration
 
 [Service]
-ExecStart=/var/www/html/boot.sh
+ExecStart=/.boot
 
 [Install]
 WantedBy=multi-user.target

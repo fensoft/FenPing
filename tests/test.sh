@@ -33,10 +33,17 @@ PUBLIC_GET_ROUTES=(
   /api/auth/session
   /api/inventory
   /api/notify
+  /api/netboot/images
 )
 
-ADMIN_GET_ROUTES=(
-  /api/netboot/images
+DENIED_WEB_PATHS=(
+  /.env
+  /config.php
+  /db.sql
+  /backups/test.tgz
+  /nmap/test.xml
+  /netboot/test.efi
+  /state/test
 )
 
 rm -f "$COOKIE"
@@ -45,13 +52,13 @@ for route in "${PUBLIC_GET_ROUTES[@]}"; do
   expect_code "GET $route" 200 "${SITE}${route}"
 done
 
+for route in "${DENIED_WEB_PATHS[@]}"; do
+  expect_code "GET $route" 403 "${SITE}${route}"
+done
+
 echo inventory bytes: `wc -c < "${OUT_DIR}/fenping-GET--api-inventory.json"`
 
 expect_code "POST /api/auth/login" 200 -c "$COOKIE" -X POST -H "$JSON" -d "{\"password\":\"$PASS\"}" "${SITE}/api/auth/login"
-
-for route in "${ADMIN_GET_ROUTES[@]}"; do
-  expect_code "GET $route" 200 -b "$COOKIE" "${SITE}${route}"
-done
 
 if [ "$TEST_IP" != "" ]; then
   expect_code "GET /api/scans/ip/status" 200 "${SITE}/api/scans/${TEST_IP}/status"

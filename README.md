@@ -98,24 +98,26 @@ Do not delete `data/` casually. It is the appliance state.
 | `data/db` | `/var/lib/mysql` | MariaDB data. |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases. |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | Generated dnsmasq config files. |
-| `data/nmap` | `/var/www/html/nmap` | nmap XML, metadata, and history. |
-| `data/netboot` | `/var/www/html/netboot` | Uploaded netboot files. |
-| `data/backups` | `/var/www/html/backups` | Backup archives and imported dumps. |
-| `data/state` | `/var/www/html/state` | Optional state/health files. |
+| `data/nmap` | `/var/lib/fenping/nmap` | nmap XML, metadata, and history. |
+| `data/netboot` | `/var/lib/fenping/netboot` | Uploaded netboot files. |
+| `data/backups` | `/var/lib/fenping/backups` | Backup archives and imported dumps. |
+| `data/state` | `/var/lib/fenping/state` | Optional state/health files. |
+
+Apache serves only `/var/www/public`, which contains the built frontend and the small API entrypoint. PHP application code lives in `/opt/fenping`; runtime files under `/var/lib/fenping` are not directly web-accessible.
 
 ## CLI
 
 Run operational commands from the container:
 
 ```bash
-docker exec fenping php /var/www/html/cli.php ping
-docker exec fenping php /var/www/html/cli.php ping 10
-docker exec fenping php /var/www/html/cli.php hosts
-docker exec fenping php /var/www/html/cli.php inventory
-docker exec fenping php /var/www/html/cli.php inventory --quick 10.10.10.10
-docker exec fenping php /var/www/html/cli.php backup
-docker exec fenping php /var/www/html/cli.php restore /var/www/html/backups/fenping-YYYYmmdd-HHMMSS.tgz
-docker exec fenping php /var/www/html/cli.php discord-restart
+docker exec fenping php /opt/fenping/cli.php ping
+docker exec fenping php /opt/fenping/cli.php ping 10
+docker exec fenping php /opt/fenping/cli.php hosts
+docker exec fenping php /opt/fenping/cli.php inventory
+docker exec fenping php /opt/fenping/cli.php inventory --quick 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php backup
+docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
+docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
 
 Cron inside the container runs:
@@ -129,19 +131,19 @@ Cron inside the container runs:
 Create a full backup archive before upgrades:
 
 ```bash
-docker exec fenping php /var/www/html/cli.php backup
+docker exec fenping php /opt/fenping/cli.php backup
 ```
 
 Restore from a FenPing archive:
 
 ```bash
-docker exec fenping php /var/www/html/cli.php restore /var/www/html/backups/fenping-YYYYmmdd-HHMMSS.tgz
+docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 ```
 
 Restore from a raw SQL dump:
 
 ```bash
-docker exec fenping php /var/www/html/cli.php restore /var/www/html/backups/db.sql.gz
+docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/db.sql.gz
 ```
 
 ## Admin Workflow
@@ -170,6 +172,7 @@ Useful endpoints:
 | `POST` | `/api/scans/{ip}/quick` | Run quick scan. |
 | `GET` | `/api/netboot/images` | List netboot images. |
 | `POST` | `/api/netboot/images` | Upload a netboot image. |
+| `GET` | `/api/netboot/images/{id}/file` | Download a netboot image. |
 | `DELETE` | `/api/netboot/images/{id}` | Delete a netboot image. |
 
 Errors return JSON:
@@ -186,7 +189,7 @@ Useful checks before committing:
 bash -n boot.sh restart.sh tests/test.sh
 docker build --check .
 docker build -t fenping-check .
-php -l api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
 ```
 
@@ -208,14 +211,14 @@ docker logs --tail=100 fenping
 ### dnsmasq Does Not Update
 
 ```bash
-docker exec fenping php /var/www/html/cli.php hosts
+docker exec fenping php /opt/fenping/cli.php hosts
 docker logs -f fenping
 ```
 
 ### Scans Are Missing
 
 ```bash
-docker exec fenping php /var/www/html/cli.php inventory --quick 10.10.10.10
+docker exec fenping php /opt/fenping/cli.php inventory --quick 10.10.10.10
 ```
 
 ### Docker Build Is Slow During npm install

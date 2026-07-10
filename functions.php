@@ -189,7 +189,7 @@ function getInventory() {
       $data["stats"] = $stats[$ip]["label"];
       $data["stats2"] = $stats[$ip]["transitions"];
     }
-    if ($ip != "" && file_exists(__DIR__ . "/nmap/" . $ip . ".xml")) {
+    if ($ip != "" && file_exists(SCAN_DIR . "/" . $ip . ".xml")) {
       $data["xml"] = $ip;
     }
     if ($ip != "" && isset($latestScans[$ip])) {
@@ -450,7 +450,7 @@ function get_netboot_images() {
     $row["id"] = (int)$row["id"];
     $row["size"] = (int)$row["size"];
     $row["hosts"] = (int)$row["hosts"];
-    $row["url"] = "/netboot/" . rawurlencode($row["filename"]);
+    $row["url"] = netboot_image_url($row["id"]);
     $images[] = $row;
   }
   return $images;
@@ -616,8 +616,16 @@ function get_netboot_image(int $id) {
     return false;
   $image["id"] = (int)$image["id"];
   $image["size"] = (int)$image["size"];
-  $image["url"] = "/netboot/" . rawurlencode($image["filename"]);
+  $image["url"] = netboot_image_url($image["id"]);
   return $image;
+}
+
+function netboot_image_url(int $id): string {
+  return '/api/netboot/images/' . $id . '/file';
+}
+
+function netboot_image_path(array $image): string {
+  return netboot_dir() . '/' . basename((string)($image['filename'] ?? ''));
 }
 
 function netboot_image_exists($id): bool {
@@ -627,7 +635,7 @@ function netboot_image_exists($id): bool {
 }
 
 function netboot_dir(): string {
-  return __DIR__ . "/netboot";
+  return FENPING_DATA_DIR . "/netboot";
 }
 
 function ensure_netboot_dir(): void {

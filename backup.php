@@ -1,6 +1,6 @@
 <?php
 
-const BACKUP_DIR = __DIR__ . '/backups';
+define('BACKUP_DIR', FENPING_DATA_DIR . '/backups');
 const BACKUP_FORMAT = 'fenping-backup-v1';
 
 function runBackupCommand(array $args): int {
@@ -594,7 +594,7 @@ function backupAbsolutePath(string $path): string {
 }
 
 function backupNetbootDir(): string {
-  return __DIR__ . '/netboot';
+  return FENPING_DATA_DIR . '/netboot';
 }
 
 function backupIsArchive(string $path): bool {

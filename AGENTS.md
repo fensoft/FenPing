@@ -50,22 +50,24 @@ Do not casually delete or rewrite files under `data/`.
 - `data/db` -> `/var/lib/mysql`
 - `data/dnsmasq` -> `/var/lib/misc`
 - `data/dnsmasq.d` -> `/etc/dnsmasq.d`
-- `data/nmap` -> `/var/www/html/nmap`
-- `data/netboot` -> `/var/www/html/netboot`
-- `data/backups` -> `/var/www/html/backups`
-- `data/state` -> `/var/www/html/state`
+- `data/nmap` -> `/var/lib/fenping/nmap`
+- `data/netboot` -> `/var/lib/fenping/netboot`
+- `data/backups` -> `/var/lib/fenping/backups`
+- `data/state` -> `/var/lib/fenping/state`
+
+Apache's document root is `/var/www/public`. Application code lives in `/opt/fenping`; never move runtime data or `.env` back under the document root.
 
 ## CLI
 
 Run commands through the single container:
 
 ```bash
-docker exec fenping php /var/www/html/cli.php ping [1-254|DEBUG]
-docker exec fenping php /var/www/html/cli.php hosts
-docker exec fenping php /var/www/html/cli.php inventory [--quick] [1-254|IPv4]
-docker exec fenping php /var/www/html/cli.php backup [backup.tgz]
-docker exec fenping php /var/www/html/cli.php restore <backup.tgz|dump.sql.gz>
-docker exec fenping php /var/www/html/cli.php discord-restart
+docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
+docker exec fenping php /opt/fenping/cli.php hosts
+docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
+docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
+docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
+docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
 
 ## API Shape
@@ -87,7 +89,7 @@ bash -n boot.sh restart.sh tests/test.sh
 docker build --check .
 docker build -t fenping-check .
 npm run build
-php -l api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
 ```
 

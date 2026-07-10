@@ -122,6 +122,10 @@ CREATE INDEX IF NOT EXISTS `scans_ip_id` ON `scans` (`ip`, `id`);
 CREATE INDEX IF NOT EXISTS `scans_ip_xml_hash_id` ON `scans` (`ip`, `xml_hash`, `id`);
 
 UPDATE scans
+SET xml=CONCAT('/var/lib/fenping/nmap/', SUBSTRING(xml, LENGTH('/var/www/html/nmap/') + 1))
+WHERE xml LIKE '/var/www/html/nmap/%';
+
+UPDATE scans
 SET state=IF(
       date_begin IS NOT NULL AND date_begin <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 2 HOUR),
       'timeout',

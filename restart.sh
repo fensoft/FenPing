@@ -18,7 +18,7 @@ DOCKER_BUILDKIT=1 docker build --network=host -t fensoft/fenping:$VERSION .
 docker stop fenping || true
 docker rm fenping || true
 if [ "$DEV" ]; then
-  EXTRA="-v `pwd`:/var/www/html"
+  EXTRA="-v `pwd`:/opt/fenping"
 fi
 docker run -d \
   --name fenping \
@@ -36,10 +36,10 @@ docker run -d \
   --env-file .env \
   -v `pwd`/data/dnsmasq:/var/lib/misc \
   -v `pwd`/data/dnsmasq.d:/etc/dnsmasq.d \
-  -v `pwd`/data/nmap:/var/www/html/nmap \
-  -v `pwd`/data/netboot:/var/www/html/netboot \
-  -v `pwd`/data/backups:/var/www/html/backups \
-  -v `pwd`/data/state:/var/www/html/state \
+  -v `pwd`/data/nmap:/var/lib/fenping/nmap \
+  -v `pwd`/data/netboot:/var/lib/fenping/netboot \
+  -v `pwd`/data/backups:/var/lib/fenping/backups \
+  -v `pwd`/data/state:/var/lib/fenping/state \
   -v `pwd`/data/db:/var/lib/mysql \
   $EXTRA \
   --network host \

@@ -1,6 +1,6 @@
 <?php
 
-const SCAN_DIR = __DIR__ . '/nmap';
+define('SCAN_DIR', FENPING_DATA_DIR . '/nmap');
 const SCAN_XSL_FROM = 'file:///usr/bin/../share/nmap/';
 const SCAN_XSL_LEGACY = '../res/xsl/';
 const SCAN_XSL_TO = '/res/xsl/';

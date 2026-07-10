@@ -10,10 +10,10 @@ mkdir -p /var/run/mysqld
 chown mysql:mysql /var/run/mysqld
 mkdir -p /var/log/mysql
 chown mysql:mysql /var/log/mysql
-cd /var/www/html
-mkdir -p /var/www/html/netboot
-chown -R www-data:www-data /var/www/html/netboot
-install -o root -g root -m 0644 /.netboot-htaccess /var/www/html/netboot/.htaccess
+cd /opt/fenping
+mkdir -p /var/lib/fenping/nmap /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
+chown -R www-data:www-data /var/lib/fenping/netboot
+install -o root -g root -m 0644 /.netboot-htaccess /var/lib/fenping/netboot/.htaccess
 mkdir -p /var/lib/mysql
 chown mysql:mysql -R /var/lib/mysql
 MYSQL_AUTH="-proot"
@@ -45,6 +45,7 @@ export IFACE
 export PASSWORD
 export SECRET
 export DISCORD_WEBHOOK_URL
+export FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
 mkdir -p /etc/dnsmasq.d
 cp dnsmasq.conf.template /etc/dnsmasq.d/fenping.conf
 for i in `env | sed "s#=.*##" | grep -v "^_$" | awk '{ print length, $0 }' | sort -r -n -s | cut -d" " -f2-` IFACE ME; do
@@ -66,13 +67,14 @@ NETWORK=$NETWORK
 IFACE=$IFACE
 IP=$IP
 DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
+FENPING_DATA_DIR=$FENPING_DATA_DIR
 
-0 * * * * root flock -n /tmp/inv.lck -c "php /var/www/html/cli.php inventory"
-*/15 * * * * root flock -n /tmp/ping.lck -c "php /var/www/html/cli.php ping"
-* * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /var/www/html/dnsmasq.leases.php"
+0 * * * * root flock -n /tmp/inv.lck -c "php /opt/fenping/cli.php inventory"
+*/15 * * * * root flock -n /tmp/ping.lck -c "php /opt/fenping/cli.php ping"
+* * * * * root flock -n /tmp/dnsmasq-leases.lck -c "php /opt/fenping/dnsmasq.leases.php"
 EOF
 chmod 0644 /etc/cron.d/fenping
-php /var/www/html/cli.php discord-restart || true
-php /var/www/html/cli.php hosts
+php /opt/fenping/cli.php discord-restart || true
+php /opt/fenping/cli.php hosts
 cron
 exec apachectl -D FOREGROUND

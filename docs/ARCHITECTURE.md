@@ -11,7 +11,7 @@ The current runtime is one host-networked Docker container named `fenping`. The 
 3. `restart.sh` removes the old `fenping` container if present, then starts one `fenping` container with host networking and reduced capabilities.
 4. `boot.sh` starts MariaDB, initializes the DB if needed, and applies `db.sql`.
 5. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
-6. Apache serves the static Vue app and rewrites `/api/...` to `api.php`.
+6. Apache serves the static Vue app from `/var/www/public` and rewrites `/api/...` to the public `api.php` entrypoint, which loads private application code from `/opt/fenping`.
 
 ## Docker Build
 
@@ -33,10 +33,12 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 | `data/db` | `/var/lib/mysql` | MariaDB data directory |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | generated dnsmasq config |
-| `data/nmap` | `/var/www/html/nmap` | latest nmap XML, metadata, and scan history |
-| `data/netboot` | `/var/www/html/netboot` | uploaded netboot files |
-| `data/backups` | `/var/www/html/backups` | backup archives and imported dumps |
-| `data/state` | `/var/www/html/state` | optional state files |
+| `data/nmap` | `/var/lib/fenping/nmap` | latest nmap XML, metadata, and scan history |
+| `data/netboot` | `/var/lib/fenping/netboot` | uploaded netboot files |
+| `data/backups` | `/var/lib/fenping/backups` | backup archives and imported dumps |
+| `data/state` | `/var/lib/fenping/state` | optional state files |
+
+The web root contains only the built frontend, static scan stylesheet assets, favicons, and the public API entrypoint. PHP modules, CLI code, templates, schema files, `.env` in development, and all persistent state remain outside the web root. Apache also explicitly denies dotfiles, source/config extensions, and legacy runtime URL paths.
 
 Avoid destructive edits in `data/` unless explicitly requested.
 
@@ -65,12 +67,12 @@ Route modules:
 `cli.php` is the operational command entrypoint:
 
 ```bash
-docker exec fenping php /var/www/html/cli.php ping [1-254|DEBUG]
-docker exec fenping php /var/www/html/cli.php hosts
-docker exec fenping php /var/www/html/cli.php inventory [--quick] [1-254|IPv4]
-docker exec fenping php /var/www/html/cli.php backup [backup.tgz]
-docker exec fenping php /var/www/html/cli.php restore <backup.tgz|dump.sql.gz>
-docker exec fenping php /var/www/html/cli.php discord-restart
+docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
+docker exec fenping php /opt/fenping/cli.php hosts
+docker exec fenping php /opt/fenping/cli.php inventory [--quick] [1-254|IPv4]
+docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
+docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
+docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
 
 Prefer adding operational jobs here instead of creating new shell scripts.
@@ -112,7 +114,7 @@ The `update_status` procedure appends to `stats` only when status/IP/MAC changes
 - Deep scan uses `-A -p- -sS -T3`.
 - Quick scan targets one host with faster flags.
 - Every nmap command has a 2-hour hard timeout; timed-out scans are recorded with the `timeout` state.
-- XML is saved under `/var/www/html/nmap`.
+- XML is saved under `/var/lib/fenping/nmap`.
 - History pruning keeps one week and removes older duplicate scan signatures.
 
 Avoid default inventory scans in tests unless the user accepts LAN scan traffic.
@@ -130,7 +132,7 @@ The required `IFACE` environment variable selects the host network interface tha
 
 `php cli.php hosts` always rewrites generated files and reloads/starts local dnsmasq.
 
-Netboot uploads live in `/var/www/html/netboot`; metadata lives in `netboot_images`.
+Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_images`. Browser downloads are streamed through `/api/netboot/images/{id}/file`; Apache never serves the storage directory directly.
 
 ## Frontend
 
@@ -144,7 +146,7 @@ Important files:
 - `frontend/styles.css`: app styling and dark mode.
 - `package.json`: Vue, Vite, Tabler Core, Tabler Icons Webfont.
 
-Apache serves real files directly and falls back all other non-API paths to `index.html`.
+Apache serves real public files directly and falls back all other non-API paths to `index.html`.
 
 ## Auth
 
@@ -166,7 +168,7 @@ Never place secrets in docs, commits, logs, generated files, or the committed ge
 - netboot files.
 - JSON indexes and a manifest.
 
-Default backups go to `/var/www/html/backups/fenping-YYYYmmdd-HHMMSS.tgz`, mounted at `data/backups`.
+Default backups go to `/var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz`, mounted at `data/backups`.
 
 Restore supports FenPing `.tgz` archives and raw `.sql` or `.sql.gz` dumps. After importing SQL, restore reapplies `db.sql` and regenerates dnsmasq files.
 
@@ -199,7 +201,7 @@ Typical checks:
 bash -n boot.sh restart.sh tests/test.sh
 docker build --check .
 docker build -t fenping-check .
-php -l api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php scans.php health.php backup.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/netboot.php routes/scans.php
 curl -fsS http://127.0.0.1/api/health
 curl -fsS http://127.0.0.1/api/inventory
@@ -208,10 +210,10 @@ curl -fsS http://127.0.0.1/api/inventory
 Useful commands:
 
 ```bash
-docker exec fenping php /var/www/html/cli.php hosts
-docker exec fenping php /var/www/html/cli.php ping 1
-docker exec fenping php /var/www/html/cli.php inventory --quick 1
-docker exec fenping php /var/www/html/cli.php backup
+docker exec fenping php /opt/fenping/cli.php hosts
+docker exec fenping php /opt/fenping/cli.php ping 1
+docker exec fenping php /opt/fenping/cli.php inventory --quick 1
+docker exec fenping php /opt/fenping/cli.php backup
 docker logs -f fenping
 ```
 

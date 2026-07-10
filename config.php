@@ -19,3 +19,8 @@ $myself = fenping_env('IP', '192.168.0.100');
 $password = fenping_env('PASSWORD', '');
 $secret = fenping_env('SECRET', 'token');
 $discord_webhook_url = fenping_env('DISCORD_WEBHOOK_URL', '');
+$fenping_data_dir = rtrim(fenping_env('FENPING_DATA_DIR', '/var/lib/fenping'), '/');
+if ($fenping_data_dir === '')
+  $fenping_data_dir = '/var/lib/fenping';
+if (!defined('FENPING_DATA_DIR'))
+  define('FENPING_DATA_DIR', $fenping_data_dir);
