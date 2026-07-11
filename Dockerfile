@@ -3,8 +3,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates nodejs npm && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --no-audit --no-fund --prefer-offline --maxsockets=1 --fetch-timeout=3600000 --fetch-retries=15 --fetch-retry-mintimeout=30000 --fetch-retry-maxtimeout=300000 --loglevel=http
+RUN npm ci
 COPY index.html vite.config.js ./
 COPY frontend ./frontend
 RUN npm run build
