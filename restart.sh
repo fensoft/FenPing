@@ -59,7 +59,7 @@ if [ "$MODE" = "demo" ]; then
 fi
 
 docker compose config --quiet
-DOCKER_BUILDKIT=1 docker compose build
+docker compose pull app db
 
 # Stop the legacy embedded database cleanly before the first split-container
 # upgrade. On later runs the Compose-managed app has no local database server.

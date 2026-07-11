@@ -79,7 +79,7 @@ MariaDB has networking disabled. The app connects through a shared Unix socket, 
 
 2. Edit `.env` for your LAN.
 
-3. Build and start:
+3. Pull and start the published image:
 
    ```bash
    ./restart.sh
@@ -99,6 +99,8 @@ Important `.env` values:
 | --- | --- |
 | `IP` | FenPing LAN address. |
 | `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
+| `FENPING_IMAGE` | Docker Hub repository pulled by `restart.sh`. Defaults to `fensoft/fenping`. |
+| `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.5`. |
 | `DB_PORT` | TCP port used only when connecting to an external database instead of the Compose Unix socket. Defaults to `3306`. |
 | `DB_USER` | MariaDB application login. Defaults to `root` for compatibility with existing installations. |
 | `DB_PASS` | MariaDB login password and initial root password for a new data directory. Keep it equal to the existing root password when reusing `data/db`; changing this value alone does not rotate an initialized database password. |
@@ -112,6 +114,19 @@ Important `.env` values:
 | `DISCORD_WEBHOOK_URL` | Optional Discord webhook for host status, service changes, and restart notifications. |
 
 Managed hosts require a valid IPv4 address and six-octet MAC address. Host names are optional; when set, they must contain one DNS label using letters, numbers, and internal hyphens. Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
+
+## Publishing Images
+
+Log in to Docker Hub, then publish the versioned multi-architecture image:
+
+```bash
+docker login
+./publish.sh 1.5
+```
+
+The targets are exactly `linux/arm64`, `linux/amd64`, and `linux/arm/v7`. The script automatically runs `tonistiigi/binfmt --install all`, so publishing requires permission to start a privileged Docker container. Set `PUBLISH_LATEST=0` to omit the `latest` tag, or set `FENPING_IMAGE` to publish another Docker Hub repository. The script uses a reusable `fenping-multiarch` Buildx container builder, pushes the version and `latest` manifests, attaches provenance and an SBOM, and inspects the published result.
+
+`restart.sh` never builds the application image. It pulls `FENPING_IMAGE:FENPING_VERSION` before stopping the current app, so a missing or inaccessible tag leaves the running deployment untouched.
 
 ## Persistent Data
 
@@ -286,10 +301,10 @@ docker exec fenping php /opt/fenping/cli.php inventory --profile lightweight 10.
 docker exec fenping php /opt/fenping/cli.php inventory --work
 ```
 
-### Docker Build Is Slow During npm install
+### Multi-architecture Build Is Slow During npm install
 
-The Dockerfile uses an npm cache mount and conservative retry settings. Keeping BuildKit enabled helps:
+The Dockerfile uses an npm cache mount and conservative retry settings. Build and push through the release script so Buildx can reuse its container cache:
 
 ```bash
-DOCKER_BUILDKIT=1 docker build --progress=plain --network=host -t fensoft/fenping:1.5 .
+./publish.sh 1.5
 ```

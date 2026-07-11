@@ -7,7 +7,7 @@ The runtime is managed by Docker Compose. The host-networked `fenping` container
 ## High-Level Flow
 
 1. `restart.sh` creates persistent directories under `data/`.
-2. `restart.sh` validates the Compose model and builds `fensoft/fenping:1.5`.
+2. `restart.sh` validates the Compose model and pulls the configured published FenPing and MariaDB images before stopping the current app.
 3. Compose starts the network-disabled `fenping-db`, mounting `data/db`, the shared SQL socket, and the low-write MariaDB configuration. The official entrypoint upgrades a reused MariaDB data directory when needed, then Compose waits for its authenticated health check.
 4. Compose starts `fenping` with host networking, reduced capabilities, and the remaining persistent mounts.
 5. `boot.sh` waits for MariaDB over loopback and applies `db.sql`.
@@ -22,6 +22,8 @@ The runtime is managed by Docker Compose. The host-networked `fenping` container
 - runtime: uses `ubuntu:26.04` and installs Apache, PHP, the MariaDB client, dnsmasq, cron, nmap, ping/arping tools, sudo, and iptables.
 
 The application image no longer contains a MariaDB server. Compose uses the smaller purpose-built `mariadb:11.8` image for SQL.
+
+Runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.5`.
 
 `config.php` is committed as a generic, environment-driven config file. Runtime values should come from `.env`/container environment variables; do not hardcode machine-specific secrets in `config.php`.
 
@@ -274,7 +276,7 @@ Do not run broad scans or destructive restore tests unless the user asks.
 
 ## Things To Preserve
 
-- Single-container runtime unless the user explicitly asks for split services again.
+- The Compose application/database split unless the user explicitly asks to change it.
 - Host networking for DHCP/DNS/scanning behavior.
 - Idempotent `db.sql`.
 - Direct JSON API responses, not `{ "ok": true }` wrappers.
