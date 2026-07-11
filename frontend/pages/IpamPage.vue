@@ -3,7 +3,7 @@
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="page-header">
       <div><h2>IPAM</h2><div class="text-secondary small">Device onboarding and DHCP pool utilization</div></div>
-      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><i class="ti ti-refresh me-1" :class="{ 'is-spinning': loading }"></i>Refresh</button>
+      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />Refresh</button>
     </div>
 
     <div class="ipam-pool">
@@ -30,14 +30,14 @@
           <tr v-if="loading && pending.length === 0"><td class="text-secondary text-center py-4" colspan="6">Loading</td></tr>
           <tr v-else-if="!loading && pending.length === 0"><td class="text-secondary text-center py-4" colspan="6">No new devices</td></tr>
           <tr v-for="device in pending" :key="device.mac" class="ipam-device-new">
-            <td><div class="ipam-device-name"><i class="ti ti-alert-triangle text-warning"></i><strong>{{ deviceName(device) }}</strong></div><small class="font-monospace">{{ formatMac(device.mac) }}</small><small v-if="device.vendor" :title="device.vendor">{{ device.vendor }}</small></td>
+            <td><div class="ipam-device-name"><AppIcon name="alert-triangle" class="text-warning" /><strong>{{ deviceName(device) }}</strong></div><small class="font-monospace">{{ formatMac(device.mac) }}</small><small v-if="device.vendor" :title="device.vendor">{{ device.vendor }}</small></td>
             <td class="font-monospace">{{ device.ip || '-' }}</td>
-            <td><span :class="statusClass(device.status)" :title="statusTitle(device.status)" class="status-pill"><i :class="statusIcon(device.status)"></i></span>{{ device.status || '-' }}</td>
+            <td><span :class="statusClass(device.status)" :title="statusTitle(device.status)" class="status-pill"><AppIcon :name="statusIcon(device.status)" /></span>{{ device.status || '-' }}</td>
             <td class="text-nowrap">{{ formatServerDate(device.last_seen) }}</td>
             <td class="text-nowrap"><span>{{ formatServerDate(device.lease_expires) }}</span><small v-if="device.lease_active" class="text-green">active</small></td>
             <td class="text-end action-cell">
-              <button v-if="isAuthenticated" class="btn btn-outline-success btn-sm" type="button" :disabled="savingMac !== ''" @click="approve(device)"><i class="ti ti-check me-1"></i>Approve</button>
-              <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><i class="ti ti-pin me-1"></i>Reserve</button>
+              <button v-if="isAuthenticated" class="btn btn-outline-success btn-sm" type="button" :disabled="savingMac !== ''" @click="approve(device)"><AppIcon name="check" class="me-1" />Approve</button>
+              <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><AppIcon name="pin" class="me-1" />Reserve</button>
             </td>
           </tr>
         </tbody>
@@ -54,12 +54,12 @@
           <tr v-for="device in approved" :key="device.mac">
             <td><strong>{{ deviceName(device) }}</strong><small class="font-monospace">{{ formatMac(device.mac) }}</small><small v-if="device.vendor" :title="device.vendor">{{ device.vendor }}</small></td>
             <td class="font-monospace">{{ device.ip || '-' }}</td>
-            <td><span :class="statusClass(device.status)" :title="statusTitle(device.status)" class="status-pill"><i :class="statusIcon(device.status)"></i></span>{{ device.status || '-' }}</td>
+            <td><span :class="statusClass(device.status)" :title="statusTitle(device.status)" class="status-pill"><AppIcon :name="statusIcon(device.status)" /></span>{{ device.status || '-' }}</td>
             <td class="text-nowrap">{{ formatServerDate(device.last_seen) }}</td>
             <td class="text-nowrap">{{ formatServerDate(device.approved_at) }}</td>
             <td class="text-end action-cell">
-              <button v-if="isAuthenticated" class="btn btn-outline-warning btn-sm" type="button" :disabled="savingMac !== ''" @click="unapprove(device)"><i class="ti ti-arrow-back-up me-1"></i>Mark new</button>
-              <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><i class="ti ti-pin me-1"></i>Reserve</button>
+              <button v-if="isAuthenticated" class="btn btn-outline-warning btn-sm" type="button" :disabled="savingMac !== ''" @click="unapprove(device)"><AppIcon name="arrow-back-up" class="me-1" />Mark new</button>
+              <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><AppIcon name="pin" class="me-1" />Reserve</button>
             </td>
           </tr>
         </tbody>

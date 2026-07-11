@@ -18,7 +18,7 @@
 
         <form v-if="modal.type === 'login'" @submit.prevent="$emit('submit-login')">
           <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><label class="form-label">Password<input v-model="modal.password" class="form-control" type="password" autocomplete="current-password" autofocus /></label></div>
-          <ModalFooter :saving="saving" submit-label="Login" submit-icon="ti ti-login" @close="requestClose" />
+          <ModalFooter :saving="saving" submit-label="Login" submit-icon="login" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'edit'" @submit.prevent="$emit('submit-edit')">
@@ -40,27 +40,27 @@
               </div>
             </div>
           </div>
-          <div class="modal-footer justify-content-between"><button class="btn btn-outline-danger" type="button" :disabled="saving" @click="$emit('delete-host')"><i class="ti ti-trash me-1"></i>Delete</button><div><button class="btn btn-link" type="button" :disabled="saving" @click="requestClose">Cancel</button><button class="btn btn-primary" type="submit" :disabled="saving"><i class="ti ti-device-floppy me-1"></i>Save</button></div></div>
+          <div class="modal-footer justify-content-between"><button class="btn btn-outline-danger" type="button" :disabled="saving" @click="$emit('delete-host')"><AppIcon name="trash" class="me-1" />Delete</button><div><button class="btn btn-link" type="button" :disabled="saving" @click="requestClose">Cancel</button><button class="btn btn-primary" type="submit" :disabled="saving"><AppIcon name="device-floppy" class="me-1" />Save</button></div></div>
         </form>
 
         <form v-else-if="modal.type === 'create'" @submit.prevent="$emit('submit-create')">
           <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" required /></label><label class="form-label">IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" inputmode="numeric" required /></div></label></div></div>
-          <ModalFooter :saving="saving" :submit-label="modal.purpose === 'reserve' ? 'Reserve' : 'Create'" :submit-icon="modal.purpose === 'reserve' ? 'ti ti-pin' : 'ti ti-plus'" @close="requestClose" />
+          <ModalFooter :saving="saving" :submit-label="modal.purpose === 'reserve' ? 'Reserve' : 'Create'" :submit-icon="modal.purpose === 'reserve' ? 'pin' : 'plus'" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'category'" @submit.prevent="$emit('submit-category')">
           <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">Start IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" /></div></label><label class="form-label">Name<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label></div></div>
-          <ModalFooter :saving="saving" submit-label="Add" submit-icon="ti ti-folder-plus" @close="requestClose" />
+          <ModalFooter :saving="saving" submit-label="Add" submit-icon="folder-plus" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'renameCategory'" @submit.prevent="$emit('submit-rename-category')">
           <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">Start IP<input :value="modal.ip" class="form-control font-monospace" name="ip" type="text" disabled /></label><label class="form-label">Name<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label></div></div>
-          <ModalFooter :saving="saving" submit-label="Save" submit-icon="ti ti-device-floppy" @close="requestClose" />
+          <ModalFooter :saving="saving" submit-label="Save" submit-icon="device-floppy" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'deleteHost' || modal.type === 'deleteCategory'" @submit.prevent="$emit(modal.type === 'deleteHost' ? 'submit-delete-host' : 'submit-delete-category')">
           <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><p class="mb-3">{{ modal.name || modal.mac || modal.ip || modal.id }}</p></div>
-          <div class="modal-footer"><button class="btn btn-link" type="button" :disabled="saving" @click="requestClose">Cancel</button><button class="btn btn-danger" type="submit" :disabled="saving"><i class="ti ti-trash me-1"></i>Delete</button></div>
+          <div class="modal-footer"><button class="btn btn-link" type="button" :disabled="saving" @click="requestClose">Cancel</button><button class="btn btn-danger" type="submit" :disabled="saving"><AppIcon name="trash" class="me-1" />Delete</button></div>
         </form>
 
         <div v-else-if="modal.type === 'scanProfile'">
@@ -68,7 +68,7 @@
             <div class="text-secondary mb-3">Choose how thoroughly to scan <strong class="text-body">{{ modal.host?.name || modal.host?.ip }}</strong>.</div>
             <div class="scan-profile-grid">
               <button v-for="(profile, index) in scanProfiles" :key="profile.id" class="scan-profile-option" type="button" :autofocus="index === 0" @click="$emit('submit-scan-profile', profile.id)">
-                <i :class="profile.icon"></i>
+                <AppIcon :name="profile.icon" />
                 <span><strong>{{ profile.name }}</strong><small>{{ profile.description }}</small><small class="text-secondary">{{ profile.timeout }}</small></span>
               </button>
             </div>
@@ -87,7 +87,7 @@
             </div>
             <table class="table table-sm history-table"><thead><tr><th>MAC</th><th>Status</th><th>Date</th></tr></thead><tbody>
               <tr v-if="modal.rows === null"><td class="text-secondary text-center py-4" colspan="3">Loading</td></tr>
-              <tr v-for="item in modal.rows || []" :key="item.id" :class="historyRowClass(item)"><td class="font-monospace">{{ formatMac(item.mac) }}</td><td><span :class="statusClass(item.status)" :title="statusTitle(item.status)" class="status-pill"><i :class="statusIcon(item.status)"></i></span></td><td>{{ formatServerDate(item.date_begin) }} for {{ formatDuration(item.duration) }}</td></tr>
+              <tr v-for="item in modal.rows || []" :key="item.id" :class="historyRowClass(item)"><td class="font-monospace">{{ formatMac(item.mac) }}</td><td><span :class="statusClass(item.status)" :title="statusTitle(item.status)" class="status-pill"><AppIcon :name="statusIcon(item.status)" /></span></td><td>{{ formatServerDate(item.date_begin) }} for {{ formatDuration(item.duration) }}</td></tr>
             </tbody></table>
           </div>
           <div class="modal-footer"><button class="btn btn-primary" type="button" @click="requestClose">Close</button></div>

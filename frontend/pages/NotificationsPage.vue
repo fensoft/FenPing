@@ -8,7 +8,7 @@
         <div class="text-secondary small">Last {{ notify.hours || 24 }}h of status and service changes</div>
       </div>
       <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load">
-        <i class="ti ti-refresh me-1" :class="{ 'is-spinning': loading }"></i>
+        <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />
         Refresh
       </button>
     </div>
@@ -42,10 +42,10 @@
             </td>
             <td>
               <div class="notify-change">
-                <span v-if="change.previous_status" :class="statusClass(change.previous_status)" :title="statusTitle(change.previous_status)"><i :class="statusIcon(change.previous_status)"></i></span>
-                <span v-else class="status-pill status-unknown" title="new"><i class="ti ti-point"></i></span>
-                <i class="ti ti-arrow-right text-secondary"></i>
-                <span :class="statusClass(change.status)" :title="statusTitle(change.status)"><i :class="statusIcon(change.status)"></i></span>
+                <span v-if="change.previous_status" :class="statusClass(change.previous_status)" :title="statusTitle(change.previous_status)"><AppIcon :name="statusIcon(change.previous_status)" /></span>
+                <span v-else class="status-pill status-unknown" title="new"><AppIcon name="point" /></span>
+                <AppIcon name="arrow-right" class="text-secondary" />
+                <span :class="statusClass(change.status)" :title="statusTitle(change.status)"><AppIcon :name="statusIcon(change.status)" /></span>
                 <strong>{{ change.status || 'Unknown' }}</strong>
               </div>
             </td>
@@ -78,7 +78,7 @@
             <td class="service-change-value">
               <template v-if="change.change_type === 'changed'">
                 <span class="text-secondary">{{ serviceLabel(change, 'previous') }}</span>
-                <i class="ti ti-arrow-right"></i>
+                <AppIcon name="arrow-right" />
                 <strong>{{ serviceLabel(change, 'current') }}</strong>
               </template>
               <strong v-else>{{ serviceLabel(change, change.change_type === 'appeared' ? 'current' : 'previous') }}</strong>

@@ -8,14 +8,14 @@
         </div>
         <nav class="app-nav" aria-label="Primary navigation">
           <div class="app-nav-group">
-            <button class="app-nav-link" :class="{ active: isInventoryRoute }" type="button" title="Inventory" :aria-current="isInventoryRoute ? 'page' : undefined" @click="go('/')"><i class="ti ti-list-details"></i><span>Inventory</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.services }" type="button" title="Services" :aria-current="route.name === routeNames.services ? 'page' : undefined" @click="go('/services')"><i class="ti ti-world-www"></i><span>Services</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.notify }" type="button" title="Notify" :aria-current="route.name === routeNames.notify ? 'page' : undefined" @click="go('/notify')"><i class="ti ti-bell"></i><span>Notify</span></button>
+            <button class="app-nav-link" :class="{ active: isInventoryRoute }" type="button" title="Inventory" :aria-current="isInventoryRoute ? 'page' : undefined" @click="go('/')"><AppIcon name="list-details" /><span>Inventory</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.services }" type="button" title="Services" :aria-current="route.name === routeNames.services ? 'page' : undefined" @click="go('/services')"><AppIcon name="world-www" /><span>Services</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.notify }" type="button" title="Notify" :aria-current="route.name === routeNames.notify ? 'page' : undefined" @click="go('/notify')"><AppIcon name="bell" /><span>Notify</span></button>
           </div>
           <div class="app-nav-group app-nav-bottom">
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.ipam }" type="button" title="IPAM" :aria-current="route.name === routeNames.ipam ? 'page' : undefined" @click="go('/ipam')"><i class="ti ti-address-book"></i><span>IPAM</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" :aria-current="route.name === routeNames.scans ? 'page' : undefined" @click="go('/scans')"><i class="ti ti-radar"></i><span>Scans</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.netboot }" type="button" title="Netboot images" :aria-current="route.name === routeNames.netboot ? 'page' : undefined" @click="go('/netboot-images')"><i class="ti ti-server"></i><span>Netboot</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.ipam }" type="button" title="IPAM" :aria-current="route.name === routeNames.ipam ? 'page' : undefined" @click="go('/ipam')"><AppIcon name="address-book" /><span>IPAM</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" :aria-current="route.name === routeNames.scans ? 'page' : undefined" @click="go('/scans')"><AppIcon name="radar" /><span>Scans</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.netboot }" type="button" title="Netboot images" :aria-current="route.name === routeNames.netboot ? 'page' : undefined" @click="go('/netboot-images')"><AppIcon name="server" /><span>Netboot</span></button>
           </div>
         </nav>
       </aside>
@@ -25,9 +25,9 @@
           <div class="container-xl d-flex align-items-center justify-content-end gap-2">
             <div class="toolbar">
               <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span>
-              <button class="btn btn-outline-primary auth-button" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><i :class="isAuthenticated ? 'ti ti-logout' : 'ti ti-login'"></i><span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span></button>
-              <button class="btn btn-outline-secondary icon-btn" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><i :class="darkMode ? 'ti ti-sun' : 'ti ti-moon'"></i></button>
-              <button class="btn btn-outline-primary icon-btn refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><i class="ti ti-refresh"></i></button>
+              <button class="btn btn-outline-primary auth-button" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><AppIcon :name="isAuthenticated ? 'logout' : 'login'" /><span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span></button>
+              <button class="btn btn-outline-secondary icon-btn" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><AppIcon :name="darkMode ? 'sun' : 'moon'" /></button>
+              <button class="btn btn-outline-primary icon-btn refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><AppIcon name="refresh" /></button>
               <span class="text-secondary small">{{ refreshLabel }}</span>
             </div>
           </div>

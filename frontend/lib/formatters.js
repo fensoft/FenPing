@@ -84,11 +84,11 @@ export function statusClass(status) {
 }
 
 export function statusIcon(status) {
-  if (status === 'Up') return 'ti ti-check';
-  if (status === 'Down') return 'ti ti-x';
-  if (status === 'arp') return 'ti ti-wifi';
-  if (status === 'arp-down') return 'ti ti-alert-triangle';
-  return 'ti ti-question-mark';
+  if (status === 'Up') return 'check';
+  if (status === 'Down') return 'x';
+  if (status === 'arp') return 'wifi';
+  if (status === 'arp-down') return 'alert-triangle';
+  return 'question-mark';
 }
 
 export function statusTitle(status) {
@@ -113,12 +113,12 @@ export function scanRunStateClass(state) {
 }
 
 export function scanRunStateIcon(state) {
-  if (state === 'queued') return 'ti ti-clock';
-  if (state === 'complete') return 'ti ti-check';
-  if (state === 'failed') return 'ti ti-alert-triangle';
-  if (state === 'timeout') return 'ti ti-clock-exclamation';
-  if (state === 'cancelled') return 'ti ti-ban';
-  return 'ti ti-point';
+  if (state === 'queued') return 'clock';
+  if (state === 'complete') return 'check';
+  if (state === 'failed') return 'alert-triangle';
+  if (state === 'timeout') return 'clock-exclamation';
+  if (state === 'cancelled') return 'ban';
+  return 'point';
 }
 
 export function scanStateClass(state) {

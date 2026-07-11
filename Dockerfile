@@ -9,6 +9,7 @@ RUN npm run build
 FROM alpine:3.23
 RUN apk add --no-cache \
       ca-certificates \
+      doas \
       dnsmasq \
       iproute2-minimal \
       iputils-arping \
@@ -24,7 +25,6 @@ RUN apk add --no-cache \
       php84-posix \
       php84-session \
       php84-sockets \
-      sudo \
     && adduser -S -D -H -s /sbin/nologin -G www-data www-data
 COPY config.php oui.php /opt/fenping/
 RUN mkdir -p /usr/share/fenping \
@@ -62,15 +62,14 @@ RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
     && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc \
     && touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts /var/lib/misc/dnsmasq.leases \
     && printf '%s\n' \
-      'Defaults umask=0007' \
-      'Defaults env_keep += "DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE"' \
-      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts' \
-      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --apply-pending' \
-      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --sync-locked' \
-      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php ping' \
-      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php inventory --work' \
-      > /etc/sudoers.d/fenping \
-    && chmod 0440 /etc/sudoers.d/fenping
+      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts' \
+      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts --apply-pending' \
+      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts --sync-locked' \
+      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php ping' \
+      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php inventory --work' \
+      > /etc/doas.conf \
+    && chmod 0400 /etc/doas.conf \
+    && doas -C /etc/doas.conf
 COPY boot.sh /.boot
 ENV FENPING_DATA_DIR=/var/lib/fenping
 EXPOSE 80

@@ -105,7 +105,7 @@ function queueScanResponse(string $ip, string $profile): void {
 
 function startScanWorkerAsync(): void {
   $cli = dirname(__DIR__) . '/cli.php';
-  $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg($cli) . ' inventory --work';
+  $command = '/usr/bin/doas /usr/bin/php ' . escapeshellarg($cli) . ' inventory --work';
   exec($command . ' </dev/null >/dev/null 2>&1 &');
 }
 

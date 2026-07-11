@@ -25,7 +25,7 @@ function handleNotify(array $params): array {
 }
 
 function handlePingRefresh(array $params): array {
-  $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(dirname(__DIR__) . '/cli.php') . ' ping';
+  $command = '/usr/bin/doas /usr/bin/php ' . escapeshellarg(dirname(__DIR__) . '/cli.php') . ' ping';
   $output = array();
   $code = 0;
   exec($command . ' 2>&1', $output, $code);

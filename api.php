@@ -325,7 +325,7 @@ function runDhcpHostsCli(string $mode): string {
   if (!in_array($mode, array('', '--apply-pending', '--sync-locked'), true))
     throw new InvalidArgumentException('invalid DHCP apply mode');
 
-  $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' hosts';
+  $command = '/usr/bin/doas /usr/bin/php ' . escapeshellarg(__DIR__ . '/cli.php') . ' hosts';
   if ($mode !== '')
     $command .= ' ' . escapeshellarg($mode);
   $output = array();

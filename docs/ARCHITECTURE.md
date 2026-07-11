@@ -18,7 +18,7 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 `Dockerfile` has two stages:
 
 - `frontend`: uses `node:22-alpine` to run `npm ci` and `npm run build`.
-- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM and PDO SQLite, dnsmasq, nmap with scripts, minimal IP/ping/arping tools, and sudo. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
+- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM and PDO SQLite, dnsmasq, nmap with scripts, minimal IP/ping/arping tools, and doas. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
 
 The image contains no database server or SQL client process. SQLite is embedded through PDO and persists its database and WAL files on the application bind mount.
 

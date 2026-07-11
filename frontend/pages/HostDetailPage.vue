@@ -1,21 +1,21 @@
 <template>
   <section>
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
-    <RouterLink v-if="!embedded" class="btn btn-link btn-sm p-0 mb-1" to="/"><i class="ti ti-arrow-left me-1"></i>Inventory</RouterLink>
+    <RouterLink v-if="!embedded" class="btn btn-link btn-sm p-0 mb-1" to="/"><AppIcon name="arrow-left" class="me-1" />Inventory</RouterLink>
     <div class="page-header host-detail-header">
       <div>
         <h2>{{ title }}</h2><div class="text-secondary small font-monospace">{{ host.ip || 'No IP' }}</div>
       </div>
       <div class="page-actions">
-        <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" title="Scan history" aria-label="Scan history" :disabled="!viewScan" @click="$emit('open-scan', host.ip, viewScan?.id)"><i class="ti ti-history me-1"></i>History</button>
-        <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('scan-host', host)"><i :class="isScanning ? 'ti ti-loader-2 is-spinning me-1' : 'ti ti-search me-1'"></i>Scan</button>
-        <button v-if="isAuthenticated && host.id" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><i class="ti ti-edit me-1"></i>Edit</button>
+        <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" title="Scan history" aria-label="Scan history" :disabled="!viewScan" @click="$emit('open-scan', host.ip, viewScan?.id)"><AppIcon name="history" class="me-1" />History</button>
+        <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('scan-host', host)"><AppIcon :name="isScanning ? 'loader-2' : 'search'" class="me-1" :class="{ 'is-spinning': isScanning }" />Scan</button>
+        <button v-if="isAuthenticated && host.id" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><AppIcon name="edit" class="me-1" />Edit</button>
       </div>
     </div>
     <div v-if="loading" class="table-wrap detail-empty"><div class="text-secondary text-center py-4">Loading</div></div>
     <template v-else-if="detail">
       <div class="detail-summary">
-        <div class="detail-fact"><span>Status</span><strong><span :class="statusClass(host.status)" class="status-pill"><i :class="statusIcon(host.status)"></i></span>{{ host.status || '-' }}</strong></div>
+        <div class="detail-fact"><span>Status</span><strong><span :class="statusClass(host.status)" class="status-pill"><AppIcon :name="statusIcon(host.status)" /></span>{{ host.status || '-' }}</strong></div>
         <div class="detail-fact"><span>MAC</span><strong class="font-monospace">{{ formatMac(host.mac) || '-' }}</strong></div>
         <div class="detail-fact"><span>Vendor</span><strong>{{ host.vendor || '-' }}</strong></div>
         <div class="detail-fact"><span>Netboot</span><strong>{{ netbootName }}</strong></div>
@@ -39,7 +39,7 @@
         <div class="table-wrap"><table class="table table-sm detail-table">
           <thead><tr><th>Status</th><th>MAC</th><th>Started</th><th>Duration</th></tr></thead>
           <tbody><tr v-if="historyRows.length === 0"><td class="text-secondary text-center py-4" colspan="4">No history</td></tr>
-            <tr v-for="item in historyRows" :key="item.id" :class="historyRowClass(item)"><td><span :class="statusClass(item.status)" :title="statusTitle(item.status)" class="status-pill"><i :class="statusIcon(item.status)"></i></span>{{ item.status || '-' }}</td><td class="font-monospace">{{ formatMac(item.mac) }}</td><td>{{ formatServerDate(item.date_begin) }}</td><td>{{ formatDuration(item.duration) }}</td></tr>
+            <tr v-for="item in historyRows" :key="item.id" :class="historyRowClass(item)"><td><span :class="statusClass(item.status)" :title="statusTitle(item.status)" class="status-pill"><AppIcon :name="statusIcon(item.status)" /></span>{{ item.status || '-' }}</td><td class="font-monospace">{{ formatMac(item.mac) }}</td><td>{{ formatServerDate(item.date_begin) }}</td><td>{{ formatDuration(item.duration) }}</td></tr>
           </tbody>
         </table></div>
       </div>

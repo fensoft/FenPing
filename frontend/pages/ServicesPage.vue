@@ -3,7 +3,7 @@
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="page-header">
       <div><h2>Services</h2><div class="text-secondary small">Open services from each host's latest effective scan</div></div>
-      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><i class="ti ti-refresh me-1" :class="{ 'is-spinning': loading }"></i>Refresh</button>
+      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />Refresh</button>
     </div>
 
     <div class="notify-summary">
@@ -14,8 +14,8 @@
 
     <div class="table-wrap">
       <div class="table-toolbar">
-        <div class="input-icon filter-search"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input v-model="search" class="form-control form-control-sm" type="search" placeholder="Search host, port, service, or version" /></div>
-        <button v-if="search" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Clear search" @click="search = ''"><i class="ti ti-x"></i></button>
+        <div class="input-icon filter-search"><span class="input-icon-addon"><AppIcon name="search" /></span><input v-model="search" class="form-control form-control-sm" type="search" placeholder="Search host, port, service, or version" /></div>
+        <button v-if="search" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Clear search" @click="search = ''"><AppIcon name="x" /></button>
       </div>
       <table class="table table-sm services-table">
         <thead><tr><th>Computer</th><th>IP</th><th>Port</th><th>Service</th><th>Version</th><th>Source</th><th>Scanned</th><th class="text-end">Actions</th></tr></thead>
@@ -38,8 +38,8 @@
             <td><span class="badge" :class="scanProfileBadgeClass(row.source || row.scan_mode)">{{ scanProfileLabel(row.source || row.scan_mode) }}</span></td>
             <td class="text-nowrap"><span>{{ formatScanDate(row.scan_date) }}</span><small v-if="row.merged">{{ scanProfileLabel(row.scan_mode) }} + Deep</small></td>
             <td class="text-end action-cell">
-              <a v-if="serviceUrl(row)" class="btn btn-outline-primary btn-sm icon-btn" :href="serviceUrl(row)" target="_blank" rel="noopener noreferrer" title="Open web service"><i class="ti ti-external-link"></i></a>
-              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" @click="$emit('open-scan', row.ip, row.scan_id)"><i class="ti ti-file-search"></i></button>
+              <a v-if="serviceUrl(row)" class="btn btn-outline-primary btn-sm icon-btn" :href="serviceUrl(row)" target="_blank" rel="noopener noreferrer" title="Open web service"><AppIcon name="external-link" /></a>
+              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" @click="$emit('open-scan', row.ip, row.scan_id)"><AppIcon name="file-search" /></button>
             </td>
           </tr>
         </tbody>

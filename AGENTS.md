@@ -126,7 +126,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - SQLite WAL plus `synchronous=NORMAL` is an intentional SSD-endurance tradeoff. Keep the busy timeout, foreign keys, and integrity checks enabled.
 - Keep `DATABASE_PATH` inside the local `data/database` bind mount in production; SQLite must not be placed on a network filesystem.
 - `/tmp` and `/run` are tmpfs; persistent state must remain under the documented bind mounts.
-- API-triggered sudo calls expect `/usr/bin/php` in Dockerfile sudoers.
+- API-triggered doas calls are restricted to exact `/usr/bin/php` CLI commands in `/etc/doas.conf`.
 - Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.
 - MAC vendor lookups must remain local; refresh the complete public IEEE registries through `oui-refresh` instead of sending individual LAN MAC addresses to an external API.
 - Lease imports must retain the `(hardware-ethernet, ip)` history and use the staging/upsert transaction in `dnsmasq.leases.php`; do not restore truncate-and-reinsert behavior.

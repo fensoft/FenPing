@@ -3,13 +3,13 @@
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="netboot-header">
       <div><h2>Netboot Images</h2><div class="text-secondary small">Private boot files served by dnsmasq TFTP</div></div>
-      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><i class="ti ti-refresh me-1" :class="{ 'is-spinning': loading }"></i>Refresh</button>
+      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />Refresh</button>
     </div>
     <div v-if="!isAuthenticated" class="alert alert-info" role="alert">Guest mode is read only. You can browse and download images.</div>
     <form v-if="isAuthenticated" class="netboot-upload" @submit.prevent="upload">
       <label class="form-label netboot-name-field">Name<input v-model.trim="uploadForm.name" class="form-control form-control-sm" type="text" placeholder="Optional display name" /></label>
       <label class="form-label netboot-file-field">File<input ref="fileInput" class="form-control form-control-sm" type="file" accept=".efi,.kpxe,.kkpxe,.kkkpxe,.pxe,.lkrn,.0,.ipxe" @change="onFile" /></label>
-      <button class="btn btn-primary btn-sm" type="submit" :disabled="uploading"><i class="ti ti-upload me-1" :class="{ 'is-spinning': uploading }"></i>Upload</button>
+      <button class="btn btn-primary btn-sm" type="submit" :disabled="uploading"><AppIcon name="upload" class="me-1" :class="{ 'is-spinning': uploading }" />Upload</button>
     </form>
     <div class="table-wrap">
       <table class="table table-sm netboot-table">
@@ -22,7 +22,7 @@
             <td class="text-truncate-cell" :title="image.name"><strong>{{ image.name }}</strong><small v-if="image.original_name && image.original_name !== image.name" class="text-secondary">{{ image.original_name }}</small></td>
             <td class="text-truncate-cell font-monospace" :title="image.filename"><a :href="image.url" target="_blank" rel="noopener noreferrer">{{ image.filename }}</a></td>
             <td class="text-nowrap">{{ formatBytes(image.size) }}</td><td class="text-center text-nowrap">{{ image.hosts || 0 }}</td><td class="text-nowrap">{{ formatServerDate(image.created_at) }}</td>
-            <td v-if="isAuthenticated" class="text-end"><button class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete image" :disabled="loading" @click="remove(image)"><i class="ti ti-trash"></i></button></td>
+            <td v-if="isAuthenticated" class="text-end"><button class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete image" :disabled="loading" @click="remove(image)"><AppIcon name="trash" /></button></td>
           </tr>
         </tbody>
       </table>

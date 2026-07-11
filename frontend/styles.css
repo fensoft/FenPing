@@ -82,7 +82,16 @@ body {
   color: #1d4ed8;
 }
 
-.app-nav-link .ti {
+.app-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 1em;
+  stroke-width: 2;
+  vertical-align: -0.125em;
+  width: 1em;
+}
+
+.app-nav-link .app-icon {
   flex: 0 0 auto;
   font-size: 1.15rem;
 }
@@ -586,7 +595,7 @@ body {
   min-width: 14rem;
 }
 
-.service-change-value .ti {
+.service-change-value .app-icon {
   margin: 0 0.35rem;
 }
 
@@ -950,7 +959,7 @@ body {
   font-weight: 650;
 }
 
-.inventory-table .ti {
+.inventory-table .app-icon {
   line-height: 1;
 }
 
@@ -958,8 +967,8 @@ body {
   white-space: nowrap;
 }
 
-.inventory-table .icon-btn.is-spinning .ti,
-.inventory-table .inventory-action-btn.is-spinning .ti {
+.inventory-table .icon-btn.is-spinning .app-icon,
+.inventory-table .inventory-action-btn.is-spinning .app-icon {
   animation: spin 0.8s linear infinite;
 }
 
@@ -1029,15 +1038,15 @@ body {
   white-space: nowrap;
 }
 
-.refresh-btn .ti {
+.refresh-btn .app-icon {
   transform-origin: center;
 }
 
-.refresh-btn.is-spinning .ti {
+.refresh-btn.is-spinning .app-icon {
   animation: spin 0.8s linear infinite;
 }
 
-.ti.is-spinning {
+.app-icon.is-spinning {
   animation: spin 0.8s linear infinite;
 }
 
@@ -1113,7 +1122,7 @@ body {
   outline: none;
 }
 
-.scan-profile-option > .ti {
+.scan-profile-option > .app-icon {
   color: #206bc4;
   font-size: 1.4rem;
 }

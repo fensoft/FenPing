@@ -4,7 +4,7 @@
     <div class="page-header">
       <div><h2>Scans</h2><div class="text-secondary small">Queued, running, and recent inventory scans</div></div>
       <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load">
-        <i class="ti ti-refresh me-1" :class="{ 'is-spinning': loading }"></i>Refresh
+        <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />Refresh
       </button>
     </div>
     <div class="table-wrap">
@@ -19,7 +19,7 @@
           <tr v-if="loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">Loading</td></tr>
           <tr v-else-if="!loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">No scans</td></tr>
           <tr v-for="scan in scans" :key="scan.id" :class="rowClass(scan)">
-            <td><span :class="scanRunStateClass(scan.state)"><i :class="scan.state === 'running' ? 'ti ti-loader-2 is-spinning' : scanRunStateIcon(scan.state)"></i>{{ scan.state || '-' }}</span></td>
+            <td><span :class="scanRunStateClass(scan.state)"><AppIcon :name="scan.state === 'running' ? 'loader-2' : scanRunStateIcon(scan.state)" :class="{ 'is-spinning': scan.state === 'running' }" />{{ scan.state || '-' }}</span></td>
             <td class="scan-queue-host">
               <button v-if="scan.host_id" class="btn btn-link btn-sm p-0 scan-queue-host-name" type="button" @click="$emit('host-detail', scan.host_id)">{{ displayName(scan) }}</button>
               <strong v-else>{{ displayName(scan) }}</strong>
@@ -31,9 +31,9 @@
             <td class="text-truncate-cell" :title="scan.error || ''">{{ scan.error || '-' }}</td>
             <td class="text-end action-cell">
               <button v-if="isAuthenticated && scan.ip" class="btn btn-outline-secondary btn-sm icon-btn" :class="{ 'is-spinning': isScanning(scan) || scan.state === 'running' }" type="button" :disabled="isScanning(scan) || scanIsActiveState(scan.state)" title="Scan host" @click="$emit('scan-host', scan)">
-                <i :class="isScanning(scan) || scan.state === 'running' ? 'ti ti-loader-2' : 'ti ti-search'"></i>
+                <AppIcon :name="isScanning(scan) || scan.state === 'running' ? 'loader-2' : 'search'" />
               </button>
-              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!(scan.result_available ?? scan.xml_usable)" @click="$emit('open-scan', scan.ip, scan.id)"><i class="ti ti-file-search"></i></button>
+              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!(scan.result_available ?? scan.xml_usable)" @click="$emit('open-scan', scan.ip, scan.id)"><AppIcon name="file-search" /></button>
             </td>
           </tr>
         </tbody>

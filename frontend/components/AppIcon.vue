@@ -1,0 +1,98 @@
+<template>
+  <component :is="icon" class="app-icon" aria-hidden="true" focusable="false" />
+</template>
+
+<script setup>
+import { computed } from 'vue';
+import {
+  IconAddressBook,
+  IconAlertTriangle,
+  IconAntennaBars5,
+  IconArrowBackUp,
+  IconArrowLeft,
+  IconArrowRight,
+  IconBan,
+  IconBell,
+  IconBolt,
+  IconCheck,
+  IconClock,
+  IconClockExclamation,
+  IconDeviceFloppy,
+  IconEdit,
+  IconExternalLink,
+  IconFileSearch,
+  IconFilterX,
+  IconFolderPlus,
+  IconHistory,
+  IconListDetails,
+  IconLoader2,
+  IconLogin,
+  IconLogout,
+  IconMinus,
+  IconMoon,
+  IconPencil,
+  IconPin,
+  IconPlus,
+  IconPoint,
+  IconQuestionMark,
+  IconRadar,
+  IconRefresh,
+  IconSearch,
+  IconServer,
+  IconSun,
+  IconTelescope,
+  IconTrash,
+  IconUpload,
+  IconWifi,
+  IconWorldWww,
+  IconX
+} from '@tabler/icons-vue';
+
+const props = defineProps({ name: { type: String, required: true } });
+
+const icons = Object.freeze({
+  'address-book': IconAddressBook,
+  'alert-triangle': IconAlertTriangle,
+  'antenna-bars-5': IconAntennaBars5,
+  'arrow-back-up': IconArrowBackUp,
+  'arrow-left': IconArrowLeft,
+  'arrow-right': IconArrowRight,
+  ban: IconBan,
+  bell: IconBell,
+  bolt: IconBolt,
+  check: IconCheck,
+  clock: IconClock,
+  'clock-exclamation': IconClockExclamation,
+  'device-floppy': IconDeviceFloppy,
+  edit: IconEdit,
+  'external-link': IconExternalLink,
+  'file-search': IconFileSearch,
+  'filter-x': IconFilterX,
+  'folder-plus': IconFolderPlus,
+  history: IconHistory,
+  'list-details': IconListDetails,
+  'loader-2': IconLoader2,
+  login: IconLogin,
+  logout: IconLogout,
+  minus: IconMinus,
+  moon: IconMoon,
+  pencil: IconPencil,
+  pin: IconPin,
+  plus: IconPlus,
+  point: IconPoint,
+  'question-mark': IconQuestionMark,
+  radar: IconRadar,
+  refresh: IconRefresh,
+  search: IconSearch,
+  server: IconServer,
+  sun: IconSun,
+  telescope: IconTelescope,
+  trash: IconTrash,
+  upload: IconUpload,
+  wifi: IconWifi,
+  'world-www': IconWorldWww,
+  x: IconX
+});
+
+const icon = computed(() => icons[props.name] || IconQuestionMark);
+</script>

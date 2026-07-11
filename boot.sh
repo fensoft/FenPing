@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 printf '\n\n-- booting fenping ... ---\n'
 grep -q "[[:space:]]$(hostname)\\([[:space:]]\\|$\\)" /etc/hosts || echo "127.0.1.1 $(hostname)" >> /etc/hosts
 if [ -z "${IFACE:-}" ]; then
@@ -20,7 +21,7 @@ install -d -o www-data -g www-data -m 0700 /run/fenping/sessions
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/client-body
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/fastcgi
 install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock
-sudo -u www-data env DATABASE_PATH="$DATABASE_PATH" FENPING_DATA_DIR="$FENPING_DATA_DIR" php /opt/fenping/cli.php database
+su www-data -s /bin/sh -c 'exec php /opt/fenping/cli.php database'
 IP=${IP:-$(ip -4 a show dev "$IFACE" | awk '/inet/ {print $2}' | head -n1 | sed 's#/.*##')}
 export IP
 export NETWORK
