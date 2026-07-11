@@ -25,7 +25,7 @@ function handleNotify(array $params): array {
 }
 
 function handlePingRefresh(array $params): array {
-  $command = 'flock -n /tmp/ping.lck -c ' . escapeshellarg('/usr/bin/sudo /usr/bin/php ' . dirname(__DIR__) . '/cli.php ping');
+  $command = '/usr/bin/sudo /usr/bin/php ' . escapeshellarg(dirname(__DIR__) . '/cli.php') . ' ping';
   $output = array();
   $code = 0;
   exec($command . ' 2>&1', $output, $code);

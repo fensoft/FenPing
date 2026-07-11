@@ -3,7 +3,6 @@
 const INVENTORY_SCAN_TIMEOUT_SECONDS = 7200;
 const INVENTORY_DISCOVERY_TIMEOUT_SECONDS = 300;
 const INVENTORY_SCAN_CONCURRENCY = 4;
-const INVENTORY_WORKER_LOCK = '/tmp/fenping-inventory-worker.lck';
 
 class InventoryTimeoutException extends RuntimeException {}
 
@@ -57,22 +56,8 @@ function runInventoryWorkerCommand(array $args): int {
   if (count($args) !== 0)
     throw new InvalidArgumentException(inventoryUsage());
 
-  $lock = fopen(INVENTORY_WORKER_LOCK, 'c');
-  if ($lock === false)
-    throw new RuntimeException('failed to open inventory worker lock');
-  if (!flock($lock, LOCK_EX | LOCK_NB)) {
-    fclose($lock);
-    echo "inventory worker already running" . PHP_EOL;
-    return 0;
-  }
-
-  try {
-    scanMetadataExpireStaleRunning(INVENTORY_SCAN_TIMEOUT_SECONDS + 60);
-    return inventoryWorkerLoop();
-  } finally {
-    flock($lock, LOCK_UN);
-    fclose($lock);
-  }
+  scanMetadataExpireStaleRunning(INVENTORY_SCAN_TIMEOUT_SECONDS + 60);
+  return inventoryWorkerLoop();
 }
 
 function inventoryWorkerLoop(): int {

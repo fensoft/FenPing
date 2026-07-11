@@ -11,7 +11,11 @@ require_once __DIR__ . '/backup.php';
 
 $command = $argv[1] ?? '';
 if ($command === 'ping') {
-  exit(runPingCommand(array_slice($argv, 2)));
+  exit(runLockedCliCommand(
+    '/tmp/ping.lck',
+    'ping scan',
+    fn() => runPingCommand(array_slice($argv, 2))
+  ));
 }
 
 if ($command === 'hosts') {
@@ -19,7 +23,21 @@ if ($command === 'hosts') {
 }
 
 if ($command === 'inventory') {
-  exit(runInventoryCommand(array_slice($argv, 2)));
+  $args = array_slice($argv, 2);
+  if (($args[0] ?? '') === '--work') {
+    exit(runLockedCliCommand(
+      '/tmp/fenping-inventory-worker.lck',
+      'inventory worker',
+      fn() => runInventoryCommand($args)
+    ));
+  }
+  if (($args[0] ?? '') === '--run-job')
+    exit(runInventoryCommand($args));
+  exit(runLockedCliCommand(
+    '/tmp/inventory-discovery.lck',
+    'inventory scheduling',
+    fn() => runInventoryCommand($args)
+  ));
 }
 
 if ($command === 'scan-port-backfill') {
@@ -27,11 +45,24 @@ if ($command === 'scan-port-backfill') {
 }
 
 if ($command === 'oui-refresh') {
-  exit(runIeeeOuiRefreshCommand(array_slice($argv, 2)));
+  exit(runLockedCliCommand(
+    '/tmp/oui-refresh.lck',
+    'OUI refresh',
+    fn() => runIeeeOuiRefreshCommand(array_slice($argv, 2))
+  ));
 }
 
 if ($command === 'oui-sync') {
   exit(runIeeeOuiSyncCommand(array_slice($argv, 2)));
+}
+
+if ($command === 'dnsmasq-leases') {
+  $args = array_slice($argv, 2);
+  exit(runLockedCliCommand(
+    '/tmp/dnsmasq-leases.lck',
+    'dnsmasq lease import',
+    fn() => runDnsmasqLeasesCommand($args)
+  ));
 }
 
 if ($command === 'discord-restart') {
@@ -53,15 +84,51 @@ fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);
 fwrite(STDERR, "       php cli.php scan-port-backfill" . PHP_EOL);
 fwrite(STDERR, "       php cli.php oui-refresh" . PHP_EOL);
 fwrite(STDERR, "       php cli.php oui-sync" . PHP_EOL);
+fwrite(STDERR, "       php cli.php dnsmasq-leases" . PHP_EOL);
 fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
 fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
 fwrite(STDERR, "       php cli.php restore <backup.tgz|dump.sql.gz>" . PHP_EOL);
 exit(2);
 
+function runLockedCliCommand(string $path, string $label, callable $callback): int {
+  $lock = fopen($path, 'c');
+  if ($lock === false) {
+    fwrite(STDERR, "failed to open $label lock" . PHP_EOL);
+    return 1;
+  }
+  if (!flock($lock, LOCK_EX | LOCK_NB)) {
+    fclose($lock);
+    fwrite(STDERR, "$label already running" . PHP_EOL);
+    return 75;
+  }
+
+  try {
+    return $callback();
+  } finally {
+    flock($lock, LOCK_UN);
+    fclose($lock);
+  }
+}
+
 function runScanPortBackfillCommand() {
   $inserted = scanPortChangesBackfill();
   echo "scan port changes backfill: $inserted inserted" . PHP_EOL;
   return 0;
+}
+
+function runDnsmasqLeasesCommand(array $args): int {
+  if (count($args) !== 0) {
+    fwrite(STDERR, "Usage: php cli.php dnsmasq-leases" . PHP_EOL);
+    return 2;
+  }
+
+  try {
+    require __DIR__ . '/dnsmasq.leases.php';
+    return 0;
+  } catch (Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . PHP_EOL);
+    return 1;
+  }
 }
 
 function runPingCommand($args) {
