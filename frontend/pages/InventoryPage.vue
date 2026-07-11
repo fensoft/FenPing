@@ -15,7 +15,7 @@
         <thead><tr>
           <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Close all categories" @click="closeAllCategories"><i class="ti ti-minus"></i></button></th>
           <th scope="col">Name</th><th scope="col">MAC</th><th scope="col">Vendor</th><th scope="col">IP</th>
-          <th scope="col" class="text-end"><button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm icon-btn" type="button" title="Add category" @click="$emit('add-category')"><i class="ti ti-folder-plus"></i></button></th>
+          <th scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>Actions</span><button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm inventory-action-btn" type="button" title="Add category" aria-label="Add category" @click="$emit('add-category')"><i class="ti ti-folder-plus"></i><span class="inventory-action-label">Add category</span></button></div></th>
         </tr></thead>
         <tbody>
           <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" colspan="6">Loading</td></tr>
@@ -25,8 +25,10 @@
               <td><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="row.collapsed ? 'Open category' : 'Close category'" @click="toggleCategory(row.categoryKey)"><i :class="row.collapsed ? 'ti ti-plus' : 'ti ti-minus'"></i></button></td>
               <td class="category-name" colspan="4">{{ row.name }}</td>
               <td class="text-end category-actions">
-                <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Rename category" @click="$emit('rename-category', row)"><i class="ti ti-pencil"></i></button>
-                <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete category" @click="$emit('delete-category', row)"><i class="ti ti-trash"></i></button>
+                <div class="inventory-actions">
+                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Rename category" aria-label="Rename category" @click="$emit('rename-category', row)"><i class="ti ti-pencil"></i><span class="inventory-action-label">Rename</span></button>
+                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-danger btn-sm inventory-action-btn" type="button" title="Delete category" aria-label="Delete category" @click="$emit('delete-category', row)"><i class="ti ti-trash"></i><span class="inventory-action-label">Delete</span></button>
+                </div>
               </td>
             </template>
             <template v-else>
@@ -40,11 +42,13 @@
               <td class="text-truncate-cell font-monospace" :title="formatMac(row.host.mac)"><span class="mac-value">{{ formatMac(row.host.mac) }}</span><i v-if="row.host.via" class="ti ti-antenna-bars-5 ms-1 text-secondary" :title="row.host.via"></i></td>
               <td class="text-truncate-cell" :title="row.host.vendor || ''">{{ row.host.vendor }}</td><td class="text-truncate-cell font-monospace" :title="row.host.ip || ''">{{ row.host.ip }}</td>
               <td class="text-end action-cell">
-                <button v-if="row.host.id" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Host detail" @click="$emit('host-detail', row.host.id)"><i class="ti ti-info-circle"></i></button>
-                <button v-if="isAuthenticated && row.host.ip" class="btn btn-sm icon-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i></button>
-                <button v-if="row.host.xml" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" @click="$emit('open-scan', row.host.ip)"><i class="ti ti-file-search"></i></button>
-                <button v-if="isAuthenticated && row.host.id" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Edit host" @click="$emit('open-edit', row.host)"><i class="ti ti-edit"></i></button>
-                <button v-else-if="isAuthenticated && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" title="Create host" @click="$emit('open-create', row.host)"><i class="ti ti-plus"></i></button>
+                <div class="inventory-actions">
+                  <button v-if="row.host.id" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Host details" aria-label="Host details" @click="$emit('host-detail', row.host.id)"><i class="ti ti-info-circle"></i><span class="inventory-action-label">Details</span></button>
+                  <button v-if="isAuthenticated && row.host.ip" class="btn btn-sm inventory-action-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
+                  <button v-if="row.host.xml" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="View scan" aria-label="View scan" @click="$emit('open-scan', row.host.ip)"><i class="ti ti-file-search"></i><span class="inventory-action-label">View scan</span></button>
+                  <button v-if="isAuthenticated && row.host.id" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Edit host" aria-label="Edit host" @click="$emit('open-edit', row.host)"><i class="ti ti-edit"></i><span class="inventory-action-label">Edit</span></button>
+                  <button v-else-if="isAuthenticated && row.host.mac" class="btn btn-outline-primary btn-sm inventory-action-btn" type="button" title="Create host" aria-label="Create host" @click="$emit('open-create', row.host)"><i class="ti ti-plus"></i><span class="inventory-action-label">Create</span></button>
+                </div>
               </td>
             </template>
           </tr>
@@ -139,6 +143,12 @@ function hostKey(host) { return String(host?.ip || host?.id || host?.mac || '');
 function isScanningHost(host) { const key = hostKey(host); return key !== '' && props.scanningHosts.has(key); }
 function isScanRunning(host) { return isScanningHost(host) || scanIsActiveState(host?.scan?.state); }
 function scanActionClass(host) { return { 'btn-outline-primary': isScanRunning(host), 'btn-outline-danger': host?.scan?.state === 'failed', 'btn-outline-warning': host?.scan?.state === 'timeout', 'btn-outline-secondary': !isScanRunning(host) && !['failed', 'timeout'].includes(host?.scan?.state), 'is-spinning': isScanRunning(host) }; }
+function scanButtonLabel(host) {
+  if (host?.scan?.state === 'queued') return 'Queued';
+  if (isScanRunning(host)) return 'Scanning';
+  if (['failed', 'timeout'].includes(host?.scan?.state)) return 'Retry';
+  return 'Scan';
+}
 function scanButtonTitle(host) {
   if (host?.scan?.state === 'queued') return 'Scan queued';
   if (isScanRunning(host)) return 'Scanning';
