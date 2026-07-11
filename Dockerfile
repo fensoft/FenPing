@@ -26,9 +26,6 @@ RUN apk add --no-cache \
       php84-session \
       php84-sockets \
     && adduser -S -D -H -s /sbin/nologin -G www-data www-data
-COPY config.php oui.php /opt/fenping/
-RUN mkdir -p /usr/share/fenping \
-    && php -r 'require "/opt/fenping/config.php"; require "/opt/fenping/oui.php"; $result=ieeeOuiRefresh(IEEE_OUI_SEED_PATH); printf("IEEE OUI registry seed: %d assignments from %d registries\n", $result["assignments"], $result["registries"]);'
 RUN printf '%s\n' \
       'upload_max_filesize=512M' \
       'post_max_size=512M' \
@@ -56,7 +53,7 @@ COPY img/icon.png /var/www/public/icon.png
 COPY favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/
-COPY functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php ipam.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
+COPY config.php functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php ipam.php scans.php inventory.php backup.php oui.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
 RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
     && install -d -o www-data -g www-data -m 2770 /var/lib/fenping/database \
     && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc \

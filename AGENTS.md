@@ -20,7 +20,7 @@ This repo uses Docker Compose with one application service.
 - `restart.sh` normally pulls published images and starts the Compose project. `./restart.sh dev` explicitly builds the current platform as the local `dev` tag.
 - `fenping` uses host networking for DHCP/DNS/TFTP and the web UI.
 - `fenping` owns the SQLite database at `/var/lib/fenping/database/fenping.sqlite3`, mounted from `data/database`.
-- `boot.sh` initializes and checks SQLite, backfills service-change notifications from retained scans, renders dnsmasq config, starts BusyBox cron, sends restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
+- `boot.sh` initializes and checks SQLite, backfills service-change notifications, refreshes the IEEE vendor registry into persistent state and SQL, renders dnsmasq config, starts BusyBox cron, sends the restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
 - Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
 Do not add a separate database service or split dnsmasq into another container unless the user explicitly asks.
@@ -128,7 +128,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - `/tmp` and `/run` are tmpfs; persistent state must remain under the documented bind mounts.
 - API-triggered doas calls are restricted to exact `/usr/bin/php` CLI commands in `/etc/doas.conf`.
 - Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.
-- MAC vendor lookups must remain local; refresh the complete public IEEE registries through `oui-refresh` instead of sending individual LAN MAC addresses to an external API.
+- MAC vendor lookups must remain local. The image contains no OUI seed; boot and the monthly job refresh the complete public IEEE registries through `oui-refresh` instead of sending individual LAN MAC addresses to an external API.
 - Lease imports must retain the `(hardware-ethernet, ip)` history and use the staging/upsert transaction in `dnsmasq.leases.php`; do not restore truncate-and-reinsert behavior.
 - Automatic inventory discovery must honor each managed host's `scan_profile` and `scan_interval_hours`; manual API/CLI scans intentionally bypass cadence.
 - dnsmasq generation happens through `php cli.php hosts`.

@@ -9,7 +9,7 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 1. `restart.sh` creates persistent directories under `data/`.
 2. `restart.sh` validates the Compose model and pulls the configured published FenPing image before stopping the current app.
 3. Compose starts `fenping` with host networking, reduced capabilities, and persistent mounts including `data/database`.
-4. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, and synchronizes the local IEEE vendor registry when changed.
+4. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, downloads the IEEE vendor registries, and synchronizes changed assignments into SQLite.
 5. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
 6. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, and sends `/api/...` to PHP-FPM through a Unix socket. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
 
@@ -156,7 +156,7 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 - Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained structured snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
 - History pruning keeps one week of jobs plus the latest complete and latest changed result for each profile.
 
-`oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains a validated seed at `/usr/share/fenping/ieee-oui.json`; the monthly refresh command downloads the complete registries with short timeouts and atomically writes `/var/lib/fenping/state/ieee-oui.json`. Boot runs `oui-sync` after schema setup, hashes the source and SQL rows, and transactionally replaces `oui_vendors` only when they differ. A successful monthly download also performs this sync. Invalid or failed refreshes leave the previous data untouched. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the JSON registry remains a lookup fallback if SQL is unavailable.
+`oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains no vendor database. Boot and the monthly refresh command download the complete registries with short timeouts and atomically write `/var/lib/fenping/state/ieee-oui.json`, then hash the source and SQL rows and transactionally replace `oui_vendors` only when they differ. Invalid or failed refreshes leave previous cache and SQL data untouched; a first startup without IEEE connectivity continues without vendor names. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the runtime JSON registry remains a lookup fallback if SQL is unavailable.
 
 Avoid default inventory scans in tests unless the user accepts LAN scan traffic.
 

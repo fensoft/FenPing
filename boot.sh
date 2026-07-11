@@ -30,7 +30,10 @@ export PASSWORD
 export SECRET
 export DISCORD_WEBHOOK_URL
 php /opt/fenping/cli.php scan-port-backfill
-php /opt/fenping/cli.php oui-sync
+if ! php /opt/fenping/cli.php oui-refresh; then
+  echo "warning: IEEE OUI startup refresh failed; keeping the existing vendor cache and SQL data" >&2
+  php /opt/fenping/cli.php oui-sync || true
+fi
 mkdir -p /etc/dnsmasq.d
 DNSMASQ_RENDERED=/run/fenping/dnsmasq.conf
 cp dnsmasq.conf.template "$DNSMASQ_RENDERED"

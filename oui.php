@@ -1,6 +1,5 @@
 <?php
 
-const IEEE_OUI_SEED_PATH = '/usr/share/fenping/ieee-oui.json';
 const IEEE_OUI_USER_AGENT = 'FenPing IEEE OUI updater';
 
 function ieeeOuiRegistrySources(): array {
@@ -17,21 +16,18 @@ function ieeeOuiRuntimePath(): string {
 }
 
 function runIeeeOuiRefreshCommand(array $args): int {
-  if (count($args) > 1 || (count($args) === 1 && $args[0] !== '--seed')) {
-    fwrite(STDERR, "Usage: php cli.php oui-refresh [--seed]" . PHP_EOL);
+  if (count($args) !== 0) {
+    fwrite(STDERR, "Usage: php cli.php oui-refresh" . PHP_EOL);
     return 2;
   }
 
-  $target = ($args[0] ?? '') === '--seed' ? IEEE_OUI_SEED_PATH : ieeeOuiRuntimePath();
   try {
-    $result = ieeeOuiRefresh($target);
+    $result = ieeeOuiRefresh(ieeeOuiRuntimePath());
     $message = "IEEE OUI registry updated: {$result['assignments']} assignments from {$result['registries']} registries";
-    if ($target !== IEEE_OUI_SEED_PATH) {
-      $sync = ieeeOuiSyncDatabase(db());
-      $message .= $sync['changed']
-        ? "; {$sync['assignments']} loaded into SQL"
-        : '; SQL already current';
-    }
+    $sync = ieeeOuiSyncDatabase(db());
+    $message .= $sync['changed']
+      ? "; {$sync['assignments']} loaded into SQL"
+      : '; SQL already current';
     echo $message . PHP_EOL;
     return 0;
   } catch (Throwable $e) {
@@ -289,11 +285,9 @@ function ieeeOuiAssignments(): array {
   if ($assignments !== null)
     return $assignments;
 
-  foreach (array(ieeeOuiRuntimePath(), IEEE_OUI_SEED_PATH) as $path) {
-    $loaded = ieeeOuiLoad($path);
-    if ($loaded !== null)
-      return $assignments = $loaded;
-  }
+  $loaded = ieeeOuiLoad(ieeeOuiRuntimePath());
+  if ($loaded !== null)
+    return $assignments = $loaded;
   return $assignments = array('6' => array(), '7' => array(), '9' => array());
 }
 
