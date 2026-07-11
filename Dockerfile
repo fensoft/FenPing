@@ -30,7 +30,7 @@ RUN apk add --no-cache \
          grep -Fqx "${script##*/}" /tmp/nmap-default-scripts || rm -f "$script"; \
        done \
     && nmap --script-updatedb >/dev/null \
-    && rm -f /tmp/nmap-default-scripts \
+    && rm -f /tmp/nmap-default-scripts /usr/share/nmap/nmap-mac-prefixes \
     && adduser -S -D -H -s /sbin/nologin -G www-data www-data
 RUN printf '%s\n' \
       'upload_max_filesize=512M' \
