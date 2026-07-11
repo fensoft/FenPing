@@ -12,7 +12,7 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-for dir in db dnsmasq dnsmasq.d netboot backups state; do
+for dir in database dnsmasq dnsmasq.d netboot backups state; do
   mkdir -p "$(pwd)/data/$dir"
 done
 
@@ -50,7 +50,7 @@ wait_for_fenping() {
     sleep 1
   done
   echo "FenPing did not become healthy" >&2
-  docker compose logs --tail 100 app db >&2 || true
+  docker compose logs --tail 100 app >&2 || true
   return 1
 }
 
@@ -75,18 +75,11 @@ if [ "$MODE" = "dev" ]; then
   fi
   echo "building $DEV_IMAGE for the current platform"
   docker build --pull --tag "$DEV_IMAGE" .
-  docker compose pull db
 else
-  docker compose pull app db
+  docker compose pull app
 fi
 
-# Stop the legacy embedded database cleanly before the first split-container
-# upgrade. On later runs the Compose-managed app has no local database server.
 if docker inspect fenping >/dev/null 2>&1; then
-  COMPOSE_SERVICE=`docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' fenping 2>/dev/null || true`
-  if [ -z "$COMPOSE_SERVICE" ]; then
-    docker exec fenping mariadb-admin --socket=/var/run/mysqld/mysqld.sock --user=root --password=root shutdown >/dev/null 2>&1 || true
-  fi
   docker stop --time 30 fenping >/dev/null 2>&1 || true
   docker rm fenping >/dev/null 2>&1 || true
 fi

@@ -10,39 +10,37 @@ Main stack:
 - PHP API and CLI with a hand-written front controller in `api.php`.
 - Static Vue 3 + Vite frontend styled with Tabler.
 - A host-networked Alpine application container running nginx/PHP-FPM, dnsmasq, BusyBox cron, nmap, ping, and ARP/arping tools.
-- A separate MariaDB 11.8 container managed by Docker Compose.
-- MariaDB stores app data.
+- SQLite stores application data inside the FenPing container's persistent database mount.
 - dnsmasq provides DHCP, DNS, TFTP, and leases.
 
 ## Runtime Shape
 
-This repo uses Docker Compose with an application service and a database service.
+This repo uses Docker Compose with one application service.
 
 - `restart.sh` normally pulls published images and starts the Compose project. `./restart.sh dev` explicitly builds the current platform as the local `dev` tag.
 - `fenping` uses host networking for DHCP/DNS/TFTP and the web UI.
-- `fenping-db` uses the official `mariadb:11.8` image, has networking disabled, shares only its Unix socket with the app, and owns `data/db`.
-- `boot.sh` waits for MariaDB, applies `db.sql`, backfills service-change notifications from retained scans, renders dnsmasq config, starts BusyBox cron, sends restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
+- `fenping` owns the SQLite database at `/var/lib/fenping/database/fenping.sqlite3`, mounted from `data/database`.
+- `boot.sh` initializes and checks SQLite, backfills service-change notifications from retained scans, renders dnsmasq config, starts BusyBox cron, sends restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
 - Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
-Do not fold MariaDB back into the application image or split dnsmasq into another container unless the user explicitly asks.
+Do not add a separate database service or split dnsmasq into another container unless the user explicitly asks.
 
 ## Important Files
 
-- `docker-compose.yml`: application and MariaDB services, mounts, capabilities, health checks, and logging limits.
-- `Dockerfile`: multi-stage build; Vite frontend first, then an Alpine application runtime with nginx/PHP-FPM, dnsmasq, BusyBox cron, networking tools, and the MariaDB client. Keep direct runtime dependencies explicit instead of relying on MariaDB server transitive packages.
+- `docker-compose.yml`: single application service, mounts, capabilities, and logging limits.
+- `Dockerfile`: multi-stage build; Vite frontend first, then an Alpine application runtime with nginx/PHP-FPM and PDO SQLite, dnsmasq, BusyBox cron, and networking tools.
 - `restart.sh`: validates, pulls `FENPING_IMAGE:FENPING_VERSION`, and starts the Compose project; `dev` mode builds and runs `FENPING_IMAGE:dev` locally.
 - `publish.sh`: multi-architecture Buildx release command that pushes the versioned Docker Hub image and `latest` by default.
 - `demo/`: versioned synthetic screenshot database, netboot files, and backup metadata. `./restart.sh demo` rebuilds and restores it after preserving the current state.
 - `boot.sh`: application-service bootstrap and database schema application.
 - `config.php`: committed generic PHP config that reads runtime values from environment variables.
-- `mariadb-fenping.cnf`: low-write MariaDB durability/logging policy; preserves InnoDB doublewrite protection.
 - `cli.php`: CLI commands: `ping`, `hosts`, `inventory`, `scan-port-backfill`, `oui-refresh`, `oui-sync`, `backup`, `restore`, `discord-restart`.
 - `api.php`: JSON API front controller.
 - `routes/`: route modules for auth, system, hosts/categories, IPAM, scans, netboot.
 - `functions.php`: domain helpers for inventory, host CRUD, categories, history, notify, netboot.
 - `ipam.php`: dynamic-device approval, observation aggregation, and DHCP pool utilization.
-- `database.php`: PDO singleton.
-- `db.sql`: idempotent schema/migration SQL and `update_status`.
+- `database.php`: configured PDO SQLite singleton, schema initialization, integrity checks, transaction helpers, and status-history writer.
+- `db.sql`: idempotent SQLite schema tracked with `PRAGMA user_version`.
 - `ping.php`: ping scanner and status writer.
 - `hosts.php`: DHCP field validation, transactional dnsmasq candidate generation, and local reload/start logic.
 - `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history, and effective port-change detection.
@@ -57,7 +55,7 @@ Do not fold MariaDB back into the application image or split dnsmasq into anothe
 
 Do not casually delete or rewrite files under `data/`.
 
-- `data/db` -> `fenping-db:/var/lib/mysql`
+- `data/database` -> `/var/lib/fenping/database`
 - `data/dnsmasq` -> `/var/lib/misc`
 - `data/dnsmasq.d` -> `/etc/dnsmasq.d`
 - `data/netboot` -> `/var/lib/fenping/netboot`
@@ -71,6 +69,7 @@ nginx's document root is `/var/www/public`. Application code lives in `/opt/fenp
 Run application commands through the `fenping` container:
 
 ```bash
+docker exec fenping php /opt/fenping/cli.php database
 docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4]
@@ -108,6 +107,8 @@ docker build -t fenping-check .
 npm run build
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php tests/backup_format.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
+DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
+DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
 ```
 
 After implementation work, run `./restart.sh` as the final deployment check. Use `./restart.sh demo` only when the user explicitly requests replacing the active data with the synthetic screenshot environment.
@@ -122,8 +123,8 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - Do not revert unrelated dirty work.
 - `data/` is live state.
 - Keep `db.sql` idempotent.
-- The MariaDB five-second flush window is an intentional SSD-endurance tradeoff. Do not disable InnoDB doublewrite protection.
-- MariaDB networking must remain disabled; the app connects through the shared `/run/mysqld` Unix socket and SQL must not be exposed to the host or LAN.
+- SQLite WAL plus `synchronous=NORMAL` is an intentional SSD-endurance tradeoff. Keep the busy timeout, foreign keys, and integrity checks enabled.
+- Keep `DATABASE_PATH` inside the local `data/database` bind mount in production; SQLite must not be placed on a network filesystem.
 - `/tmp` and `/run` are tmpfs; persistent state must remain under the documented bind mounts.
 - API-triggered sudo calls expect `/usr/bin/php` in Dockerfile sudoers.
 - Inventory commands enqueue scans; `inventory --work` is the lock-protected four-process queue coordinator.

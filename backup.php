@@ -119,15 +119,15 @@ function backupRestoreArchive(string $source): void {
 
 function backupTableNames(): array {
   return array(
-    'device_approvals', 'ips', 'leases', 'netboot_images', 'oui_vendors',
-    'ping', 'range', 'scan_port_changes', 'scan_snapshot_addresses',
-    'scan_snapshot_extra_ports', 'scan_snapshot_extra_reasons',
-    'scan_snapshot_hostnames', 'scan_snapshot_os_classes',
-    'scan_snapshot_os_cpes', 'scan_snapshot_os_matches',
-    'scan_snapshot_port_cpes', 'scan_snapshot_ports', 'scan_snapshot_scopes',
-    'scan_snapshot_script_nodes', 'scan_snapshot_scripts',
-    'scan_snapshot_trace_hops', 'scan_snapshots', 'scans', 'stats',
-    'stats_old', 'users'
+    'device_approvals', 'netboot_images', 'ips', 'leases', 'oui_vendors',
+    'ping', 'range', 'scan_snapshots', 'scans', 'scan_port_changes',
+    'scan_snapshot_addresses', 'scan_snapshot_hostnames',
+    'scan_snapshot_scopes', 'scan_snapshot_ports',
+    'scan_snapshot_port_cpes', 'scan_snapshot_extra_ports',
+    'scan_snapshot_extra_reasons', 'scan_snapshot_os_matches',
+    'scan_snapshot_os_classes', 'scan_snapshot_os_cpes',
+    'scan_snapshot_scripts', 'scan_snapshot_script_nodes',
+    'scan_snapshot_trace_hops', 'stats', 'stats_old', 'users'
   );
 }
 
@@ -141,12 +141,8 @@ function backupWriteDatabaseJson(string $target): array {
   $tableCount = 0;
   $totalRows = 0;
 
-  $unbuffered = false;
   try {
-    $database->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-    $database->exec('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
-    $database->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, false);
-    $unbuffered = true;
+    $database->beginTransaction();
     backupWriteChunk($out, "{\n");
     backupWriteChunk($out, '    "format": ' . backupJsonEncode(BACKUP_DATABASE_FORMAT) . ",\n");
     backupWriteChunk($out, '    "version": ' . backupJsonEncode(BACKUP_VERSION) . ",\n");
@@ -189,8 +185,6 @@ function backupWriteDatabaseJson(string $target): array {
     @unlink($target);
     throw $e;
   } finally {
-    if ($unbuffered)
-      $database->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
     fclose($out);
   }
 
@@ -207,19 +201,19 @@ function backupRestoreDatabase(array $document): void {
   $timestampShift = backupTimestampShift($document, $schema);
   echo "restoring database" . PHP_EOL;
 
-  $foreignKeysDisabled = false;
+  $orderedTables = backupTableNames();
   try {
-    $database->exec('SET FOREIGN_KEY_CHECKS = 0');
-    $foreignKeysDisabled = true;
-    $database->beginTransaction();
-    foreach (array_reverse(backupTableNames()) as $table) {
+    dbBeginImmediate($database);
+    foreach (array_reverse($orderedTables) as $table) {
       if (isset($schema[$table]))
         $database->exec('DELETE FROM ' . backupQuoteIdentifier($table));
     }
+    $database->exec('DELETE FROM sqlite_sequence');
 
-    foreach ($tables as $table => $tableData) {
-      if (!is_string($table) || !isset($schema[$table]))
+    foreach ($orderedTables as $table) {
+      if (!isset($tables[$table]) || !isset($schema[$table]))
         continue;
+      $tableData = $tables[$table];
       if (!is_array($tableData) || !isset($tableData['columns'], $tableData['rows'])
           || !is_array($tableData['columns']) || !is_array($tableData['rows']))
         throw new RuntimeException("invalid table data for $table in db.json");
@@ -259,37 +253,31 @@ function backupRestoreDatabase(array $document): void {
         $insert->execute($values);
       }
     }
-    $database->commit();
+    $violations = $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC);
+    if ($violations !== array())
+      throw new RuntimeException('restored database violates foreign keys');
+    dbCommit($database);
   } catch (Throwable $e) {
-    if ($database->inTransaction())
-      $database->rollBack();
+    dbRollback($database);
     throw $e;
-  } finally {
-    if ($foreignKeysDisabled)
-      $database->exec('SET FOREIGN_KEY_CHECKS = 1');
   }
   echo "database restored" . PHP_EOL;
 }
 
 function backupCurrentSchema(): array {
-  global $db_name;
-
-  $stmt = db()->prepare("
-    SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, EXTRA
-    FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA=:schema
-    ORDER BY TABLE_NAME, ORDINAL_POSITION
-  ");
-  $stmt->execute(array(':schema' => $db_name));
   $schema = array();
-  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $table = (string)$row['TABLE_NAME'];
-    if (!in_array($table, backupTableNames(), true))
+  foreach (backupTableNames() as $table) {
+    $exists = db()->prepare("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:name");
+    $exists->execute(array('name' => $table));
+    if ((int)$exists->fetchColumn() !== 1)
       continue;
-    $schema[$table][(string)$row['COLUMN_NAME']] = array(
-      'type' => (string)$row['DATA_TYPE'],
-      'generated' => str_contains((string)$row['EXTRA'], 'GENERATED')
-    );
+    $stmt = db()->query('PRAGMA table_xinfo(' . backupQuoteIdentifier($table) . ')');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+      $schema[$table][(string)$row['name']] = array(
+        'type' => strtolower((string)$row['type']),
+        'generated' => (int)($row['hidden'] ?? 0) !== 0
+      );
+    }
   }
   return $schema;
 }
@@ -335,41 +323,9 @@ function backupShiftTimestamp($value, int $seconds): string {
 }
 
 function backupApplyCurrentSchema(): void {
-  global $db_name;
-
-  $schema = __DIR__ . '/db.sql';
-  if (!is_file($schema) || !is_readable($schema))
-    throw new RuntimeException('current schema file not readable: db.sql');
-
   echo "applying current schema" . PHP_EOL;
-  $command = array_merge(
-    array(backupFindExecutable(array('mariadb', 'mysql'))),
-    backupMysqlArgs(),
-    array($db_name)
-  );
-  backupRunProcess($command, backupMysqlEnv(), $schema, null);
+  databaseInitialize();
   echo "schema updated" . PHP_EOL;
-}
-
-function backupMysqlArgs(): array {
-  global $db_host, $db_port, $db_user;
-
-  $args = array('--user=' . $db_user);
-  if (($db_host ?? '') === 'localhost' && file_exists('/var/run/mysqld/mysqld.sock'))
-    $args[] = '--socket=/var/run/mysqld/mysqld.sock';
-  elseif (($db_host ?? '') !== '') {
-    $args[] = '--host=' . $db_host;
-    $args[] = '--port=' . ($db_port ?? '3306');
-  }
-  return $args;
-}
-
-function backupMysqlEnv(): array {
-  global $db_pass;
-
-  if (($db_pass ?? '') === '')
-    return array();
-  return array('MYSQL_PWD' => $db_pass);
 }
 
 function backupScanCounts(): array {
@@ -378,11 +334,11 @@ function backupScanCounts(): array {
       (SELECT COUNT(*) FROM scans) AS scan_rows,
       (SELECT COUNT(*) FROM scan_snapshots) AS snapshot_rows,
       (
-        (SELECT COALESCE(SUM(OCTET_LENGTH(output)), 0) FROM scan_snapshot_scripts) +
-        (SELECT COALESCE(SUM(OCTET_LENGTH(value)), 0) FROM scan_snapshot_script_nodes) +
+        (SELECT COALESCE(SUM(length(CAST(output AS BLOB))), 0) FROM scan_snapshot_scripts) +
+        (SELECT COALESCE(SUM(length(CAST(value AS BLOB))), 0) FROM scan_snapshot_script_nodes) +
         (SELECT COALESCE(SUM(
-          OCTET_LENGTH(COALESCE(service, '')) + OCTET_LENGTH(COALESCE(product, '')) +
-          OCTET_LENGTH(COALESCE(version, '')) + OCTET_LENGTH(COALESCE(extra_info, ''))
+          length(CAST(COALESCE(service, '') AS BLOB)) + length(CAST(COALESCE(product, '') AS BLOB)) +
+          length(CAST(COALESCE(version, '') AS BLOB)) + length(CAST(COALESCE(extra_info, '') AS BLOB))
         ), 0) FROM scan_snapshot_ports)
       ) AS snapshot_bytes
   ");
@@ -414,7 +370,6 @@ function backupNetbootIndex(): array {
 }
 
 function backupManifest(string $database, array $databaseCounts): array {
-  global $db_name;
   $scanCounts = backupScanCounts();
 
   return array(
@@ -435,7 +390,7 @@ function backupManifest(string $database, array $databaseCounts): array {
       'netboot_rows' => count(backupNetbootIndex())
     ),
     'database' => array(
-      'name' => $db_name,
+      'name' => basename(DATABASE_PATH),
       'tables' => $databaseCounts['tables'],
       'rows' => $databaseCounts['rows'],
       'bytes' => filesize($database)
@@ -548,17 +503,6 @@ function backupReloadHosts(): void {
   $code = runHostsCommand();
   if ($code !== 0)
     throw new RuntimeException('dnsmasq reload failed after restore');
-}
-
-function backupFindExecutable(array $names): string {
-  foreach ($names as $name) {
-    $output = array();
-    $code = 0;
-    exec('command -v ' . escapeshellarg($name) . ' 2>/dev/null', $output, $code);
-    if ($code === 0 && isset($output[0]) && trim($output[0]) !== '')
-      return trim($output[0]);
-  }
-  throw new RuntimeException('missing command: ' . implode(' or ', $names));
 }
 
 function backupRunProcess(array $command, array $env = array(), ?string $stdinFile = null, ?string $stdoutFile = null): string {

@@ -16,7 +16,7 @@
         "netboot_rows": 2
     },
     "database": {
-        "name": "ping",
+        "name": "fenping.sqlite3",
         "tables": 26,
         "rows": 127,
         "bytes": 45201

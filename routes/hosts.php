@@ -253,8 +253,8 @@ function hostPingState(array $host): array {
     SELECT status, date
     FROM ping
     WHERE (:ip<>'' AND ip=:ip)
-       OR (:mac<>'' AND LOWER(mac) COLLATE latin1_general_ci=:mac)
-    ORDER BY IF(ip=:ip, 0, 1), date DESC
+       OR (:mac<>'' AND LOWER(mac)=:mac)
+    ORDER BY CASE WHEN ip=:ip THEN 0 ELSE 1 END, date DESC
     LIMIT 1
   ");
   $stmt->execute(array('ip' => $ip, 'mac' => $mac));

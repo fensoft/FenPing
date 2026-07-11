@@ -8,11 +8,7 @@ if (!function_exists('fenping_env')) {
   }
 }
 
-$db_host = fenping_env('DB_HOST', 'localhost');
-$db_port = fenping_env('DB_PORT', '3306');
-$db_user = fenping_env('DB_USER', 'root');
-$db_pass = fenping_env('DB_PASS', 'root');
-$db_name = fenping_env('DB_NAME', 'ping');
+$database_path = fenping_env('DATABASE_PATH', '/var/lib/fenping/database/fenping.sqlite3');
 $network = fenping_env('NETWORK', '192.168.0');
 $interface = fenping_env('IFACE', fenping_env('INTERFACE', fenping_env('HOST_INTERFACE', 'eth0')));
 $myself = fenping_env('IP', '192.168.0.100');
@@ -26,3 +22,5 @@ if ($fenping_data_dir === '')
   $fenping_data_dir = '/var/lib/fenping';
 if (!defined('FENPING_DATA_DIR'))
   define('FENPING_DATA_DIR', $fenping_data_dir);
+if (!defined('DATABASE_PATH'))
+  define('DATABASE_PATH', $database_path);

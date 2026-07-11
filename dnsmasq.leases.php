@@ -37,15 +37,15 @@ if (count($lines) > 0 && count($leases) === 0)
   throw new RuntimeException('dnsmasq lease file contains no valid IPv4 leases');
 
 $db = db();
-$db->exec('DROP TEMPORARY TABLE IF EXISTS lease_import_stage');
+$db->exec('DROP TABLE IF EXISTS lease_import_stage');
 $db->exec("
   CREATE TEMPORARY TABLE lease_import_stage (
-    ip varchar(45) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    mac char(17) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    hostname varchar(255) DEFAULT NULL,
-    ends datetime NOT NULL,
+    ip TEXT NOT NULL,
+    mac TEXT NOT NULL,
+    hostname TEXT DEFAULT NULL,
+    ends DATETIME NOT NULL,
     PRIMARY KEY (mac, ip)
-  ) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  )
 ");
 
 $stage = $db->prepare("
@@ -56,31 +56,32 @@ foreach ($leases as $lease)
   $stage->execute($lease);
 
 $observedAt = date('Y-m-d H:i:s');
-$db->beginTransaction();
+dbBeginImmediate($db);
 try {
   $upsert = $db->prepare("
     INSERT INTO leases
       (ip, `hardware-ethernet`, `client-hostname`, ends, first_seen, last_seen, active)
     SELECT ip, mac, hostname, ends, :first_seen, :last_seen, 1
     FROM lease_import_stage
-    ON DUPLICATE KEY UPDATE
-      `client-hostname`=VALUES(`client-hostname`),
-      ends=VALUES(ends),
-      last_seen=VALUES(last_seen),
+    WHERE 1
+    ON CONFLICT(`hardware-ethernet`, ip) DO UPDATE SET
+      `client-hostname`=excluded.`client-hostname`,
+      ends=excluded.ends,
+      last_seen=excluded.last_seen,
       active=1
   ");
   $upsert->execute(array('first_seen' => $observedAt, 'last_seen' => $observedAt));
 
   $db->exec("
-    UPDATE leases current
-    LEFT JOIN lease_import_stage imported
-      ON imported.mac=current.`hardware-ethernet` AND imported.ip=current.ip
-    SET current.active=0
-    WHERE current.active=1 AND imported.mac IS NULL
+    UPDATE leases
+    SET active=0
+    WHERE active=1 AND NOT EXISTS (
+      SELECT 1 FROM lease_import_stage imported
+      WHERE imported.mac=leases.`hardware-ethernet` AND imported.ip=leases.ip
+    )
   ");
-  $db->commit();
+  dbCommit($db);
 } catch (Throwable $e) {
-  if ($db->inTransaction())
-    $db->rollBack();
+  dbRollback($db);
   throw $e;
 }

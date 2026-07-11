@@ -32,6 +32,7 @@ function healthDb(): array {
     $time = db()->query("SELECT CURRENT_TIMESTAMP")->fetchColumn();
     return array(
       'ok' => true,
+      'engine' => 'sqlite',
       'time' => $time === false ? null : $time
     );
   } catch (Throwable $e) {

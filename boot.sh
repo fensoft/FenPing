@@ -9,50 +9,18 @@ echo "host networking enabled on $IFACE; leaving host routes, addresses and ipta
 cd /opt/fenping
 mkdir -p /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
 chown www-data:www-data /var/lib/fenping/netboot
+umask 0007
+FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
+DATABASE_PATH=${DATABASE_PATH:-/var/lib/fenping/database/fenping.sqlite3}
+export FENPING_DATA_DIR DATABASE_PATH
+install -d -o www-data -g www-data -m 2770 "$(dirname "$DATABASE_PATH")"
+install -d -o www-data -g www-data -m 0750 /run/fenping
 install -d -o www-data -g www-data -m 0700 /run/fenping/dnsmasq-pending
 install -d -o www-data -g www-data -m 0700 /run/fenping/sessions
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/client-body
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/fastcgi
 install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock
-MYSQL=$(command -v mariadb || command -v mysql)
-MYSQLADMIN=$(command -v mariadb-admin || command -v mysqladmin)
-DB_HOST=${DB_HOST:-localhost}
-DB_PORT=${DB_PORT:-3306}
-DB_USER=${DB_USER:-root}
-DB_PASS=${DB_PASS:-root}
-DB_NAME=${DB_NAME:-ping}
-export DB_HOST DB_PORT DB_USER DB_PASS DB_NAME
-if [ "$DB_HOST" = "localhost" ] && [ -S /run/mysqld/mysqld.sock ]; then
-  MYSQL_PROTOCOL=SOCKET
-else
-  MYSQL_PROTOCOL=TCP
-fi
-
-mysql_connection() {
-  MYSQL_CLIENT=$1
-  shift
-  if [ "$MYSQL_PROTOCOL" = "SOCKET" ]; then
-    MYSQL_PWD=$DB_PASS "$MYSQL_CLIENT" --protocol=SOCKET --socket=/run/mysqld/mysqld.sock "$@"
-  else
-    MYSQL_PWD=$DB_PASS "$MYSQL_CLIENT" --protocol=TCP --host="$DB_HOST" --port="$DB_PORT" "$@"
-  fi
-}
-
-DB_READY=0
-i=0
-while [ "$i" -lt 60 ]; do
-  if mysql_connection "$MYSQLADMIN" --user="$DB_USER" ping > /dev/null 2>&1; then
-    DB_READY=1
-    break
-  fi
-  sleep 1
-  i=$((i + 1))
-done
-if [ "$DB_READY" -ne 1 ]; then
-  echo "fatal: MariaDB connection did not become ready" >&2
-  exit 1
-fi
-mysql_connection "$MYSQL" --user="$DB_USER" "$DB_NAME" < db.sql
+sudo -u www-data env DATABASE_PATH="$DATABASE_PATH" FENPING_DATA_DIR="$FENPING_DATA_DIR" php /opt/fenping/cli.php database
 IP=${IP:-$(ip -4 a show dev "$IFACE" | awk '/inet/ {print $2}' | head -n1 | sed 's#/.*##')}
 export IP
 export NETWORK
@@ -60,8 +28,6 @@ export IFACE
 export PASSWORD
 export SECRET
 export DISCORD_WEBHOOK_URL
-FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
-export FENPING_DATA_DIR
 php /opt/fenping/cli.php scan-port-backfill
 php /opt/fenping/cli.php oui-sync
 mkdir -p /etc/dnsmasq.d

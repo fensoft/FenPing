@@ -181,7 +181,7 @@ function ieeeOuiSyncDatabase(PDO $db): array {
   if ($databaseState['count'] === $count && hash_equals($sourceHash, $databaseState['hash']))
     return array('assignments' => $count, 'changed' => false);
 
-  $db->beginTransaction();
+  dbBeginImmediate($db);
   try {
     $db->exec('DELETE FROM oui_vendors');
     $batch = array();
@@ -196,10 +196,9 @@ function ieeeOuiSyncDatabase(PDO $db): array {
     }
     if (count($batch) > 0)
       ieeeOuiInsertBatch($db, $batch);
-    $db->commit();
+    dbCommit($db);
   } catch (Throwable $e) {
-    if ($db->inTransaction())
-      $db->rollBack();
+    dbRollback($db);
     throw $e;
   }
   return array('assignments' => $count, 'changed' => true);

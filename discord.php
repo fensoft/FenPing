@@ -83,15 +83,27 @@ function discordStatusChangesSince(int $afterId): array {
       COALESCE((
         SELECT i.name
         FROM ips i
-        WHERE i.ip=s.ip OR LOWER(i.mac) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
-        ORDER BY IF(i.ip=s.ip, 0, 1), i.id DESC
+        WHERE i.ip=s.ip
+        ORDER BY i.id DESC
+        LIMIT 1
+      ), (
+        SELECT i.name
+        FROM ips i
+        WHERE LOWER(i.mac)=LOWER(s.mac)
+        ORDER BY i.id DESC
         LIMIT 1
       ), '') AS name,
       COALESCE((
         SELECT i.important
         FROM ips i
-        WHERE i.ip=s.ip OR LOWER(i.mac) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
-        ORDER BY IF(i.ip=s.ip, 0, 1), i.id DESC
+        WHERE i.ip=s.ip
+        ORDER BY i.id DESC
+        LIMIT 1
+      ), (
+        SELECT i.important
+        FROM ips i
+        WHERE LOWER(i.mac)=LOWER(s.mac)
+        ORDER BY i.id DESC
         LIMIT 1
       ), 0) AS important
     FROM stats s

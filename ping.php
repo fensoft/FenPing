@@ -5,11 +5,11 @@ function pingHosts($ips, $interface, $localIps) {
   $localMac = localMac($interface);
   $icmpUp = pingSweep(array_values($ips), $interface, $localIps);
   $arpTable = readArpTable($interface);
-  $db = pingStatements();
 
   foreach ($ips as $ip)
-    $hosts[] = pingHost($ip, $interface, $localIps, $localMac, $arpTable, $icmpUp, $db);
+    $hosts[] = pingHost($ip, $interface, $localIps, $localMac, $arpTable, $icmpUp, null);
 
+  savePingHosts($hosts);
   return $hosts;
 }
 
@@ -53,7 +53,23 @@ function savePingHost($host, $db) {
   $status = ($host["status"] ?? "") === "" ? "Down" : $host["status"];
 
   $db["upsert"]->execute(array("ip" => $ip, "mac" => $mac, "status" => $status));
-  $db["updateStatus"]->execute(array("ip" => $ip, "mac" => $mac === "" ? null : $mac, "status" => $status));
+  updateStatusHistory($db, $ip, $mac === "" ? null : $mac, $status);
+}
+
+function savePingHosts(array $hosts): void {
+  if ($hosts === array())
+    return;
+  $database = db();
+  $statements = pingStatements();
+  dbBeginImmediate($database);
+  try {
+    foreach ($hosts as $host)
+      savePingHost($host, $statements);
+    dbCommit($database);
+  } catch (Throwable $error) {
+    dbRollback($database);
+    throw $error;
+  }
 }
 
 function localMac($interface) {

@@ -4,14 +4,15 @@ require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/database.php';
 require_once dirname(__DIR__) . '/scans.php';
 
-if (!str_ends_with((string)$db_name, '_test'))
-  throw new RuntimeException('refusing to run destructive scan storage tests outside a *_test database');
+if (!str_contains(basename(DATABASE_PATH), 'test'))
+  throw new RuntimeException('refusing to run destructive scan storage tests outside a test SQLite database');
 
 function assertScan($condition, string $message): void {
   if (!$condition)
     throw new RuntimeException($message);
 }
 
+databaseInitialize();
 $database = db();
 $database->exec('DELETE FROM scan_port_changes');
 $database->exec('DELETE FROM scans');

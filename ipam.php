@@ -110,7 +110,7 @@ function ipamLatestObservations(): array {
   $stmt = db()->query("
     SELECT current.ip, current.`hardware-ethernet` AS mac, current.`client-hostname` AS name,
       current.ends, current.last_seen,
-      IF(current.active=1 AND current.ends>CURRENT_TIMESTAMP, 1, 0) AS lease_active
+      CASE WHEN current.active=1 AND current.ends>CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS lease_active
     FROM leases current
     INNER JOIN (
       SELECT `hardware-ethernet` AS mac, MAX(last_seen) AS last_seen
@@ -230,7 +230,7 @@ function ipamDeviceRow(string $mac, array $observation, ?string $approvedAt): ar
 function approveDevice(string $mac): array {
   $stmt = db()->prepare("
     INSERT INTO device_approvals (mac) VALUES (:mac)
-    ON DUPLICATE KEY UPDATE mac=VALUES(mac)
+    ON CONFLICT(mac) DO NOTHING
   ");
   $stmt->execute(array('mac' => $mac));
   $read = db()->prepare("SELECT approved_at FROM device_approvals WHERE mac=:mac");

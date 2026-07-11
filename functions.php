@@ -108,7 +108,7 @@ function getInventory() {
       $ips[$data["ip"]] = $data;
   }
   #en db mais ne pingent pas
-  $stmt = $db->prepare("select id, name, p.ip, p.mac, status, date, i.important, i.web, i.repeater from ips i right outer join ping p on p.ip=i.ip or lower(i.mac)=lower(p.mac) where p.status != 'Down' and id is null");
+  $stmt = $db->prepare("select id, name, p.ip, p.mac, status, date, i.important, i.web, i.repeater from ping p left outer join ips i on p.ip=i.ip or lower(i.mac)=lower(p.mac) where p.status != 'Down' and id is null");
   $stmt->execute();
   while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
     if (($data["ip"] ?? "") != "")
@@ -121,7 +121,7 @@ function getInventory() {
     if ($mac != "")
       array_push($macs, $mac);
   }
-  $stmt = $db->prepare("select NULL as id, `client-hostname` as name, ip, `hardware-ethernet` as mac, 'Down' as status, last_seen as date, 0 as important from leases where active=1 and ends > date_sub(now(), interval 7 day)");
+  $stmt = $db->prepare("select NULL as id, `client-hostname` as name, ip, `hardware-ethernet` as mac, 'Down' as status, last_seen as date, 0 as important from leases where active=1 and ends > datetime('now', '-7 days')");
   $stmt->execute();
   while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $ip = $data["ip"] ?? "";
@@ -172,13 +172,13 @@ function getInventory() {
       select ip_begin, ip_begin_full, type from (
         select
           ip_begin,
-          case when ip_begin like '%.%' then ip_begin else concat(:category_network, '.', ip_begin) end as ip_begin_full,
+          case when ip_begin like '%.%' then ip_begin else :category_network || '.' || ip_begin end as ip_begin_full,
           type
         from `range`
       ) ranges
-      where INET_ATON(:ip_begin) < INET_ATON(ip_begin_full)
-        and INET_ATON(:ip_end) >= INET_ATON(ip_begin_full)
-      order by INET_ATON(ip_begin_full) desc
+      where ipv4_num(:ip_begin) < ipv4_num(ip_begin_full)
+        and ipv4_num(:ip_end) >= ipv4_num(ip_begin_full)
+      order by ipv4_num(ip_begin_full) desc
       limit 1
     ");
     $stmt2->execute(array("category_network" => $categoryNetwork, "ip_begin" => $old_ip, "ip_end" => $ip));
@@ -323,7 +323,7 @@ function del($id) {
 }
 
 function get_stats() {
-  $stmt = getDb()->prepare("select distinct ip from stats where ip is not null and ip<>'' and date_end > date_sub(now(), interval 7 day)");
+  $stmt = getDb()->prepare("select distinct ip from stats where ip is not null and ip<>'' and date_end > datetime('now', '-7 days')");
   $stmt->execute();
   $arr = array();
   while ($i = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -369,7 +369,7 @@ function get_port_notify($hours = 24) {
       c.current_service,
       c.current_version,
       c.created_at,
-      UNIX_TIMESTAMP(c.created_at) AS created,
+      unixepoch(c.created_at) AS created,
       COALESCE(NULLIF((
         SELECT i.mac FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1
       ), ''), NULLIF((
@@ -384,7 +384,7 @@ function get_port_notify($hours = 24) {
         SELECT i.important FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1
       ), 0) AS important
     FROM scan_port_changes c
-    WHERE c.created_at >= DATE_SUB(NOW(), INTERVAL $hours HOUR)
+    WHERE c.created_at >= datetime('now', '-$hours hours')
     ORDER BY c.created_at DESC, c.id DESC
   ");
   $stmt->execute();
@@ -425,42 +425,60 @@ function get_notify($hours = 24) {
       s.status,
       s.date_begin,
       s.date_end,
-      UNIX_TIMESTAMP(s.date_begin) AS `begin`,
-      UNIX_TIMESTAMP(CASE
-        WHEN s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip) THEN NOW()
-        ELSE COALESCE(s.date_end, NOW())
+      unixepoch(s.date_begin) AS `begin`,
+      unixepoch(CASE
+        WHEN s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip) THEN CURRENT_TIMESTAMP
+        ELSE COALESCE(s.date_end, CURRENT_TIMESTAMP)
       END) AS `end`,
-      GREATEST(0, UNIX_TIMESTAMP(CASE
-        WHEN s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip) THEN NOW()
-        ELSE COALESCE(s.date_end, NOW())
-      END) - UNIX_TIMESTAMP(s.date_begin)) AS duration,
-      IF(s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip), 1, 0) AS current,
+      MAX(0, unixepoch(CASE
+        WHEN s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip) THEN CURRENT_TIMESTAMP
+        ELSE COALESCE(s.date_end, CURRENT_TIMESTAMP)
+      END) - unixepoch(s.date_begin)) AS duration,
+      CASE WHEN s.id=(SELECT MAX(latest.id) FROM stats latest WHERE latest.ip=s.ip) THEN 1 ELSE 0 END AS current,
       (SELECT prev.status FROM stats prev WHERE prev.ip=s.ip AND prev.id<s.id ORDER BY prev.id DESC LIMIT 1) AS previous_status,
       COALESCE(NULLIF((
         SELECT i.name
         FROM ips i
-        WHERE i.ip=s.ip OR LOWER(i.mac) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
-        ORDER BY IF(i.ip=s.ip, 0, 1), i.id DESC
+        WHERE i.ip=s.ip
+        ORDER BY i.id DESC
+        LIMIT 1
+      ), ''), NULLIF((
+        SELECT i.name
+        FROM ips i
+        WHERE LOWER(i.mac)=LOWER(s.mac)
+        ORDER BY i.id DESC
         LIMIT 1
       ), ''), NULLIF((
         SELECT l.`client-hostname`
         FROM leases l
-        WHERE l.ip=s.ip OR LOWER(CONVERT(l.`hardware-ethernet` USING latin1)) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
-        ORDER BY IF(l.ip=s.ip, 0, 1), l.active DESC, l.last_seen DESC
+        WHERE l.ip=s.ip
+        ORDER BY l.active DESC, l.last_seen DESC
+        LIMIT 1
+      ), ''), NULLIF((
+        SELECT l.`client-hostname`
+        FROM leases l
+        WHERE LOWER(l.`hardware-ethernet`)=LOWER(s.mac)
+        ORDER BY l.active DESC, l.last_seen DESC
         LIMIT 1
       ), ''), '') AS name,
       '' AS vendor,
       COALESCE((
         SELECT i.important
         FROM ips i
-        WHERE i.ip=s.ip OR LOWER(i.mac) COLLATE latin1_general_ci=LOWER(s.mac) COLLATE latin1_general_ci
-        ORDER BY IF(i.ip=s.ip, 0, 1), i.id DESC
+        WHERE i.ip=s.ip
+        ORDER BY i.id DESC
+        LIMIT 1
+      ), (
+        SELECT i.important
+        FROM ips i
+        WHERE LOWER(i.mac)=LOWER(s.mac)
+        ORDER BY i.id DESC
         LIMIT 1
       ), 0) AS important
     FROM stats s
     WHERE s.ip IS NOT NULL
       AND s.ip<>''
-      AND s.date_begin >= DATE_SUB(NOW(), INTERVAL $hours HOUR)
+      AND s.date_begin >= datetime('now', '-$hours hours')
       AND EXISTS (SELECT 1 FROM stats prev_exists WHERE prev_exists.ip=s.ip AND prev_exists.id<s.id)
     ORDER BY s.date_begin DESC, s.id DESC
   ");
@@ -750,7 +768,7 @@ function netboot_upload_error(int $code): string {
 }
 
 function get_history($ip, $blipSeconds = 120) {
-  $stmt = getDb()->prepare("select *, UNIX_TIMESTAMP(date_begin) as `begin`, UNIX_TIMESTAMP(date_end) as `end`, UNIX_TIMESTAMP(date_end)-UNIX_TIMESTAMP(date_begin) as duration from stats where ip=:ip and date_end > date_sub(now(), interval 7 day) order by id asc");
+  $stmt = getDb()->prepare("select *, unixepoch(date_begin) as `begin`, unixepoch(date_end) as `end`, unixepoch(date_end)-unixepoch(date_begin) as duration from stats where ip=:ip and date_end > datetime('now', '-7 days') order by id asc");
   $stmt->execute(array("ip" => $ip));
   $before = $stmt->fetchAll(PDO::FETCH_ASSOC);
   $cutoff = time() - 7 * 24 * 60 * 60;

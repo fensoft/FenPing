@@ -66,9 +66,8 @@ function inventoryWorkerLoop(): int {
   while (true) {
     inventoryReapJobProcesses($processes);
 
-    $slots = max(0, INVENTORY_SCAN_CONCURRENCY - scanMetadataRunningCount());
-    if ($slots > 0) {
-      foreach (scanMetadataClaimQueued($slots) as $job) {
+    if (scanMetadataRunningCount() < INVENTORY_SCAN_CONCURRENCY) {
+      foreach (scanMetadataClaimQueued(INVENTORY_SCAN_CONCURRENCY) as $job) {
         $process = inventoryStartJobProcess((int)$job['id']);
         if ($process === false) {
           scanMetadataFailed((int)$job['id'], 'failed to start scan worker');
@@ -223,7 +222,7 @@ function inventoryScheduledTargets(array $hosts, ?int $now = null): array {
 
   $lastScans = array();
   $stmt = db()->query("
-    SELECT ip, mode, MAX(UNIX_TIMESTAMP(COALESCE(date_end, date_begin))) AS last_scan
+    SELECT ip, mode, MAX(unixepoch(COALESCE(date_end, date_begin))) AS last_scan
     FROM scans
     WHERE state='complete'
     GROUP BY ip, mode

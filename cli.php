@@ -10,6 +10,20 @@ require_once __DIR__ . '/inventory.php';
 require_once __DIR__ . '/backup.php';
 
 $command = $argv[1] ?? '';
+if ($command === 'database') {
+  try {
+    databaseInitialize();
+    $errors = databaseIntegrityErrors();
+    if ($errors !== array())
+      throw new RuntimeException('database integrity check failed: ' . implode('; ', $errors));
+    echo 'SQLite database ready: ' . DATABASE_PATH . PHP_EOL;
+    exit(0);
+  } catch (Throwable $error) {
+    fwrite(STDERR, $error->getMessage() . PHP_EOL);
+    exit(1);
+  }
+}
+
 if ($command === 'ping') {
   exit(runLockedCliCommand(
     '/tmp/ping.lck',
@@ -78,6 +92,7 @@ if ($command === 'restore') {
 }
 
 fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
+fwrite(STDERR, "       php cli.php database" . PHP_EOL);
 fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
 fwrite(STDERR, "       php cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4] (queue scans)" . PHP_EOL);
 fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);

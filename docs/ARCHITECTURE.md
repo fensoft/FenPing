@@ -2,36 +2,33 @@
 
 FenPing is a small LAN appliance that combines host inventory, DHCP/DNS management, ping history, nmap scan history, notifications, backup/restore, and netboot image selection in one web UI.
 
-The runtime is managed by Docker Compose. The host-networked Alpine `fenping` container runs nginx/PHP-FPM, dnsmasq, BusyBox cron, and scanner tools. The separate `fenping-db` container uses the official MariaDB 11.8 image and owns the persistent SQL data.
+The runtime is managed by Docker Compose. One host-networked Alpine `fenping` container runs nginx/PHP-FPM, SQLite, dnsmasq, BusyBox cron, and scanner tools.
 
 ## High-Level Flow
 
 1. `restart.sh` creates persistent directories under `data/`.
-2. `restart.sh` validates the Compose model and pulls the configured published FenPing and MariaDB images before stopping the current app.
-3. Compose starts the network-disabled `fenping-db`, mounting `data/db`, the shared SQL socket, and the low-write MariaDB configuration. The official entrypoint upgrades a reused MariaDB data directory when needed, then Compose waits for its authenticated health check.
-4. Compose starts `fenping` with host networking, reduced capabilities, and the remaining persistent mounts.
-5. `boot.sh` waits for MariaDB over loopback and applies `db.sql`.
-6. `boot.sh` verifies the local IEEE vendor registry in MariaDB and imports it only when changed, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
-7. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, and sends `/api/...` to PHP-FPM through a Unix socket. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
+2. `restart.sh` validates the Compose model and pulls the configured published FenPing image before stopping the current app.
+3. Compose starts `fenping` with host networking, reduced capabilities, and persistent mounts including `data/database`.
+4. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, and synchronizes the local IEEE vendor registry when changed.
+5. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
+6. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, and sends `/api/...` to PHP-FPM through a Unix socket. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
 
 ## Docker Build
 
 `Dockerfile` has two stages:
 
 - `frontend`: uses `node:22-alpine` to run `npm ci` and `npm run build`.
-- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM, the MariaDB client, dnsmasq, nmap with scripts, minimal IP/ping/arping tools, and sudo. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
+- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM and PDO SQLite, dnsmasq, nmap with scripts, minimal IP/ping/arping tools, and sudo. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
 
-The application image no longer contains a MariaDB server. Compose uses the smaller purpose-built `mariadb:11.8` image for SQL.
+The image contains no database server or SQL client process. SQLite is embedded through PDO and persists its database and WAL files on the application bind mount.
 
 Normal runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.6`.
 
-`./restart.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev`, pulls only the database image, and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next normal restart uses the configured published version again.
+`./restart.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev` and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next normal restart uses the configured published version again.
 
 `config.php` is committed as a generic, environment-driven config file. Runtime values should come from `.env`/container environment variables; do not hardcode machine-specific secrets in `config.php`.
 
-For compatibility with the former embedded database, the default application login remains `root`. `DB_PASS` initializes the root password only when `data/db` is empty; an existing data directory keeps its stored credentials, so changing `.env` alone does not rotate that password.
-
-MariaDB has no container network. The app and database share the named `db-socket` volume mounted at `/run/mysqld`, so SQL stays inaccessible over both the LAN and host loopback.
+`DATABASE_PATH` defaults to `/var/lib/fenping/database/fenping.sqlite3`. It can be overridden for testing, but production should keep it within the mounted database directory.
 
 ## Persistent Data
 
@@ -39,7 +36,7 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 
 | Host path | Container path | Purpose |
 | --- | --- | --- |
-| `data/db` | `fenping-db:/var/lib/mysql` | MariaDB data directory |
+| `data/database` | `/var/lib/fenping/database` | SQLite database and WAL files |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | generated dnsmasq config |
 | `data/netboot` | `/var/lib/fenping/netboot` | uploaded netboot files |
@@ -52,9 +49,9 @@ Avoid destructive edits in `data/` unless explicitly requested.
 
 ## Write Endurance
 
-`mariadb-fenping.cnf` uses `innodb_flush_log_at_trx_commit=2` and a five-second `innodb_flush_log_at_timeout`. This groups durable redo flushes, with the explicit tradeoff that an operating-system crash or power loss can discard approximately five seconds of recent transactions. InnoDB doublewrite remains enabled for torn-page protection, binary/general/slow logging is disabled, and buffer-pool state is not dumped on shutdown.
+SQLite uses WAL mode and `synchronous=NORMAL`, trading possible loss of the newest committed transactions after an operating-system crash or power loss for fewer sync writes while preserving database consistency. A 30-second busy timeout serializes short competing writers, foreign keys are enforced, and SQLite temporary storage remains in memory.
 
-Compose mounts size-limited tmpfs filesystems for both services. MariaDB's temporary tablespace, scan output, nginx upload buffering, locks, PHP sessions, and lease-import staging therefore avoid persistent writes. Login sessions are cleared on app-container restart. nginx discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP lease history is retained, while `dnsmasq.leases.php` upserts observed rows instead of rebuilding the table. Generated dnsmasq files use content comparison to avoid identical replacements.
+Compose mounts size-limited tmpfs filesystems for scan output, nginx upload buffering, locks, PHP sessions, and lease-import staging. Login sessions are cleared on app-container restart. nginx discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP lease history is retained, while `dnsmasq.leases.php` upserts observed rows instead of rebuilding the table. Generated dnsmasq files use content comparison to avoid identical replacements.
 
 Stable ping records update their activity timestamp at most once per day; actual status, IP, or MAC changes are still written immediately. The boot-time IEEE sync hashes both registries and skips the 57,000-row transaction when SQL is already current. Backups, netboot uploads, DHCP leases, changed scan results, and actual application mutations remain persistent by design.
 
@@ -84,6 +81,7 @@ Route modules:
 `cli.php` is the operational command entrypoint:
 
 ```bash
+docker exec fenping php /opt/fenping/cli.php database
 docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4]
@@ -100,7 +98,9 @@ Prefer adding operational jobs here instead of creating new shell scripts.
 
 ## Database
 
-The configured application database is normally `ping`.
+The application database is the SQLite file at `DATABASE_PATH`. `database.php` configures WAL, `synchronous=NORMAL`, a 30-second busy timeout, foreign keys, memory-backed temporary storage, and the deterministic `ipv4_num()` ordering helper. `db.sql` is the canonical idempotent schema and `PRAGMA user_version` tracks future migrations.
+
+SQLite permits concurrent readers and one writer. Mutation paths use immediate write transactions. Scan queue capacity is counted and claimed atomically, so concurrent coordinators cannot collectively exceed four running jobs. Ping detection completes before one batched transaction writes the latest state and status history.
 
 Important tables:
 
@@ -173,11 +173,11 @@ The required `IFACE` environment variable selects the host network interface tha
 
 `php cli.php hosts` always validates candidate files with `dnsmasq --test`, atomically replaces the generated files, and reloads/starts local dnsmasq. If replacement or reload fails, it restores the previous files.
 
-Host create, edit, and delete requests hold a shared dnsmasq update lock and a MariaDB transaction while generating and testing a candidate configuration. The candidate is applied before the SQL commit; an apply failure rolls back SQL, while a commit failure regenerates dnsmasq from the committed database state. Netboot image deletion uses the same path because it clears per-host boot assignments. Host names, MAC addresses, router octets, DNS server addresses, IP addresses, and netboot filenames are validated before they can be rendered into dnsmasq files.
+Host create, edit, and delete requests hold a shared dnsmasq update lock and an immediate SQLite transaction while generating and testing a candidate configuration. The candidate is applied before the SQL commit; an apply failure rolls back SQL, while a commit failure regenerates dnsmasq from the committed database state. Netboot image deletion uses the same path because it clears per-host boot assignments. Host names, MAC addresses, router octets, DNS server addresses, IP addresses, and netboot filenames are validated before they can be rendered into dnsmasq files.
 
 Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_images`. Browser downloads are streamed through `/api/netboot/images/{id}/file`; nginx denies the entire legacy `/netboot` URL path and never maps the storage directory into the document root, so uploaded PHP-like files cannot execute.
 
-`dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a memory-backed staging table. One InnoDB transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
+`dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a temporary staging table. One immediate SQLite transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
 
 `ipam.php` combines lease, ping, and status observations by MAC. Devices seen within seven days remain pending until approved or converted into a managed fixed host. Approval only updates `device_approvals`; it never changes DHCP access or reloads dnsmasq. Pool utilization counts the union of active unexpired leases and fixed MAC reservations within the configured dynamic range, so overlapping addresses count once.
 
@@ -248,7 +248,7 @@ Locks use `flock` under `/tmp` to prevent overlapping jobs.
 `GET /api/health` reports:
 
 - HTTP/PHP status.
-- DB connectivity.
+- SQLite connectivity and engine identity.
 - dnsmasq running.
 - BusyBox `crond` running.
 - last ping scan time.
@@ -265,6 +265,8 @@ docker build --check .
 docker build -t fenping-check .
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/backup_format.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
+DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
+DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
 curl -fsS http://127.0.0.1/api/health
 curl -fsS http://127.0.0.1/api/inventory
 ```
@@ -285,7 +287,7 @@ Do not run broad scans or destructive restore tests unless the user asks.
 
 ## Things To Preserve
 
-- The Compose application/database split unless the user explicitly asks to change it.
+- The single host-networked application container with embedded SQLite.
 - Host networking for DHCP/DNS/scanning behavior.
 - Idempotent `db.sql`.
 - Direct JSON API responses, not `{ "ok": true }` wrappers.

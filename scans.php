@@ -637,14 +637,10 @@ function scanMetadataEnqueue(string $ip, string $mode): array {
   if (!scanProfileIsValid($mode))
     throw new InvalidArgumentException('invalid scan profile');
 
-  $lockName = 'fenping-scan-' . hash('sha256', $ip);
-  $lock = db()->prepare('SELECT GET_LOCK(:name, 5)');
-  $lock->execute(array('name' => $lockName));
-  if ((int)$lock->fetchColumn() !== 1)
-    throw new RuntimeException("failed to lock scan queue for $ip");
-
+  $database = db();
+  dbBeginImmediate($database);
   try {
-    $stmt = db()->prepare("
+    $stmt = $database->prepare("
       SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
       FROM scans
       WHERE ip=:ip AND state IN ('queued', 'running')
@@ -661,32 +657,36 @@ function scanMetadataEnqueue(string $ip, string $mode): array {
       if ($covering === null || scanProfileRank((string)$active['mode']) > scanProfileRank((string)$covering['mode']))
         $covering = $active;
     }
-    if ($covering !== null)
+    if ($covering !== null) {
+      dbCommit($database);
       return array('metadata' => scanNormalizeMetadata($covering), 'created' => false);
+    }
 
     foreach ($activeJobs as $active) {
       if ($active['state'] !== 'queued' || scanProfileRank((string)$active['mode']) >= $requestedRank)
         continue;
-      $update = db()->prepare("UPDATE scans SET mode=:mode WHERE id=:id AND state='queued'");
+      $update = $database->prepare("UPDATE scans SET mode=:mode WHERE id=:id AND state='queued'");
       $update->execute(array('mode' => $mode, 'id' => $active['id']));
       if ($update->rowCount() === 1) {
         $active['mode'] = $mode;
+        dbCommit($database);
         return array('metadata' => scanNormalizeMetadata($active), 'created' => false);
       }
     }
 
-    $insert = db()->prepare("
+    $insert = $database->prepare("
       INSERT INTO scans (ip, mode, state, date_begin, ports_count)
       VALUES (:ip, :mode, 'queued', NULL, 0)
     ");
     $insert->execute(array('ip' => $ip, 'mode' => $mode));
-    $metadata = scanMetadataJobById((int)db()->lastInsertId());
+    $metadata = scanMetadataJobById((int)$database->lastInsertId());
     if ($metadata === null)
       throw new RuntimeException('failed to read queued scan');
+    dbCommit($database);
     return array('metadata' => $metadata, 'created' => true);
-  } finally {
-    $release = db()->prepare('SELECT RELEASE_LOCK(:name)');
-    $release->execute(array('name' => $lockName));
+  } catch (Throwable $error) {
+    dbRollback($database);
+    throw $error;
   }
 }
 
@@ -702,45 +702,57 @@ function scanMetadataJobById(int $id): ?array {
   return $metadata === false ? null : scanNormalizeMetadata($metadata);
 }
 
-function scanMetadataClaimQueued(int $limit): array {
-  $limit = max(0, min(20, $limit));
-  if ($limit === 0)
-    return array();
+function scanMetadataClaimQueued(int $concurrency): array {
+  $concurrency = max(1, min(20, $concurrency));
+  $database = db();
+  dbBeginImmediate($database);
+  try {
+    $running = (int)$database->query("SELECT COUNT(*) FROM scans WHERE state='running'")->fetchColumn();
+    $limit = max(0, $concurrency - $running);
+    if ($limit === 0) {
+      dbCommit($database);
+      return array();
+    }
 
-  $stmt = db()->prepare("
-    SELECT queued.id
-    FROM scans queued
-    WHERE queued.state='queued'
-      AND NOT EXISTS (
-        SELECT 1
-        FROM scans running
-        WHERE running.ip=queued.ip AND running.state='running'
-      )
-    ORDER BY CASE queued.mode
-      WHEN 'quick' THEN 0
-      WHEN 'lightweight' THEN 0
-      WHEN 'standard' THEN 1
-      ELSE 2
-    END, queued.id ASC
-    LIMIT $limit
-  ");
-  $stmt->execute();
+    $stmt = $database->prepare("
+      SELECT queued.id
+      FROM scans queued
+      WHERE queued.state='queued'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM scans running
+          WHERE running.ip=queued.ip AND running.state='running'
+        )
+      ORDER BY CASE queued.mode
+        WHEN 'quick' THEN 0
+        WHEN 'lightweight' THEN 0
+        WHEN 'standard' THEN 1
+        ELSE 2
+      END, queued.id ASC
+      LIMIT $limit
+    ");
+    $stmt->execute();
 
-  $jobs = array();
-  foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
-    $update = db()->prepare("
+    $jobs = array();
+    $update = $database->prepare("
       UPDATE scans
       SET state='running', date_begin=CURRENT_TIMESTAMP, date_end=NULL, duration=NULL, error=NULL
       WHERE id=:id AND state='queued'
     ");
-    $update->execute(array('id' => $id));
-    if ($update->rowCount() !== 1)
-      continue;
-    $job = scanMetadataJobById((int)$id);
-    if ($job !== null)
-      $jobs[] = $job;
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
+      $update->execute(array('id' => $id));
+      if ($update->rowCount() !== 1)
+        continue;
+      $job = scanMetadataJobById((int)$id);
+      if ($job !== null)
+        $jobs[] = $job;
+    }
+    dbCommit($database);
+    return $jobs;
+  } catch (Throwable $error) {
+    dbRollback($database);
+    throw $error;
   }
-  return $jobs;
 }
 
 function scanMetadataQueuedCount(): int {
@@ -757,10 +769,10 @@ function scanMetadataExpireStaleRunning(int $maxSeconds): int {
     UPDATE scans
     SET state='timeout',
         date_end=CURRENT_TIMESTAMP,
-        duration=IF(date_begin IS NULL, NULL, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP))),
+        duration=CASE WHEN date_begin IS NULL THEN NULL ELSE MAX(0, unixepoch(CURRENT_TIMESTAMP)-unixepoch(date_begin)) END,
         error=COALESCE(NULLIF(error, ''), 'scan worker stopped before completion')
     WHERE state='running'
-      AND (date_begin IS NULL OR date_begin <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL $maxSeconds SECOND))
+      AND (date_begin IS NULL OR date_begin <= datetime('now', '-$maxSeconds seconds'))
   ");
   $stmt->execute();
   return $stmt->rowCount();
@@ -777,7 +789,7 @@ function scanMetadataStart(string $ip, string $mode): int {
 
 function scanMetadataComplete(int $id, array $scan): bool {
   $database = db();
-  $database->beginTransaction();
+  dbBeginImmediate($database);
 
   try {
     $job = scanMetadataRawById($id, true);
@@ -830,11 +842,10 @@ function scanMetadataComplete(int $id, array $scan): bool {
       'uptime_seconds' => $scan['uptime_seconds'] ?? null,
       'distance' => $scan['distance'] ?? null
     ));
-    $database->commit();
+    dbCommit($database);
     return $changed === 1;
   } catch (Throwable $e) {
-    if ($database->inTransaction())
-      $database->rollBack();
+    dbRollback($database);
     throw $e;
   }
 }
@@ -848,12 +859,11 @@ function scanNormalizeDate(string $value): ?string {
 }
 
 function scanMetadataRawById(int $id, bool $forUpdate = false): ?array {
-  $suffix = $forUpdate ? ' FOR UPDATE' : '';
   $stmt = db()->prepare("
     SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
     FROM scans
     WHERE id=:id
-    LIMIT 1$suffix
+    LIMIT 1
   ");
   $stmt->execute(array('id' => $id));
   $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -878,7 +888,7 @@ function scanEnsureSnapshot(array $job, array $scan): array {
   $previousRow = $previous->fetch(PDO::FETCH_ASSOC);
 
   $insert = db()->prepare("
-    INSERT IGNORE INTO scan_snapshots (ip, mode, result_hash, content_hash)
+    INSERT OR IGNORE INTO scan_snapshots (ip, mode, result_hash, content_hash)
     VALUES (:ip, :mode, :result_hash, :content_hash)
   ");
   $insert->execute(array(
@@ -1237,7 +1247,7 @@ function scanRecordPortChanges(array $job, array $scan, ?string $createdAt = nul
     return 0;
 
   $insert = db()->prepare("
-    INSERT IGNORE INTO scan_port_changes (
+    INSERT OR IGNORE INTO scan_port_changes (
       scan_id, ip, mode, change_type, protocol, port,
       previous_service, previous_version, current_service, current_version, created_at
     ) VALUES (
@@ -1287,7 +1297,7 @@ function scanPortChangesBackfill(): int {
     return 0;
   }
 
-  $database->beginTransaction();
+  dbBeginImmediate($database);
   try {
     $inserted = 0;
     $mark = $database->prepare("UPDATE scans SET port_changes_processed=1 WHERE id=:id");
@@ -1299,12 +1309,11 @@ function scanPortChangesBackfill(): int {
       );
       $mark->execute(array('id' => $row['id']));
     }
-    $database->commit();
+    dbCommit($database);
     scanPrunePortChanges();
     return $inserted;
   } catch (Throwable $e) {
-    if ($database->inTransaction())
-      $database->rollBack();
+    dbRollback($database);
     throw $e;
   }
 }
@@ -1474,7 +1483,7 @@ function scanMetadataFailed(int $id, string $error): void {
     UPDATE scans
     SET state='failed',
         date_end=CURRENT_TIMESTAMP,
-        duration=IF(date_begin IS NULL, NULL, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP))),
+        duration=CASE WHEN date_begin IS NULL THEN NULL ELSE MAX(0, unixepoch(CURRENT_TIMESTAMP)-unixepoch(date_begin)) END,
         error=:error
     WHERE id=:id
   ");
@@ -1486,7 +1495,7 @@ function scanMetadataTimedOut(int $id, string $error): void {
     UPDATE scans
     SET state='timeout',
         date_end=CURRENT_TIMESTAMP,
-        duration=IF(date_begin IS NULL, NULL, GREATEST(0, TIMESTAMPDIFF(SECOND, date_begin, CURRENT_TIMESTAMP))),
+        duration=CASE WHEN date_begin IS NULL THEN NULL ELSE MAX(0, unixepoch(CURRENT_TIMESTAMP)-unixepoch(date_begin)) END,
         error=:error
     WHERE id=:id
   ");
@@ -1649,7 +1658,7 @@ function scanMetadataHistory(string $ip, int $limit = 30): array {
       AND snapshot_id IS NOT NULL
       AND result_changed=1
       AND (
-        COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+        COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= datetime('now', '-$days days')
         OR id IN (
           SELECT latest_id
           FROM (
@@ -1683,7 +1692,7 @@ function scanMetadataForIp(string $ip, int $limit = 50): array {
     WHERE ip=:ip
       AND (state<>'complete' OR result_changed=1)
       AND (
-        COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= DATE_SUB(NOW(), INTERVAL $days DAY)
+        COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) >= datetime('now', '-$days days')
         OR id IN (
           SELECT latest_id
           FROM (
@@ -1816,7 +1825,7 @@ function scanMetadataLatestUsableByIp(): array {
       GROUP BY ip
     ) latest ON latest.id=s.id
     LEFT JOIN ips i ON i.ip=s.ip
-    ORDER BY INET_ATON(s.ip), s.ip
+    ORDER BY ipv4_num(s.ip), s.ip
   ");
 
   $results = array();
@@ -1853,7 +1862,7 @@ function scanPruneHistory(string $ip): void {
 
 function scanPrunePortChanges(): void {
   $days = SCAN_HISTORY_DAYS;
-  db()->exec("DELETE FROM scan_port_changes WHERE created_at < DATE_SUB(NOW(), INTERVAL $days DAY)");
+  db()->exec("DELETE FROM scan_port_changes WHERE created_at < datetime('now', '-$days days')");
 }
 
 function scanPruneOldHistory(string $ip): void {
@@ -1862,7 +1871,7 @@ function scanPruneOldHistory(string $ip): void {
     SELECT id
     FROM scans
     WHERE ip=:ip
-      AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) < DATE_SUB(NOW(), INTERVAL $days DAY)
+      AND COALESCE(date_end, date_begin, CURRENT_TIMESTAMP) < datetime('now', '-$days days')
       AND id NOT IN (
         SELECT keep_id
         FROM (
@@ -1890,10 +1899,8 @@ function scanPruneOldHistory(string $ip): void {
 
 function scanPruneOrphanSnapshots(): void {
   db()->exec("
-    DELETE ss
-    FROM scan_snapshots ss
-    LEFT JOIN scans s ON s.snapshot_id=ss.id
-    WHERE s.id IS NULL
+    DELETE FROM scan_snapshots
+    WHERE NOT EXISTS (SELECT 1 FROM scans WHERE scans.snapshot_id=scan_snapshots.id)
   ");
 }
 

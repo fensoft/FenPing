@@ -2,7 +2,7 @@
 
 FenPing is a compact LAN appliance for device discovery, uptime history, DHCP/DNS host management, nmap scan history, notifications, backups, and netboot image assignment.
 
-It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI backend, MariaDB, dnsmasq, BusyBox cron, nmap, ping, ARP, and arping. Docker Compose runs the appliance and database as separate containers.
+It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI backend, SQLite, dnsmasq, BusyBox cron, nmap, ping, ARP, and arping. Docker Compose runs the complete appliance in one container.
 
 ## Features
 
@@ -62,12 +62,11 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 
 ## Runtime Layout
 
-FenPing runs through Docker Compose with two containers:
+FenPing runs through Docker Compose with one container:
 
 - `fenping` uses host networking and runs nginx/PHP-FPM, dnsmasq, BusyBox cron, nmap, ping/ARP tools, and the application CLI on Alpine Linux.
-- `fenping-db` runs the official MariaDB 11.8 image and owns `data/db`.
 
-MariaDB has networking disabled. The app connects through a shared Unix socket, preserving compatibility with the existing `root@localhost` account without exposing an SQL port. Compose waits for an authenticated database health check before starting the app, and `boot.sh` applies the idempotent schema before nginx and PHP-FPM start.
+Application data is stored in the local SQLite database at `data/database/fenping.sqlite3`. `boot.sh` applies the idempotent schema and verifies database integrity before nginx and PHP-FPM start.
 
 ## Install
 
@@ -101,10 +100,7 @@ Important `.env` values:
 | `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
 | `FENPING_IMAGE` | Docker Hub repository pulled by `restart.sh`. Defaults to `fensoft/fenping`. |
 | `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.6`. |
-| `DB_PORT` | TCP port used only when connecting to an external database instead of the Compose Unix socket. Defaults to `3306`. |
-| `DB_USER` | MariaDB application login. Defaults to `root` for compatibility with existing installations. |
-| `DB_PASS` | MariaDB login password and initial root password for a new data directory. Keep it equal to the existing root password when reusing `data/db`; changing this value alone does not rotate an initialized database password. |
-| `DB_NAME` | Application database. Defaults to `ping`. |
+| `DATABASE_PATH` | SQLite file inside the container. Defaults to `/var/lib/fenping/database/fenping.sqlite3`. |
 | `NETWORK` | `/24` prefix, for example `10.10.10`. |
 | `DHCP_DEFAULT_ROUTER` | Router handed out by DHCP. |
 | `DHCP_DYNAMIC_BEGIN` | First dynamic DHCP address, last octet only. |
@@ -134,7 +130,7 @@ To build the current checkout for the Docker host's platform, tag it as `FENPING
 ./restart.sh dev
 ```
 
-Development mode builds before stopping the running app, pulls only the database image, and prevents Compose from pulling over the local `dev` tag. A later normal `./restart.sh` returns to the version configured by `FENPING_VERSION` in `.env`.
+Development mode builds before stopping the running app and prevents Compose from pulling over the local `dev` tag. A later normal `./restart.sh` returns to the version configured by `FENPING_VERSION` in `.env`.
 
 ## Persistent Data
 
@@ -142,7 +138,7 @@ Do not delete `data/` casually. It is the appliance state.
 
 | Host path | Container path | Purpose |
 | --- | --- | --- |
-| `data/db` | `fenping-db:/var/lib/mysql` | MariaDB data. |
+| `data/database` | `/var/lib/fenping/database` | SQLite database and WAL files. |
 | `data/dnsmasq` | `/var/lib/misc` | dnsmasq leases. |
 | `data/dnsmasq.d` | `/etc/dnsmasq.d` | Generated dnsmasq config files. |
 | `data/netboot` | `/var/lib/fenping/netboot` | Uploaded netboot files. |
@@ -153,9 +149,9 @@ nginx serves only `/var/www/public`, which contains the built frontend and the s
 
 ### SSD write endurance
 
-FenPing groups MariaDB redo-log flushes into five-second intervals while retaining InnoDB's doublewrite protection. A host power loss or operating-system crash can therefore lose up to approximately five seconds of recent database changes; a MariaDB process crash remains recoverable from the operating-system cache. DHCP leases, scans, and application data remain persistent.
+SQLite uses WAL mode with `synchronous=NORMAL`, a 30-second busy timeout, foreign-key enforcement, and memory-backed temporary tables. This keeps the database consistent while reducing per-transaction sync writes; an operating-system crash or power loss may lose the most recent committed transactions. DHCP leases, scans, and application data remain persistent.
 
-Routine writes are also limited outside MariaDB: both services use memory-backed `/tmp`, while the app also uses memory-backed `/run` for scan temporaries, nginx upload buffering, locks, PHP sessions, and lease-import staging; nginx access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; lease imports upsert observed rows instead of rebuilding the table; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQL at boot. Login sessions are intentionally cleared when the app container restarts because their files live in `/run`.
+Routine writes are also limited with memory-backed `/tmp` and `/run` for scan temporaries, nginx upload buffering, locks, PHP sessions, and lease-import staging; nginx access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; lease imports upsert observed rows instead of rebuilding the table; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQLite at boot. Login sessions are intentionally cleared when the app container restarts because their files live in `/run`.
 
 ## CLI
 
@@ -163,6 +159,7 @@ Run operational commands from the container:
 
 ```bash
 docker exec fenping php /opt/fenping/cli.php ping
+docker exec fenping php /opt/fenping/cli.php database
 docker exec fenping php /opt/fenping/cli.php ping 10
 docker exec fenping php /opt/fenping/cli.php hosts
 docker exec fenping php /opt/fenping/cli.php inventory
@@ -188,7 +185,7 @@ Cron inside the container runs:
 
 The image includes a vendor registry seed downloaded from the [IEEE Registration Authority public listings](https://standards.ieee.org/products-programs/regauth/). Every boot verifies the SQL registry against the last validated data and transactionally imports it only when changed. A monthly background job downloads and validates the complete public MA-L, MA-M, MA-S, and historical IAB CSV files, atomically replaces `data/state/ieee-oui.json`, and refreshes the SQL table. Inventory requests query this local prefix index; individual LAN MAC addresses are never sent outside the appliance. If a download or SQL import fails, FenPing retains the previous registry and can fall back to the image seed.
 
-Completed nmap output is stored in MariaDB. FenPing keeps one XML snapshot per distinct semantic result and scan profile, so unchanged scans reuse the existing snapshot. Lightweight checks Nmap's 100 most common TCP ports with a five-minute limit. Standard checks the top 1,000 TCP ports with service, OS, default-script, and traceroute detection with a 30-minute limit. Deep performs the same detection across all 65,535 TCP ports with a two-hour limit. The normal detail view prefers the latest deep result. Selecting a lightweight or standard result merges it over the preceding deep snapshot: partial observations replace matching ports while deep-only ports and OS data remain visible with source labels. Existing `quick` history remains readable as Lightweight. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
+Completed nmap output is stored in SQLite. FenPing keeps one XML snapshot per distinct semantic result and scan profile, so unchanged scans reuse the existing snapshot. Lightweight checks Nmap's 100 most common TCP ports with a five-minute limit. Standard checks the top 1,000 TCP ports with service, OS, default-script, and traceroute detection with a 30-minute limit. Deep performs the same detection across all 65,535 TCP ports with a two-hour limit. The normal detail view prefers the latest deep result. Selecting a lightweight or standard result merges it over the preceding deep snapshot: partial observations replace matching ports while deep-only ports and OS data remain visible with source labels. Existing `quick` history remains readable as Lightweight. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
 
 Completed scans also build an effective open-port view. A deep scan observes the full TCP range; lightweight and standard scans change only the ports listed in their Nmap scan scope. Services in the first usable result are recorded as newly appeared, and later appearances, disappearances, and confirmed service/version changes are stored for seven days, displayed on Notify, and sent to Discord when a webhook is configured. Missing version data from a partial scan does not erase version details learned by a deeper scan.
 
@@ -197,6 +194,10 @@ Managed hosts have an automatic scan profile and cadence. The default remains De
 At boot, `scan-port-backfill` replays stored snapshots in chronological order and inserts any missing service-change events using their original scan timestamps. The replay is idempotent, so it can also be run manually after restoring older scan history.
 
 ## Backup And Restore
+
+### Upgrading from MariaDB
+
+SQLite starts with a fresh database and does not automatically import `data/db`. The old MariaDB directory is left in place for rollback but is no longer mounted. To preserve an older installation manually, create a version 1.6 FenPing archive before upgrading and restore that archive after the SQLite deployment starts.
 
 ### Screenshot demo
 
@@ -220,7 +221,7 @@ Restore from a FenPing archive:
 docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 ```
 
-Backups use the version 1.6 JSON format (`db.json` inside the archive). SQL-based backups from earlier versions are not supported.
+Backups use the database-neutral version 1.6 JSON format (`db.json` inside the archive). Existing version 1.6 archives created by MariaDB-based FenPing releases remain restorable into SQLite. SQL-based backups from earlier versions are not supported.
 
 Legacy 1.2 SQL dumps can be converted offline, without a MariaDB/MySQL server:
 
@@ -283,6 +284,8 @@ docker build --check .
 docker build -t fenping-check .
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
+DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
+DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
 ```
 
 Smoke test a running instance:

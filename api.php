@@ -280,13 +280,12 @@ function commitDhcpMutation(callable $mutation): array {
       throw new RuntimeException('database transaction already active');
 
     clearDnsmasqCandidateDir($candidateDir);
-    $database->beginTransaction();
+    dbBeginImmediate($database);
     $result = $mutation();
     prepareDnsmasqCandidate(buildDnsmasqFiles(), $candidateDir);
     $log = runDhcpHostsCli('--apply-pending');
     $applied = true;
-    if (!$database->commit())
-      throw new RuntimeException('database commit failed');
+    dbCommit($database);
 
     return array('result' => $result, 'log' => $log);
   } catch (Throwable $error) {
@@ -294,7 +293,7 @@ function commitDhcpMutation(callable $mutation): array {
 
     if ($database->inTransaction()) {
       try {
-        $database->rollBack();
+        dbRollback($database);
       } catch (Throwable $rollbackError) {
         $recoveryErrors[] = 'database rollback failed: ' . $rollbackError->getMessage();
       }

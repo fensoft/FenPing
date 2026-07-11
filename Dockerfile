@@ -13,7 +13,6 @@ RUN apk add --no-cache \
       iproute2-minimal \
       iputils-arping \
       iputils-ping \
-      mariadb-client \
       nginx \
       nmap \
       nmap-scripts \
@@ -21,7 +20,7 @@ RUN apk add --no-cache \
       php84-ctype \
       php84-curl \
       php84-fpm \
-      php84-pdo_mysql \
+      php84-pdo_sqlite \
       php84-posix \
       php84-session \
       php84-sockets \
@@ -59,10 +58,12 @@ COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/
 COPY functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php ipam.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
 RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
+    && install -d -o www-data -g www-data -m 2770 /var/lib/fenping/database \
     && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc \
     && touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts /var/lib/misc/dnsmasq.leases \
     && printf '%s\n' \
-      'Defaults env_keep += "DB_HOST DB_PORT DB_USER DB_PASS DB_NAME NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE"' \
+      'Defaults umask=0007' \
+      'Defaults env_keep += "DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE"' \
       'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts' \
       'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --apply-pending' \
       'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --sync-locked' \
