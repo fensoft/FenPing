@@ -18,7 +18,7 @@ Main stack:
 
 This repo uses Docker Compose with an application service and a database service.
 
-- `restart.sh` pulls published images and starts the Compose project; it never builds the application image.
+- `restart.sh` normally pulls published images and starts the Compose project. `./restart.sh dev` explicitly builds the current platform as the local `dev` tag.
 - `fenping` uses host networking for DHCP/DNS/TFTP and the web UI.
 - `fenping-db` uses the official `mariadb:11.8` image, has networking disabled, shares only its Unix socket with the app, and owns `data/db`.
 - `boot.sh` waits for MariaDB, applies `db.sql`, backfills service-change notifications from retained scans, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
@@ -30,7 +30,7 @@ Do not fold MariaDB back into the application image or split dnsmasq into anothe
 
 - `docker-compose.yml`: application and MariaDB services, mounts, capabilities, health checks, and logging limits.
 - `Dockerfile`: multi-stage build; Vite frontend first, then Ubuntu application runtime with Apache/PHP/dnsmasq/cron, networking tools, and the MariaDB client. Keep direct runtime dependencies explicit instead of relying on MariaDB server transitive packages.
-- `restart.sh`: validates, pulls `FENPING_IMAGE:FENPING_VERSION`, and starts the Compose project.
+- `restart.sh`: validates, pulls `FENPING_IMAGE:FENPING_VERSION`, and starts the Compose project; `dev` mode builds and runs `FENPING_IMAGE:dev` locally.
 - `publish.sh`: multi-architecture Buildx release command that pushes the versioned Docker Hub image and `latest` by default.
 - `demo/`: versioned synthetic screenshot database, netboot files, and backup metadata. `./restart.sh demo` rebuilds and restores it after preserving the current state.
 - `boot.sh`: application-service bootstrap and database schema application.
@@ -117,7 +117,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 ## Gotchas
 
 - Never commit `.env`, cookies, DB dumps, webhook URLs, or machine-specific private values.
-- Do not add a Compose `build:` section or local build to `restart.sh`; releases are built and pushed only through `publish.sh`.
+- Do not add a Compose `build:` section. Release images are built and pushed only through `publish.sh`; the explicit `./restart.sh dev` path is limited to a current-platform local image.
 - Keep `config.php` generic and environment-driven; do not hardcode local secrets or host-specific values in it.
 - Do not revert unrelated dirty work.
 - `data/` is live state.

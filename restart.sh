@@ -2,8 +2,8 @@
 set -e
 
 MODE=${1:-}
-if [ "$MODE" != "" ] && [ "$MODE" != "demo" ]; then
-  echo "Usage: $0 [demo]" >&2
+if [ "$MODE" != "" ] && [ "$MODE" != "demo" ] && [ "$MODE" != "dev" ]; then
+  echo "Usage: $0 [demo|dev]" >&2
   exit 2
 fi
 
@@ -58,8 +58,27 @@ if [ "$MODE" = "demo" ]; then
   build_demo_backup
 fi
 
+if [ "$MODE" = "dev" ]; then
+  export FENPING_VERSION=dev
+fi
+
 docker compose config --quiet
-docker compose pull app db
+if [ "$MODE" = "dev" ]; then
+  DEV_IMAGE=$(docker compose config | awk '
+    /^  app:$/ { in_app = 1; next }
+    in_app && /^    image:/ { sub(/^    image:[[:space:]]*/, ""); print; exit }
+    in_app && /^  [^ ]/ { exit }
+  ')
+  if [ -z "$DEV_IMAGE" ]; then
+    echo "could not resolve the app image from docker-compose.yml" >&2
+    exit 1
+  fi
+  echo "building $DEV_IMAGE for the current platform"
+  docker build --pull --tag "$DEV_IMAGE" .
+  docker compose pull db
+else
+  docker compose pull app db
+fi
 
 # Stop the legacy embedded database cleanly before the first split-container
 # upgrade. On later runs the Compose-managed app has no local database server.
@@ -72,7 +91,11 @@ if docker inspect fenping >/dev/null 2>&1; then
   docker rm fenping >/dev/null 2>&1 || true
 fi
 
-docker compose up -d --remove-orphans
+if [ "$MODE" = "dev" ]; then
+  docker compose up -d --remove-orphans --pull never
+else
+  docker compose up -d --remove-orphans
+fi
 docker compose ps
 wait_for_fenping
 

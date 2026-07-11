@@ -23,7 +23,9 @@ The runtime is managed by Docker Compose. The host-networked `fenping` container
 
 The application image no longer contains a MariaDB server. Compose uses the smaller purpose-built `mariadb:11.8` image for SQL.
 
-Runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.5`.
+Normal runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.5`.
+
+`./restart.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev`, pulls only the database image, and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next normal restart uses the configured published version again.
 
 `config.php` is committed as a generic, environment-driven config file. Runtime values should come from `.env`/container environment variables; do not hardcode machine-specific secrets in `config.php`.
 

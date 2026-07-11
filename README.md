@@ -126,7 +126,15 @@ docker login
 
 The targets are exactly `linux/arm64`, `linux/amd64`, and `linux/arm/v7`. The script automatically runs `tonistiigi/binfmt --install all`, so publishing requires permission to start a privileged Docker container. Set `PUBLISH_LATEST=0` to omit the `latest` tag, or set `FENPING_IMAGE` to publish another Docker Hub repository. The script uses a reusable `fenping-multiarch` Buildx container builder, pushes the version and `latest` manifests, attaches provenance and an SBOM, and inspects the published result.
 
-`restart.sh` never builds the application image. It pulls `FENPING_IMAGE:FENPING_VERSION` before stopping the current app, so a missing or inaccessible tag leaves the running deployment untouched.
+By default, `restart.sh` never builds the application image. It pulls `FENPING_IMAGE:FENPING_VERSION` before stopping the current app, so a missing or inaccessible tag leaves the running deployment untouched.
+
+To build the current checkout for the Docker host's platform, tag it as `FENPING_IMAGE:dev`, and restart with that local image:
+
+```bash
+./restart.sh dev
+```
+
+Development mode builds before stopping the running app, pulls only the database image, and prevents Compose from pulling over the local `dev` tag. A later normal `./restart.sh` returns to the version configured by `FENPING_VERSION` in `.env`.
 
 ## Persistent Data
 
