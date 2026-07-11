@@ -74,7 +74,7 @@ Route modules:
 
 - `routes/auth.php`: session, login, logout.
 - `routes/system.php`: health, inventory, notify, ping refresh.
-- `routes/hosts.php`: host CRUD, host detail/history, category create/rename/delete.
+- `routes/hosts.php`: host CRUD, managed-ID and inventory-IP detail/history, category create/rename/delete.
 - `routes/ipam.php`: IPAM summary plus authenticated device approve/unapprove actions.
 - `routes/scans.php`: scan profiles, queueing, scan status/history, and database-backed XML/JSON responses.
 - `routes/netboot.php`: netboot image list/upload/delete.

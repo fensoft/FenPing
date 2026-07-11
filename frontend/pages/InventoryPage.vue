@@ -43,9 +43,8 @@
               <td class="text-truncate-cell" :title="row.host.vendor || ''">{{ row.host.vendor }}</td><td class="text-truncate-cell font-monospace" :title="row.host.ip || ''">{{ row.host.ip }}</td>
               <td class="text-end action-cell">
                 <div class="inventory-actions">
-                  <button v-if="row.host.id" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Host details" aria-label="Host details" @click="$emit('host-detail', row.host.id)"><i class="ti ti-info-circle"></i><span class="inventory-action-label">Details</span></button>
+                  <button v-if="row.host.id || row.host.ip" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Host details" aria-label="Host details" @click="$emit('host-detail', row.host)"><i class="ti ti-info-circle"></i><span class="inventory-action-label">Details</span></button>
                   <button v-if="isAuthenticated && row.host.ip" class="btn btn-sm inventory-action-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
-                  <button v-if="row.host.xml" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="View scan" aria-label="View scan" @click="$emit('open-scan', row.host.ip)"><i class="ti ti-file-search"></i><span class="inventory-action-label">View scan</span></button>
                   <button v-if="isAuthenticated && row.host.id" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Edit host" aria-label="Edit host" @click="$emit('open-edit', row.host)"><i class="ti ti-edit"></i><span class="inventory-action-label">Edit</span></button>
                   <button v-else-if="isAuthenticated && row.host.mac" class="btn btn-outline-primary btn-sm inventory-action-btn" type="button" title="Create host" aria-label="Create host" @click="$emit('open-create', row.host)"><i class="ti ti-plus"></i><span class="inventory-action-label">Create</span></button>
                 </div>
@@ -72,7 +71,7 @@ const props = defineProps({
   refreshQueued: Boolean,
   scanningHosts: { type: Object, required: true }
 });
-const emit = defineEmits(['add-category', 'delete-category', 'host-detail', 'network', 'open-create', 'open-edit', 'open-history', 'open-scan', 'ping-refresh', 'rename-category', 'scan-host']);
+const emit = defineEmits(['add-category', 'delete-category', 'host-detail', 'network', 'open-create', 'open-edit', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
 const hosts = ref([]);
 const loading = ref(false);
 const error = ref('');

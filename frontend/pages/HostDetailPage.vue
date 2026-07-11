@@ -1,13 +1,13 @@
 <template>
   <section>
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
-    <div class="page-header">
+    <RouterLink class="btn btn-link btn-sm p-0 mb-1" to="/"><i class="ti ti-arrow-left me-1"></i>Inventory</RouterLink>
+    <div class="page-header host-detail-header">
       <div>
-        <RouterLink class="btn btn-link btn-sm p-0 mb-1" to="/"><i class="ti ti-arrow-left me-1"></i>Inventory</RouterLink>
         <h2>{{ title }}</h2><div class="text-secondary small font-monospace">{{ host.ip || 'No IP' }}</div>
       </div>
       <div class="page-actions">
-        <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" :disabled="!latestScan || !scanHasXml(latestScan)" @click="$emit('open-scan', host.ip, latestScan?.id)"><i class="ti ti-file-search me-1"></i>View scan</button>
+        <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" title="Scan history" aria-label="Scan history" :disabled="!viewScan" @click="$emit('open-scan', host.ip, viewScan?.id)"><i class="ti ti-history me-1"></i>History</button>
         <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('scan-host', host)"><i :class="isScanning ? 'ti ti-loader-2 is-spinning me-1' : 'ti ti-search me-1'"></i>Scan</button>
         <button v-if="isAuthenticated && host.id" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><i class="ti ti-edit me-1"></i>Edit</button>
       </div>
@@ -22,6 +22,7 @@
       </div>
       <div class="detail-grid">
         <section class="detail-panel"><h3>Configuration</h3><dl class="detail-list">
+          <div><dt>Management</dt><dd>{{ managementLabel }}</dd></div>
           <div><dt>Name</dt><dd>{{ host.name || '-' }}</dd></div><div><dt>IP</dt><dd class="font-monospace">{{ host.ip || '-' }}</dd></div>
           <div><dt>Router</dt><dd>{{ host.router || '-' }}</dd></div><div><dt>DNS</dt><dd>{{ host.dns || '-' }}</dd></div>
           <div><dt>Scheduled scan</dt><dd>{{ scanSchedule }}</dd></div>
@@ -42,15 +43,27 @@
           </tbody>
         </table></div>
       </div>
-      <div class="detail-section">
-        <div class="detail-section-heading"><h3>Scan History</h3><span class="text-secondary small">{{ scans.length }} scans</span></div>
-        <div class="table-wrap"><table class="table table-sm detail-table">
-          <thead><tr><th>State</th><th>Profile</th><th>Status</th><th>Ports</th><th>Ended</th><th class="text-end">Actions</th></tr></thead>
-          <tbody><tr v-if="scans.length === 0"><td class="text-secondary text-center py-4" colspan="6">No scans</td></tr>
-            <tr v-for="scan in scans" :key="scan.id"><td><span :class="scanRunStateClass(scan.state)"><i :class="scan.state === 'running' ? 'ti ti-loader-2 is-spinning' : scanRunStateIcon(scan.state)"></i>{{ scan.state || '-' }}</span></td><td>{{ scanProfileLabel(scan.mode) }}</td><td>{{ scan.status || '-' }}</td><td>{{ Number(scan.ports_count || 0) }}</td><td>{{ formatScanDate(scan.date_end || scan.date_begin) }}</td><td class="text-end"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!scanHasXml(scan)" @click="$emit('open-scan', host.ip, scan.id)"><i class="ti ti-file-search"></i></button></td></tr>
-          </tbody>
-        </table></div>
-      </div>
+      <div v-if="scanResultError" class="alert alert-warning mt-3 mb-0" role="alert">{{ scanResultError }}</div>
+      <template v-if="scanResult">
+        <div class="detail-grid detail-scan-grid">
+          <section class="detail-panel"><h3>Hostnames</h3><table class="table table-sm scan-table"><tbody>
+            <tr v-if="scanResult.hostnames.length === 0"><td class="text-secondary">No hostnames detected</td></tr>
+            <tr v-for="hostname in scanResult.hostnames" :key="`${hostname.name}-${hostname.type}`"><td>{{ hostname.name }}</td><td class="scan-type">{{ hostname.type || '-' }}</td></tr>
+          </tbody></table></section>
+          <section class="detail-panel"><h3>OS</h3><table class="table table-sm scan-table"><tbody>
+            <tr v-if="scanResult.os.length === 0"><td class="text-secondary">No OS match detected</td></tr>
+            <tr v-for="os in scanResult.os" :key="os.name"><td>{{ os.name }}</td><td class="scan-type">{{ os.accuracy }}%</td></tr>
+          </tbody></table></section>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-heading"><h3>Ports</h3><span class="text-secondary small">{{ scanResult.ports.length }} ports</span></div>
+          <div class="table-wrap"><table class="table table-sm scan-table detail-ports-table"><thead><tr><th>Port</th><th>State</th><th>Service</th><th>Details</th><th>Source</th></tr></thead><tbody>
+            <tr v-if="scanResult.ports.length === 0"><td class="text-secondary text-center py-4" colspan="5">No ports found</td></tr>
+            <tr v-for="port in scanResult.ports" :key="`${port.protocol}-${port.port}`"><td class="font-monospace">{{ port.port }}/{{ port.protocol }}</td><td><span :class="scanStateClass(port.state)">{{ port.state || '-' }}</span></td><td>{{ port.service || '-' }}</td><td class="text-truncate-cell" :title="port.details">{{ port.details || '-' }}</td><td class="scan-type">{{ scanProfileLabel(port.source || scanResult.metadata?.mode) }}</td></tr>
+          </tbody></table></div>
+        </div>
+      </template>
+      <div v-else-if="!viewScan && !scanResultError" class="table-wrap detail-empty mt-3"><div class="text-secondary text-center py-4">No scan details</div></div>
     </template>
   </section>
 </template>
@@ -61,7 +74,7 @@ import { useRoute } from 'vue-router';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { usePageController } from '../composables/usePageController.js';
-import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanIsActiveState, scanRunStateClass, scanRunStateIcon, statusClass, statusIcon, statusTitle, toFlag } from '../lib/formatters.js';
+import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanIsActiveState, scanStateClass, statusClass, statusIcon, statusTitle, toFlag } from '../lib/formatters.js';
 import { scanCadenceLabel, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
@@ -75,24 +88,41 @@ const request = useAbortableTask();
 const host = computed(() => detail.value?.host || {});
 const latestScan = computed(() => detail.value?.latest_scan || null);
 const scans = computed(() => detail.value?.scans || []);
+const viewScan = computed(() => scans.value.find(scanHasXml) || null);
+const scanResult = ref(null);
+const scanResultError = ref('');
 const historyRows = computed(() => detail.value?.history?.rows || []);
 const title = computed(() => host.value.name || host.value.ip || 'Host detail');
 const netbootName = computed(() => detail.value?.netboot_image?.name || detail.value?.netboot_image?.filename || '-');
-const scanSchedule = computed(() => `${scanProfileLabel(host.value.scan_profile)} · ${scanCadenceLabel(host.value.scan_interval_hours)}`);
+const managementLabel = computed(() => host.value.id ? 'Managed' : 'Not managed');
+const scanSchedule = computed(() => host.value.id ? `${scanProfileLabel(host.value.scan_profile)} · ${scanCadenceLabel(host.value.scan_interval_hours)}` : 'Not managed');
 const isScanning = computed(() => props.scanningHosts.has(String(host.value?.ip || host.value?.id || host.value?.mac || '')));
 
 usePageController({ loading, label: computed(() => loading.value ? 'Loading' : 'Device'), title: 'Refresh host', disabled: false, refresh: load });
-watch(() => route.params.id, load, { immediate: true });
+watch(() => route.fullPath, load, { immediate: true });
 
 async function load() {
   const id = Number(route.params.id || 0);
-  if (!id) return;
+  const ip = String(route.params.ip || '');
+  if (!id && !ip) return;
   const signal = request.nextSignal();
   loading.value = true;
   error.value = '';
+  scanResult.value = null;
+  scanResultError.value = '';
   try {
-    const data = await apiJson(`/api/hosts/${encodeURIComponent(id)}/detail`, { signal });
-    if (request.isCurrent(signal)) detail.value = data;
+    const endpoint = id ? `/api/hosts/${encodeURIComponent(id)}/detail` : `/api/hosts/by-ip/${encodeURIComponent(ip)}/detail`;
+    const data = await apiJson(endpoint, { signal });
+    if (!request.isCurrent(signal)) return;
+    detail.value = data;
+    const resultMetadata = (data.scans || []).find(scanHasXml);
+    if (resultMetadata) {
+      try {
+        scanResult.value = await apiJson(`/api/scans/${encodeURIComponent(data.host.ip)}/history/${encodeURIComponent(resultMetadata.id)}`, { signal });
+      } catch (scanError) {
+        if (!isAbortError(scanError) && request.isCurrent(signal)) scanResultError.value = `Scan details unavailable: ${scanError.message}`;
+      }
+    }
   } catch (loadError) {
     if (!isAbortError(loadError) && request.isCurrent(signal)) { detail.value = null; error.value = loadError.message; }
   } finally {

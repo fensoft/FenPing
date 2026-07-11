@@ -61,6 +61,7 @@ done
 echo inventory bytes: `wc -c < "${OUT_DIR}/fenping-GET--api-inventory.json"`
 
 expect_code "PUT /api/ipam approval guest" 403 -X PUT "${SITE}/api/ipam/devices/02%3A00%3A00%3A00%3A00%3A01/approval"
+expect_code "GET /api/hosts/by-ip invalid" 400 "${SITE}/api/hosts/by-ip/not-an-ip/detail"
 
 expect_code "POST /api/auth/login" 200 -c "$COOKIE" -X POST -H "$JSON" -d "{\"password\":\"$PASS\"}" "${SITE}/api/auth/login"
 expect_code "PUT /api/ipam approval invalid" 400 -b "$COOKIE" -X PUT "${SITE}/api/ipam/devices/invalid/approval"

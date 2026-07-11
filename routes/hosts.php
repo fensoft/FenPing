@@ -4,6 +4,7 @@ function hostsApiRoutes(): array {
   return array(
     apiRoute('GET', '/history/{ip:ipv4}', 'handleHostHistory'),
     apiRoute('GET', '/hosts/{id:int}/detail', 'handleHostDetail'),
+    apiRoute('GET', '/hosts/by-ip/{ip:ipv4}/detail', 'handleHostDetailByIp'),
     apiRoute('GET', '/hosts/{id:int}', 'handleHostGet'),
     apiRoute('POST', '/hosts', 'handleHostCreate', 'body'),
     apiRoute('PUT', '/hosts/{id:int}', 'handleHostEdit', 'body'),
@@ -30,7 +31,29 @@ function handleHostDetail(array $params): array {
   if ($host === false)
     jsonError(404, 'host not found');
 
-  $host = normalizeHostDetail($host);
+  return buildHostDetailResponse(normalizeHostDetail($host));
+}
+
+function handleHostDetailByIp(array $params): array {
+  $ip = $params['ip'];
+  $inventoryHost = null;
+  foreach (getInventory() as $candidate) {
+    if (($candidate['ip'] ?? '') === $ip) {
+      $inventoryHost = $candidate;
+      break;
+    }
+  }
+
+  if ($inventoryHost === null)
+    jsonError(404, 'host not found');
+
+  if (($inventoryHost['id'] ?? null) !== null)
+    return handleHostDetail(array('id' => (int)$inventoryHost['id']));
+
+  return buildHostDetailResponse(normalizeUnmanagedHostDetail($inventoryHost));
+}
+
+function buildHostDetailResponse(array $host): array {
   $ip = (string)($host['ip'] ?? '');
 
   $history = $ip !== '' ? get_history_response($ip) : array('summary' => null, 'rows' => array());
@@ -195,6 +218,24 @@ function normalizeHostDetail(array $host): array {
   $ping = hostPingState($host);
   $host['status'] = $ping['status'];
   $host['date'] = $ping['date'];
+  return $host;
+}
+
+function normalizeUnmanagedHostDetail(array $host): array {
+  $host = normalizeInventoryRow($host, $host['ip'] ?? '');
+  $host['id'] = null;
+  $host['important'] = (int)($host['important'] ?? 0);
+  $host['repeater'] = (int)($host['repeater'] ?? 0);
+  $host['web'] = (int)($host['web'] ?? 0);
+  $host['approved'] = (int)($host['approved'] ?? 0);
+  $host['is_new'] = (int)($host['is_new'] ?? 0);
+  $host['mac'] = strtolower((string)($host['mac'] ?? ''));
+  $host['vendor'] = (string)($host['vendor'] ?? getVendor($host['mac']));
+  $host['router'] = '';
+  $host['dns'] = '';
+  $host['scan_profile'] = null;
+  $host['scan_interval_hours'] = 0;
+  $host['netboot_image_id'] = null;
   return $host;
 }
 

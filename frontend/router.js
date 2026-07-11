@@ -14,7 +14,8 @@ export const routeNames = Object.freeze({
   scans: 'scans',
   services: 'services',
   netboot: 'netboot',
-  host: 'host'
+  host: 'host',
+  hostByIp: 'host-by-ip'
 });
 
 export const router = createRouter({
@@ -27,6 +28,7 @@ export const router = createRouter({
     { path: '/services', name: routeNames.services, component: ServicesPage },
     { path: '/netboot-images', name: routeNames.netboot, component: NetbootPage },
     { path: '/hosts/:id(\\d+)', name: routeNames.host, component: HostDetailPage },
+    { path: '/hosts/by-ip/:ip', name: routeNames.hostByIp, component: HostDetailPage },
     { path: '/:pathMatch(.*)*', redirect: { name: routeNames.inventory } }
   ],
   scrollBehavior: () => ({ top: 0 })

@@ -321,6 +321,23 @@ body {
   justify-content: flex-end;
 }
 
+.host-detail-header > :first-child {
+  min-width: 0;
+}
+
+.page-header.host-detail-header {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.host-detail-header .page-actions {
+  flex-wrap: nowrap;
+  grid-column: 2;
+  grid-row: 1;
+  margin-left: 0;
+}
+
 .scan-queue-table,
 .detail-table {
   margin: 0;
@@ -488,6 +505,18 @@ body {
   gap: 0.75rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 0.75rem;
+}
+
+.detail-scan-grid {
+  margin-top: 0.75rem;
+}
+
+.detail-scan-grid .scan-table {
+  margin-top: 0.45rem;
+}
+
+.detail-ports-table {
+  min-width: 46rem;
 }
 
 .detail-panel {
@@ -1119,6 +1148,21 @@ body {
   gap: 0.4rem;
 }
 
+.scan-history-control {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.scan-history-control > span {
+  color: #6c7a8a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .scan-history-select {
   max-width: 24rem;
 }
@@ -1249,19 +1293,6 @@ body {
 .scan-state-filtered {
   background: #fef3c7;
   color: #92400e;
-}
-
-.scan-raw {
-  background: #0f172a;
-  border-radius: 6px;
-  color: #e5e7eb;
-  font-size: 0.78rem;
-  margin: 0.75rem 0 0;
-  max-height: 18rem;
-  overflow: auto;
-  padding: 0.75rem;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 html[data-bs-theme='dark'] body {
@@ -1478,7 +1509,8 @@ html[data-bs-theme='dark'] .scan-section {
 
 html[data-bs-theme='dark'] .scan-table th,
 html[data-bs-theme='dark'] .scan-type,
-html[data-bs-theme='dark'] .scan-fact span {
+html[data-bs-theme='dark'] .scan-fact span,
+html[data-bs-theme='dark'] .scan-history-control > span {
   color: #9aa8ba;
 }
 
@@ -1598,6 +1630,15 @@ html[data-bs-theme='dark'] .scan-state-filtered {
     width: 100%;
   }
 
+  .page-header.host-detail-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .host-detail-header .page-actions {
+    justify-content: flex-end;
+    width: auto;
+  }
+
   .netboot-upload {
     grid-template-columns: 1fr;
   }
@@ -1651,6 +1692,11 @@ html[data-bs-theme='dark'] .scan-state-filtered {
   }
 
   .scan-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scan-history-control {
     align-items: stretch;
     flex-direction: column;
   }

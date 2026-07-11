@@ -81,7 +81,6 @@
       @submit-delete-category="submitDeleteCategory"
       @submit-scan-profile="submitScanProfile"
       @select-scan="selectScanHistory"
-      @toggle-raw="toggleScanRaw"
     />
   </div>
 </template>
@@ -90,7 +89,7 @@
 import { computed, onMounted, onUnmounted, ref, unref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppModal from './components/AppModal.vue';
-import { apiJson, apiText, isAbortError } from './lib/api.js';
+import { apiJson, isAbortError } from './lib/api.js';
 import { useAbortableTask } from './composables/useAbortableTask.js';
 import { providePageController } from './composables/usePageController.js';
 import { formatMac, toFlag } from './lib/formatters.js';
@@ -119,7 +118,7 @@ const modalRequest = useAbortableTask();
 const pollingTimers = new Set();
 
 const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
-const isInventoryRoute = computed(() => route.name === routeNames.inventory || route.name === routeNames.host);
+const isInventoryRoute = computed(() => [routeNames.inventory, routeNames.host, routeNames.hostByIp].includes(route.name));
 const pageLoading = computed(() => Boolean(controllerValue('loading', false)));
 const refreshLabel = computed(() => controllerValue('label', isAuthenticated.value ? 'Ready' : 'Read only'));
 const refreshTitle = computed(() => controllerValue('title', isAuthenticated.value ? 'Refresh' : 'Login to refresh'));
@@ -148,7 +147,14 @@ function controllerValue(key, fallback) {
 }
 
 function go(path) { if (route.path !== path) router.push(path); }
-function navigateHostDetail(id) { if (id) router.push({ name: routeNames.host, params: { id } }); }
+function navigateHostDetail(host) {
+  if (host && typeof host === 'object') {
+    if (host.id) router.push({ name: routeNames.host, params: { id: host.id } });
+    else if (host.ip) router.push({ name: routeNames.hostByIp, params: { ip: host.ip } });
+    return;
+  }
+  if (host) router.push({ name: routeNames.host, params: { id: host } });
+}
 function setNotice(message) { globalError.value = ''; notice.value = message || ''; }
 
 async function reloadCurrentPage() {
@@ -350,11 +356,9 @@ async function openHistory(ip) {
 }
 
 function scanJsonUrl(ip, scanId = null) { return scanId ? `/api/scans/${encodeURIComponent(ip)}/history/${encodeURIComponent(scanId)}` : `/api/scans/${encodeURIComponent(ip)}`; }
-function scanXmlUrl(ip, scanId = null) { return scanId ? `/api/scans/${encodeURIComponent(ip)}/history/${encodeURIComponent(scanId)}/xml` : `/api/scans/${encodeURIComponent(ip)}/xml`; }
-
 async function openScan(ip, scanId = null) {
   if (!ip) return;
-  clearMessages(); modal.value = { type: 'scan', ip, loading: true, scan: null, raw: '', showRaw: false, history: null, selectedScanId: scanId };
+  clearMessages(); modal.value = { type: 'scan', ip, loading: true, scan: null, history: null, selectedScanId: scanId };
   const signal = modalRequest.nextSignal();
   try {
     const [scan, history] = await Promise.all([apiJson(scanJsonUrl(ip, scanId), { signal }), apiJson(`/api/scans/${encodeURIComponent(ip)}/history`, { signal })]);
@@ -369,26 +373,13 @@ async function openScan(ip, scanId = null) {
 async function selectScanHistory(scanId) {
   if (modal.value?.type !== 'scan') return;
   const id = Number(scanId || 0); if (!id) return;
-  const ip = modal.value.ip; modal.value.loading = true; modal.value.raw = ''; modal.value.showRaw = false; modalError.value = '';
+  const ip = modal.value.ip; modal.value.loading = true; modalError.value = '';
   const signal = modalRequest.nextSignal();
   try {
     const scan = await apiJson(scanJsonUrl(ip, id), { signal });
     if (modalRequest.isCurrent(signal) && modal.value?.type === 'scan') { modal.value.scan = scan; modal.value.selectedScanId = scan.metadata?.id || id; }
   } catch (error) { if (!isAbortError(error)) modalError.value = error.message; }
   finally { if (modalRequest.isCurrent(signal) && modal.value?.type === 'scan') modal.value.loading = false; }
-}
-
-async function toggleScanRaw() {
-  if (modal.value?.type !== 'scan') return;
-  if (modal.value.showRaw) { modal.value.showRaw = false; return; }
-  if (modal.value.raw === '') {
-    const ip = modal.value.ip; const id = modal.value.selectedScanId; const signal = modalRequest.nextSignal();
-    try {
-      const raw = await apiText(scanXmlUrl(ip, id), { signal });
-      if (modalRequest.isCurrent(signal) && modal.value?.type === 'scan') modal.value.raw = raw;
-    } catch (error) { if (!isAbortError(error)) modalError.value = error.message; return; }
-  }
-  if (modal.value?.type === 'scan') modal.value.showRaw = true;
 }
 
 async function submitCreate() {
@@ -411,7 +402,7 @@ async function submitDeleteHost() {
   await saveModal(async (signal) => {
     await apiJson(`/api/hosts/${encodeURIComponent(modal.value.id)}`, { method: 'DELETE', signal });
     setNotice('Deleted'); closeModal();
-    if (route.name === routeNames.host) await router.push('/'); else await reloadCurrentPage();
+    if ([routeNames.host, routeNames.hostByIp].includes(route.name)) await router.push('/'); else await reloadCurrentPage();
   });
 }
 async function submitCategory() {

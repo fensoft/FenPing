@@ -251,6 +251,7 @@ Useful endpoints:
 | `GET` | `/api/services` | Current open services by host using the latest effective scan. |
 | `POST` | `/api/ping/refresh` | Run ping scan and wait for completion. |
 | `GET` | `/api/history/{ip}` | Status history for a host. |
+| `GET` | `/api/hosts/by-ip/{ip}/detail` | Combined identity, status history, and scan details for an inventory device. |
 | `GET` | `/api/scans/{ip}` | Preferred scan result as JSON, favoring the latest deep result. |
 | `GET` | `/api/scans/profiles` | List available scan profiles and timeout limits. |
 | `POST` | `/api/scans/{ip}` | Queue the requested `lightweight`, `standard`, or `deep` profile and return HTTP `202`. |
