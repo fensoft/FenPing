@@ -19,8 +19,8 @@ RUN apk add --no-cache \
       nmap-scripts \
       php84 \
       php84-ctype \
-      php84-curl \
       php84-fpm \
+      php84-openssl \
       php84-pdo_sqlite \
       php84-posix \
       php84-session \
@@ -59,7 +59,7 @@ COPY img/icon.webp /var/www/public/icon.webp
 COPY favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/
-COPY config.php functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php ipam.php scans.php inventory.php backup.php oui.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
+COPY config.php functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php http.php ipam.php scans.php inventory.php backup.php oui.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
 RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
     && install -d -o www-data -g www-data -m 2770 /var/lib/fenping/database \
     && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc \

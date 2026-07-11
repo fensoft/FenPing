@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/http.php';
 
 const IEEE_OUI_USER_AGENT = 'FenPing IEEE OUI updater';
 
@@ -87,31 +88,21 @@ function ieeeOuiRefresh(string $target): array {
 }
 
 function ieeeOuiDownload(string $url): string {
-  $handle = curl_init($url);
-  if ($handle === false)
-    throw new RuntimeException('failed to initialize IEEE OUI download');
-
   try {
-    curl_setopt_array($handle, array(
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_FOLLOWLOCATION => true,
-      CURLOPT_MAXREDIRS => 3,
-      CURLOPT_CONNECTTIMEOUT => 5,
-      CURLOPT_TIMEOUT => 45,
-      CURLOPT_FAILONERROR => true,
-      CURLOPT_USERAGENT => IEEE_OUI_USER_AGENT,
-      CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
-      CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS
+    $response = fenpingHttpRequest($url, array(
+      'headers' => array('User-Agent' => IEEE_OUI_USER_AGENT),
+      'timeout' => 45,
+      'max_redirects' => 3,
+      'max_bytes' => 64 * 1024 * 1024
     ));
-    $contents = curl_exec($handle);
-    if ($contents === false)
-      throw new RuntimeException('failed to download IEEE OUI registry: ' . curl_error($handle));
-    if (strlen($contents) < 10000)
-      throw new RuntimeException('downloaded IEEE OUI registry is unexpectedly small');
-    return $contents;
-  } finally {
-    curl_close($handle);
+  } catch (Throwable $error) {
+    throw new RuntimeException('failed to download IEEE OUI registry: ' . $error->getMessage(), 0, $error);
   }
+  if ($response['status'] < 200 || $response['status'] >= 300)
+    throw new RuntimeException('failed to download IEEE OUI registry: HTTP ' . $response['status']);
+  if (strlen($response['body']) < 10000)
+    throw new RuntimeException('downloaded IEEE OUI registry is unexpectedly small');
+  return $response['body'];
 }
 
 function ieeeOuiParseCsv(string $csv, string $expectedRegistry, int $prefixLength): array {

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/http.php';
 
 function discordWebhookUrl(): string {
   $url = getenv('DISCORD_WEBHOOK_URL');
@@ -284,20 +285,24 @@ function discordPostPayload(array $payload): bool {
   if ($json === false)
     return false;
 
-  $ch = curl_init($url);
-  curl_setopt($ch, CURLOPT_POST, true);
-  curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
-  curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
-  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-  curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-  curl_exec($ch);
-  $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-  $error = curl_error($ch);
-  curl_close($ch);
+  try {
+    $response = fenpingHttpRequest($url, array(
+      'method' => 'POST',
+      'headers' => array(
+        'Content-Type' => 'application/json',
+        'User-Agent' => 'FenPing Discord notifier'
+      ),
+      'body' => $json,
+      'timeout' => 8,
+      'max_bytes' => 1024 * 1024
+    ));
+  } catch (Throwable $error) {
+    fwrite(STDERR, 'Discord notification failed: ' . $error->getMessage() . PHP_EOL);
+    return false;
+  }
 
-  if ($error !== '' || $code < 200 || $code >= 300) {
-    fwrite(STDERR, "Discord notification failed" . ($error !== '' ? ": $error" : ": HTTP $code") . PHP_EOL);
+  if ($response['status'] < 200 || $response['status'] >= 300) {
+    fwrite(STDERR, 'Discord notification failed: HTTP ' . $response['status'] . PHP_EOL);
     return false;
   }
 
