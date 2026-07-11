@@ -87,7 +87,7 @@ fwrite(STDERR, "       php cli.php oui-sync" . PHP_EOL);
 fwrite(STDERR, "       php cli.php dnsmasq-leases" . PHP_EOL);
 fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
 fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
-fwrite(STDERR, "       php cli.php restore <backup.tgz|dump.sql.gz>" . PHP_EOL);
+fwrite(STDERR, "       php cli.php restore <backup.tgz>" . PHP_EOL);
 exit(2);
 
 function runLockedCliCommand(string $path, string $label, callable $callback): int {

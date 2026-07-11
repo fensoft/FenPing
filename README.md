@@ -220,11 +220,7 @@ Restore from a FenPing archive:
 docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 ```
 
-Restore from a raw SQL dump:
-
-```bash
-docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/db.sql.gz
-```
+Backups use the version 1.6 JSON format (`db.json` inside the archive). SQL-based backups from earlier versions are not supported.
 
 ## Admin Workflow
 

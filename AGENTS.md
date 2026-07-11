@@ -79,7 +79,7 @@ docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
-docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
+docker exec fenping php /opt/fenping/cli.php restore <backup.tgz>
 docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
 
@@ -106,7 +106,7 @@ docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
 npm run build
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php tests/backup_format.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 ```
 

@@ -92,7 +92,7 @@ docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
-docker exec fenping php /opt/fenping/cli.php restore <backup.tgz|dump.sql.gz>
+docker exec fenping php /opt/fenping/cli.php restore <backup.tgz>
 docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
 
@@ -218,16 +218,18 @@ Never place secrets in docs, commits, logs, generated files, or the committed ge
 
 ## Backup And Restore
 
-`backup.php` backs up:
+`backup.php` creates a version 1.6 archive containing:
 
-- A MariaDB dump of the configured app DB.
-- Deduplicated nmap snapshots through the database dump.
+- `db.json`, with the configured app DB represented as named tables, column lists, and rows.
+- Deduplicated nmap snapshots through `db.json`.
 - netboot files.
 - A netboot JSON index and a manifest.
 
 Default backups go to `/var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz`, mounted at `data/backups`.
 
-Restore supports FenPing `.tgz` archives and raw `.sql` or `.sql.gz` dumps. After importing SQL, restore reapplies `db.sql` and regenerates dnsmasq files.
+Restore supports version 1.6 (and compatible later 1.x) FenPing `.tgz` archives. It validates `manifest.json` and `db.json`, reapplies the current idempotent `db.sql` schema, imports the JSON data transactionally, restores netboot files, and regenerates dnsmasq files. Pre-1.6 SQL-based archives and raw `.sql`/`.sql.gz` dumps are intentionally unsupported.
+
+The 1.x JSON contract is forward-compatible with future FenPing backups: later 1.x writers may add top-level metadata, tables, and columns, while preserving the existing `tables.<name>.columns` plus parallel `rows` structure. Readers ignore unknown metadata, tables, and columns, so a 1.6 reader can restore the subset it understands from a later 1.x backup. Removing or changing existing fields requires a new major backup version. Future application releases must continue accepting version 1.6 backups and fill newly introduced columns from schema defaults. The optional `restore.timestamp_shift` extension is used only by the synthetic demo to keep its dated activity relative to restore time.
 
 ## Cron
 
@@ -261,7 +263,7 @@ bash -n boot.sh restart.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/backup_format.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 curl -fsS http://127.0.0.1/api/health
 curl -fsS http://127.0.0.1/api/inventory

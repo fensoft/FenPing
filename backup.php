@@ -1,7 +1,9 @@
 <?php
 
 define('BACKUP_DIR', FENPING_DATA_DIR . '/backups');
-const BACKUP_FORMAT = 'fenping-backup-v1';
+const BACKUP_FORMAT = 'fenping-backup';
+const BACKUP_DATABASE_FORMAT = 'fenping-db';
+const BACKUP_VERSION = '1.6';
 
 function runBackupCommand(array $args): int {
   try {
@@ -28,15 +30,10 @@ function runRestoreCommand(array $args): int {
     if (!is_file($source) || !is_readable($source))
       throw new InvalidArgumentException("backup not readable: $source");
 
-    if (backupIsArchive($source)) {
-      backupRestoreArchive($source);
-    } elseif (backupIsSqlGz($source) || backupIsPlainSql($source)) {
-      backupRestoreSqlGz($source);
-    } else {
-      throw new InvalidArgumentException("restore expects a .tgz, .tar.gz, .sql.gz, or .sql file");
-    }
+    if (!backupIsArchive($source))
+      throw new InvalidArgumentException("restore expects a .tgz or .tar.gz FenPing backup");
 
-    backupApplyCurrentSchema();
+    backupRestoreArchive($source);
     backupReloadHosts();
     echo "restore complete" . PHP_EOL;
     return 0;
@@ -48,7 +45,7 @@ function runRestoreCommand(array $args): int {
 
 function backupUsage(): string {
   return "Usage: php cli.php backup [backup.tgz]\n"
-    . "       php cli.php restore <backup.tgz|dump.sql.gz>";
+    . "       php cli.php restore <backup.tgz>";
 }
 
 function backupTargetPath(string $path): string {
@@ -74,15 +71,12 @@ function backupCreateArchive(string $target): void {
   }
 
   try {
-    $sql = $stage . '/db.sql';
-    $sqlGz = $stage . '/db.sql.gz';
-    backupDumpDatabase($sql);
-    backupGzipFile($sql, $sqlGz);
-    @unlink($sql);
+    $database = $stage . '/db.json';
+    $databaseCounts = backupWriteDatabaseJson($database);
 
     backupCopyDirectory(backupNetbootDir(), $stage . '/netboot');
     backupWriteJson($stage . '/netboot-index.json', backupNetbootIndex());
-    backupWriteJson($stage . '/manifest.json', backupManifest($sqlGz));
+    backupWriteJson($stage . '/manifest.json', backupManifest($database, $databaseCounts));
 
     backupRunProcess(array('tar', '-czf', $tmpArchive, '-C', $stage, '.'));
     chmod($tmpArchive, 0600);
@@ -102,15 +96,17 @@ function backupRestoreArchive(string $source): void {
   try {
     backupRunProcess(array('tar', '-xzf', $source, '-C', $stage));
 
-    $sqlGz = $stage . '/db.sql.gz';
-    $sql = $stage . '/db.sql';
-    if (is_file($sqlGz)) {
-      backupImportSqlGz($sqlGz);
-    } elseif (is_file($sql)) {
-      backupImportSql($sql);
-    } else {
-      throw new RuntimeException('archive does not contain db.sql.gz');
-    }
+    $manifest = backupReadJson($stage . '/manifest.json', 'manifest.json');
+    backupValidateDocument($manifest, BACKUP_FORMAT, 'manifest.json');
+
+    $databasePath = $stage . '/db.json';
+    $database = backupReadJson($databasePath, 'db.json');
+    backupValidateDocument($database, BACKUP_DATABASE_FORMAT, 'db.json');
+    if ($manifest['version'] !== $database['version'])
+      throw new RuntimeException('manifest.json and db.json backup versions do not match');
+
+    backupApplyCurrentSchema();
+    backupRestoreDatabase($database);
 
     if (is_dir($stage . '/netboot')) {
       backupReplaceDirectory($stage . '/netboot', backupNetbootDir());
@@ -121,58 +117,221 @@ function backupRestoreArchive(string $source): void {
   }
 }
 
-function backupRestoreSqlGz(string $source): void {
-  if (backupIsSqlGz($source))
-    backupImportSqlGz($source);
-  else
-    backupImportSql($source);
-}
-
-function backupDumpDatabase(string $target): void {
-  global $db_name;
-
-  $command = array_merge(
-    array(backupFindExecutable(array('mariadb-dump', 'mysqldump'))),
-    backupMysqlArgs(),
-    array('--single-transaction', '--quick', '--routines', '--triggers', '--add-drop-database', '--databases', $db_name)
+function backupTableNames(): array {
+  return array(
+    'device_approvals', 'ips', 'leases', 'netboot_images', 'oui_vendors',
+    'ping', 'range', 'scan_port_changes', 'scan_snapshot_addresses',
+    'scan_snapshot_extra_ports', 'scan_snapshot_extra_reasons',
+    'scan_snapshot_hostnames', 'scan_snapshot_os_classes',
+    'scan_snapshot_os_cpes', 'scan_snapshot_os_matches',
+    'scan_snapshot_port_cpes', 'scan_snapshot_ports', 'scan_snapshot_scopes',
+    'scan_snapshot_script_nodes', 'scan_snapshot_scripts',
+    'scan_snapshot_trace_hops', 'scan_snapshots', 'scans', 'stats',
+    'stats_old', 'users'
   );
-  backupRunProcess($command, backupMysqlEnv(), null, $target);
 }
 
-function backupImportSqlGz(string $source): void {
-  $stage = backupTempDir('fenping-sql-');
-  $sql = $stage . '/restore.sql';
+function backupWriteDatabaseJson(string $target): array {
+  $database = db();
+  $schema = backupCurrentSchema();
+  $out = fopen($target, 'wb');
+  if ($out === false)
+    throw new RuntimeException("failed to write $target");
 
+  $tableCount = 0;
+  $totalRows = 0;
+
+  $unbuffered = false;
   try {
-    backupGunzipFile($source, $sql);
-    backupImportSql($sql);
+    $database->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    $database->exec('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
+    $database->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, false);
+    $unbuffered = true;
+    backupWriteChunk($out, "{\n");
+    backupWriteChunk($out, '    "format": ' . backupJsonEncode(BACKUP_DATABASE_FORMAT) . ",\n");
+    backupWriteChunk($out, '    "version": ' . backupJsonEncode(BACKUP_VERSION) . ",\n");
+    backupWriteChunk($out, '    "created_at": ' . backupJsonEncode(date(DATE_ATOM)) . ",\n");
+    backupWriteChunk($out, "    \"tables\": {\n");
+
+    foreach (backupTableNames() as $table) {
+      if (!isset($schema[$table]))
+        continue;
+
+      $columns = array_keys($schema[$table]);
+      $quotedColumns = array_map('backupQuoteIdentifier', $columns);
+      if ($tableCount > 0)
+        backupWriteChunk($out, ",\n");
+      backupWriteChunk($out, '        ' . backupJsonEncode($table) . ": {\n");
+      backupWriteChunk($out, '            "columns": ' . backupJsonEncode($columns) . ",\n");
+      backupWriteChunk($out, "            \"rows\": [");
+
+      $stmt = $database->query(
+        'SELECT ' . implode(', ', $quotedColumns) . ' FROM ' . backupQuoteIdentifier($table)
+      );
+      $rowCount = 0;
+      while ($row = $stmt->fetch(PDO::FETCH_NUM)) {
+        backupWriteChunk($out, ($rowCount === 0 ? "\n" : ",\n")
+          . '                ' . backupJsonEncode($row));
+        $rowCount++;
+        $totalRows++;
+      }
+      $stmt->closeCursor();
+      if ($rowCount > 0)
+        backupWriteChunk($out, "\n            ");
+      backupWriteChunk($out, "]\n        }");
+      $tableCount++;
+    }
+    backupWriteChunk($out, "\n    }\n}\n");
+    $database->commit();
+  } catch (Throwable $e) {
+    if ($database->inTransaction())
+      $database->rollBack();
+    @unlink($target);
+    throw $e;
   } finally {
-    backupRemoveTree($stage);
+    if ($unbuffered)
+      $database->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
+    fclose($out);
   }
+
+  return array('tables' => $tableCount, 'rows' => $totalRows);
 }
 
-function backupImportSql(string $source): void {
-  global $db_name;
+function backupRestoreDatabase(array $document): void {
+  $tables = $document['tables'] ?? null;
+  if (!is_array($tables))
+    throw new RuntimeException('db.json does not contain a tables object');
 
+  $database = db();
+  $schema = backupCurrentSchema();
+  $timestampShift = backupTimestampShift($document, $schema);
   echo "restoring database" . PHP_EOL;
-  $stage = backupTempDir('fenping-import-');
-  $prepared = $stage . '/restore.sql';
 
+  $foreignKeysDisabled = false;
   try {
-    $databaseDump = backupExtractDatabaseSql($source, $prepared);
-    $importFile = $databaseDump ? $prepared : $source;
-    $command = array_merge(
-      array(backupFindExecutable(array('mariadb', 'mysql'))),
-      backupMysqlArgs()
-    );
-    if (!$databaseDump)
-      $command[] = $db_name;
+    $database->exec('SET FOREIGN_KEY_CHECKS = 0');
+    $foreignKeysDisabled = true;
+    $database->beginTransaction();
+    foreach (array_reverse(backupTableNames()) as $table) {
+      if (isset($schema[$table]))
+        $database->exec('DELETE FROM ' . backupQuoteIdentifier($table));
+    }
 
-    backupRunProcess($command, backupMysqlEnv(), $importFile, null);
+    foreach ($tables as $table => $tableData) {
+      if (!is_string($table) || !isset($schema[$table]))
+        continue;
+      if (!is_array($tableData) || !isset($tableData['columns'], $tableData['rows'])
+          || !is_array($tableData['columns']) || !is_array($tableData['rows']))
+        throw new RuntimeException("invalid table data for $table in db.json");
+
+      $sourceIndexes = array();
+      $columns = array();
+      foreach ($tableData['columns'] as $index => $column) {
+        if (!is_string($column) || !isset($schema[$table][$column]) || $schema[$table][$column]['generated'])
+          continue;
+        $sourceIndexes[] = $index;
+        $columns[] = $column;
+      }
+      if ($tableData['rows'] !== array() && $columns === array())
+        throw new RuntimeException("db.json has no restorable columns for $table");
+      if ($columns === array())
+        continue;
+
+      $sql = 'INSERT INTO ' . backupQuoteIdentifier($table)
+        . ' (' . implode(', ', array_map('backupQuoteIdentifier', $columns)) . ')'
+        . ' VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')';
+      $insert = $database->prepare($sql);
+      foreach ($tableData['rows'] as $row) {
+        if (!is_array($row))
+          throw new RuntimeException("invalid row for $table in db.json");
+        $values = array();
+        foreach ($sourceIndexes as $position => $sourceIndex) {
+          if (!array_key_exists($sourceIndex, $row))
+            throw new RuntimeException("short row for $table in db.json");
+          $column = $columns[$position];
+          $value = $row[$sourceIndex];
+          if ($value !== null && !is_scalar($value))
+            throw new RuntimeException("invalid value for $table.$column in db.json");
+          if (isset($timestampShift[$table][$column]) && $value !== null)
+            $value = backupShiftTimestamp($value, $timestampShift[$table][$column]);
+          $values[] = $value;
+        }
+        $insert->execute($values);
+      }
+    }
+    $database->commit();
+  } catch (Throwable $e) {
+    if ($database->inTransaction())
+      $database->rollBack();
+    throw $e;
   } finally {
-    backupRemoveTree($stage);
+    if ($foreignKeysDisabled)
+      $database->exec('SET FOREIGN_KEY_CHECKS = 1');
   }
   echo "database restored" . PHP_EOL;
+}
+
+function backupCurrentSchema(): array {
+  global $db_name;
+
+  $stmt = db()->prepare("
+    SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, EXTRA
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA=:schema
+    ORDER BY TABLE_NAME, ORDINAL_POSITION
+  ");
+  $stmt->execute(array(':schema' => $db_name));
+  $schema = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $table = (string)$row['TABLE_NAME'];
+    if (!in_array($table, backupTableNames(), true))
+      continue;
+    $schema[$table][(string)$row['COLUMN_NAME']] = array(
+      'type' => (string)$row['DATA_TYPE'],
+      'generated' => str_contains((string)$row['EXTRA'], 'GENERATED')
+    );
+  }
+  return $schema;
+}
+
+function backupTimestampShift(array $document, array $schema): array {
+  $config = $document['restore']['timestamp_shift'] ?? null;
+  if (!is_array($config))
+    return array();
+
+  $anchor = $config['anchor'] ?? null;
+  $columns = $config['columns'] ?? null;
+  $offset = $config['target_offset_seconds'] ?? 0;
+  if (!is_string($anchor) || !is_array($columns) || !is_int($offset))
+    throw new RuntimeException('invalid timestamp_shift in db.json');
+
+  $anchorDate = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $anchor, new DateTimeZone('UTC'));
+  if ($anchorDate === false || $anchorDate->format('Y-m-d H:i:s') !== $anchor)
+    throw new RuntimeException('invalid timestamp_shift anchor in db.json');
+  $seconds = time() + $offset - $anchorDate->getTimestamp();
+
+  $result = array();
+  foreach ($columns as $table => $names) {
+    if (!is_string($table) || !isset($schema[$table]) || !is_array($names))
+      continue;
+    foreach ($names as $column) {
+      if (!is_string($column) || !isset($schema[$table][$column]))
+        continue;
+      if (!in_array($schema[$table][$column]['type'], array('date', 'datetime', 'timestamp'), true))
+        throw new RuntimeException("timestamp_shift column is not a date: $table.$column");
+      $result[$table][$column] = $seconds;
+    }
+  }
+  return $result;
+}
+
+function backupShiftTimestamp($value, int $seconds): string {
+  if (!is_string($value))
+    throw new RuntimeException('timestamp_shift value is not a string');
+  $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, new DateTimeZone('UTC'));
+  if ($date === false || $date->format('Y-m-d H:i:s') !== $value)
+    throw new RuntimeException("invalid timestamp value in db.json: $value");
+  return gmdate('Y-m-d H:i:s', $date->getTimestamp() + $seconds);
 }
 
 function backupApplyCurrentSchema(): void {
@@ -190,69 +349,6 @@ function backupApplyCurrentSchema(): void {
   );
   backupRunProcess($command, backupMysqlEnv(), $schema, null);
   echo "schema updated" . PHP_EOL;
-}
-
-function backupExtractDatabaseSql(string $source, string $target): bool {
-  global $db_name;
-
-  $in = fopen($source, 'rb');
-  if ($in === false)
-    throw new RuntimeException("failed to read $source");
-
-  $out = fopen($target, 'wb');
-  if ($out === false) {
-    fclose($in);
-    throw new RuntimeException("failed to write $target");
-  }
-
-  $sawDatabase = false;
-  $matchedDatabase = false;
-  $write = true;
-
-  try {
-    while (($line = fgets($in)) !== false) {
-      $database = backupSqlDatabaseMarker($line);
-      if ($database !== null) {
-        $sawDatabase = true;
-        $write = $database === $db_name;
-        if ($write)
-          $matchedDatabase = true;
-      }
-
-      if ((!$sawDatabase || $write) && fwrite($out, $line) === false)
-        throw new RuntimeException("failed to write $target");
-    }
-
-    if (!feof($in))
-      throw new RuntimeException("failed to read $source");
-  } finally {
-    fclose($in);
-    fclose($out);
-  }
-
-  if (!$sawDatabase) {
-    @unlink($target);
-    return false;
-  }
-
-  if (!$matchedDatabase)
-    throw new RuntimeException("SQL dump does not contain database `$db_name`");
-
-  echo "extracted database `$db_name` from multi-database dump" . PHP_EOL;
-  return true;
-}
-
-function backupSqlDatabaseMarker(string $line): ?string {
-  if (preg_match('/^-- Current Database: `([^`]+)`/', $line, $match))
-    return $match[1];
-
-  if (preg_match('/^(?:CREATE|DROP) DATABASE\b.*`([^`]+)`/i', $line, $match))
-    return $match[1];
-
-  if (preg_match('/^USE `([^`]+)`;/i', $line, $match))
-    return $match[1];
-
-  return null;
 }
 
 function backupMysqlArgs(): array {
@@ -317,17 +413,17 @@ function backupNetbootIndex(): array {
   return $rows;
 }
 
-function backupManifest(string $sqlGz): array {
+function backupManifest(string $database, array $databaseCounts): array {
   global $db_name;
   $scanCounts = backupScanCounts();
 
   return array(
     'format' => BACKUP_FORMAT,
+    'version' => BACKUP_VERSION,
     'created_at' => date(DATE_ATOM),
-    'database' => $db_name,
     'hostname' => gethostname() ?: 'fenping',
     'includes' => array(
-      'db' => 'db.sql.gz',
+      'db' => 'db.json',
       'netboot' => 'netboot/',
       'netboot_index' => 'netboot-index.json'
     ),
@@ -338,16 +434,88 @@ function backupManifest(string $sqlGz): array {
       'scan_snapshot_bytes' => $scanCounts['snapshot_bytes'],
       'netboot_rows' => count(backupNetbootIndex())
     ),
-    'db_sql_gz_bytes' => filesize($sqlGz)
+    'database' => array(
+      'name' => $db_name,
+      'tables' => $databaseCounts['tables'],
+      'rows' => $databaseCounts['rows'],
+      'bytes' => filesize($database)
+    )
   );
 }
 
 function backupWriteJson(string $path, array $data): void {
-  $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-  if ($json === false)
-    throw new RuntimeException("failed to encode " . basename($path));
+  $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+    | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
   if (file_put_contents($path, $json . PHP_EOL) === false)
     throw new RuntimeException("failed to write $path");
+}
+
+function backupJsonEncode($value): string {
+  return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+}
+
+function backupWriteChunk($stream, string $value): void {
+  $length = strlen($value);
+  $written = 0;
+  while ($written < $length) {
+    $bytes = fwrite($stream, substr($value, $written));
+    if ($bytes === false || $bytes === 0)
+      throw new RuntimeException('failed to write db.json');
+    $written += $bytes;
+  }
+}
+
+function backupReadJson(string $path, string $label): array {
+  if (!is_file($path) || !is_readable($path))
+    throw new RuntimeException("archive does not contain $label");
+  backupEnsureJsonMemory($path);
+  $json = file_get_contents($path);
+  if ($json === false)
+    throw new RuntimeException("failed to read $label");
+  try {
+    $document = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+  } catch (JsonException $e) {
+    throw new RuntimeException("invalid $label: " . $e->getMessage());
+  }
+  if (!is_array($document))
+    throw new RuntimeException("invalid $label: expected an object");
+  return $document;
+}
+
+function backupEnsureJsonMemory(string $path): void {
+  $bytes = filesize($path);
+  if ($bytes === false)
+    return;
+  $needed = max(128 * 1024 * 1024, $bytes * 8 + 16 * 1024 * 1024);
+  $configured = trim((string)ini_get('memory_limit'));
+  if ($configured === '' || $configured === '-1')
+    return;
+  $unit = strtolower(substr($configured, -1));
+  $current = (int)$configured;
+  if ($unit === 'g')
+    $current *= 1024 * 1024 * 1024;
+  elseif ($unit === 'm')
+    $current *= 1024 * 1024;
+  elseif ($unit === 'k')
+    $current *= 1024;
+  if ($current < $needed)
+    ini_set('memory_limit', (string)$needed);
+}
+
+function backupValidateDocument(array $document, string $format, string $label): void {
+  if (($document['format'] ?? null) !== $format)
+    throw new RuntimeException("unsupported $label format");
+  $version = $document['version'] ?? null;
+  if (!is_string($version) || !preg_match('/^([0-9]+)\.([0-9]+)$/', $version, $match))
+    throw new RuntimeException("invalid backup version in $label");
+  if ($match[1] !== '1' || version_compare($version, BACKUP_VERSION, '<'))
+    throw new RuntimeException("unsupported backup version $version in $label");
+}
+
+function backupQuoteIdentifier(string $identifier): string {
+  if (!preg_match('/^[A-Za-z0-9_-]+$/', $identifier))
+    throw new RuntimeException("invalid database identifier: $identifier");
+  return '`' . $identifier . '`';
 }
 
 function backupValidateArchive(string $source): void {
@@ -446,60 +614,6 @@ function backupRestoreEnv(array $old): void {
       putenv($name);
     else
       putenv($name . '=' . $value);
-  }
-}
-
-function backupGzipFile(string $source, string $target): void {
-  $in = fopen($source, 'rb');
-  if ($in === false)
-    throw new RuntimeException("failed to read $source");
-
-  $out = gzopen($target, 'wb9');
-  if ($out === false) {
-    fclose($in);
-    throw new RuntimeException("failed to write $target");
-  }
-
-  try {
-    while (!feof($in)) {
-      $chunk = fread($in, 1024 * 1024);
-      if ($chunk === false)
-        throw new RuntimeException("failed to read $source");
-      gzwrite($out, $chunk);
-    }
-  } finally {
-    fclose($in);
-    gzclose($out);
-  }
-}
-
-function backupGunzipFile(string $source, string $target): void {
-  if (backupIsPlainSql($source)) {
-    if (!copy($source, $target))
-      throw new RuntimeException("failed to copy $source");
-    return;
-  }
-
-  $in = gzopen($source, 'rb');
-  if ($in === false)
-    throw new RuntimeException("failed to read $source");
-
-  $out = fopen($target, 'wb');
-  if ($out === false) {
-    gzclose($in);
-    throw new RuntimeException("failed to write $target");
-  }
-
-  try {
-    while (!gzeof($in)) {
-      $chunk = gzread($in, 1024 * 1024);
-      if ($chunk === false)
-        throw new RuntimeException("failed to read $source");
-      fwrite($out, $chunk);
-    }
-  } finally {
-    gzclose($in);
-    fclose($out);
   }
 }
 
@@ -605,14 +719,6 @@ function backupNetbootDir(): string {
 
 function backupIsArchive(string $path): bool {
   return str_ends_with($path, '.tgz') || str_ends_with($path, '.tar.gz');
-}
-
-function backupIsSqlGz(string $path): bool {
-  return str_ends_with($path, '.sql.gz');
-}
-
-function backupIsPlainSql(string $path): bool {
-  return str_ends_with($path, '.sql');
 }
 
 function backupCountFiles(string $dir): int {

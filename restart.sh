@@ -25,14 +25,14 @@ cleanup() {
 trap cleanup EXIT
 
 build_demo_backup() {
-  if [ ! -f demo/db.sql ] || [ ! -f demo/manifest.json ] || [ ! -f demo/netboot-index.json ] || [ ! -d demo/netboot ]; then
+  if [ ! -f demo/db.json ] || [ ! -f demo/manifest.json ] || [ ! -f demo/netboot-index.json ] || [ ! -d demo/netboot ]; then
     echo "demo source is incomplete" >&2
     exit 1
   fi
 
   DEMO_TMP=$(mktemp -d)
   mkdir -p "$DEMO_TMP/archive"
-  install -m 0644 demo/db.sql "$DEMO_TMP/archive/db.sql"
+  install -m 0644 demo/db.json "$DEMO_TMP/archive/db.json"
   install -m 0644 demo/manifest.json demo/netboot-index.json "$DEMO_TMP/archive/"
   cp -a demo/netboot "$DEMO_TMP/archive/netboot"
   tar -czf "$DEMO_TMP/fenping-demo.tgz" -C "$DEMO_TMP/archive" .

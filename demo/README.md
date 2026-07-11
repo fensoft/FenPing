@@ -2,7 +2,7 @@
 
 This directory is the versioned source for the synthetic screenshot environment.
 
-- `db.sql` contains the complete demo schema and data. Its final statements shift activity timestamps to the restore time so recent views remain populated.
+- `db.json` contains the complete version 1.6 demo data. Its `restore.timestamp_shift` metadata shifts activity timestamps to the restore time so recent views remain populated.
 - `netboot/` contains harmless example iPXE files.
 - `manifest.json` and `netboot-index.json` describe the generated backup.
 
