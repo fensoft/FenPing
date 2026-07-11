@@ -5,14 +5,14 @@ function getHealth(): array {
   $lastPing = $db['ok'] ? healthLastPingScan() : null;
   $lastInventory = $db['ok'] ? healthLastInventoryScan() : null;
   $dnsmasq = healthProcess('dnsmasq', '/var/run/dnsmasq.pid');
-  $cron = healthProcess('cron');
+  $cron = healthProcess('crond');
 
   return array(
     'status' => ($db['ok'] && $dnsmasq['running'] && $cron['running']) ? 'ok' : 'degraded',
     'checked_at' => healthNow(),
-    'apache_php' => array(
+    'web' => array(
       'ok' => true,
-      'apache' => function_exists('apache_get_version') ? apache_get_version() : ($_SERVER['SERVER_SOFTWARE'] ?? ''),
+      'server' => $_SERVER['SERVER_SOFTWARE'] ?? '',
       'php' => PHP_VERSION,
       'sapi' => PHP_SAPI
     ),

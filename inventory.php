@@ -338,8 +338,10 @@ function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds 
   $timeoutSeconds = max(1, $timeoutSeconds);
   $timedCommand = array_merge(array(
     'timeout',
-    '--signal=TERM',
-    '--kill-after=10s',
+    '-s',
+    'TERM',
+    '-k',
+    '10s',
     $timeoutSeconds . 's'
   ), $command);
   $line = implode(' ', array_map('escapeshellarg', $timedCommand));
@@ -351,7 +353,7 @@ function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds 
   $output = array();
   $code = 0;
   exec($line, $output, $code);
-  if ($code === 124 || $code === 137) {
+  if (in_array($code, array(124, 137, 143), true)) {
     $duration = inventoryTimeoutLabel($timeoutSeconds);
     $name = basename($command[0] ?? 'command');
     throw new InventoryTimeoutException("$name timed out after $duration");

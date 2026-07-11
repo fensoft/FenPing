@@ -30,7 +30,7 @@ services:
         max-file: "2"
 
   app:
-    image: ${FENPING_IMAGE:-fensoft/fenping}:${FENPING_VERSION:-1.5}
+    image: ${FENPING_IMAGE:-fensoft/fenping}:${FENPING_VERSION:-1.6}
     container_name: fenping
     hostname: fenping
     restart: unless-stopped

@@ -9,7 +9,7 @@ FenPing is a LAN appliance for inventory, DHCP/DNS management, ping status histo
 Main stack:
 - PHP API and CLI with a hand-written front controller in `api.php`.
 - Static Vue 3 + Vite frontend styled with Tabler.
-- A host-networked application container running Apache/PHP, dnsmasq, cron, nmap, ping, and ARP/arping tools.
+- A host-networked Alpine application container running nginx/PHP-FPM, dnsmasq, BusyBox cron, nmap, ping, and ARP/arping tools.
 - A separate MariaDB 11.8 container managed by Docker Compose.
 - MariaDB stores app data.
 - dnsmasq provides DHCP, DNS, TFTP, and leases.
@@ -21,7 +21,7 @@ This repo uses Docker Compose with an application service and a database service
 - `restart.sh` normally pulls published images and starts the Compose project. `./restart.sh dev` explicitly builds the current platform as the local `dev` tag.
 - `fenping` uses host networking for DHCP/DNS/TFTP and the web UI.
 - `fenping-db` uses the official `mariadb:11.8` image, has networking disabled, shares only its Unix socket with the app, and owns `data/db`.
-- `boot.sh` waits for MariaDB, applies `db.sql`, backfills service-change notifications from retained scans, renders dnsmasq config, starts cron, sends restart notification, regenerates host files, and runs Apache in the foreground.
+- `boot.sh` waits for MariaDB, applies `db.sql`, backfills service-change notifications from retained scans, renders dnsmasq config, starts BusyBox cron, sends restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
 - Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
 Do not fold MariaDB back into the application image or split dnsmasq into another container unless the user explicitly asks.
@@ -29,7 +29,7 @@ Do not fold MariaDB back into the application image or split dnsmasq into anothe
 ## Important Files
 
 - `docker-compose.yml`: application and MariaDB services, mounts, capabilities, health checks, and logging limits.
-- `Dockerfile`: multi-stage build; Vite frontend first, then Ubuntu application runtime with Apache/PHP/dnsmasq/cron, networking tools, and the MariaDB client. Keep direct runtime dependencies explicit instead of relying on MariaDB server transitive packages.
+- `Dockerfile`: multi-stage build; Vite frontend first, then an Alpine application runtime with nginx/PHP-FPM, dnsmasq, BusyBox cron, networking tools, and the MariaDB client. Keep direct runtime dependencies explicit instead of relying on MariaDB server transitive packages.
 - `restart.sh`: validates, pulls `FENPING_IMAGE:FENPING_VERSION`, and starts the Compose project; `dev` mode builds and runs `FENPING_IMAGE:dev` locally.
 - `publish.sh`: multi-architecture Buildx release command that pushes the versioned Docker Hub image and `latest` by default.
 - `demo/`: versioned synthetic screenshot database, netboot files, and backup metadata. `./restart.sh demo` rebuilds and restores it after preserving the current state.
@@ -64,7 +64,7 @@ Do not casually delete or rewrite files under `data/`.
 - `data/backups` -> `/var/lib/fenping/backups`
 - `data/state` -> `/var/lib/fenping/state`
 
-Apache's document root is `/var/www/public`. Application code lives in `/opt/fenping`; never move runtime data or `.env` back under the document root.
+nginx's document root is `/var/www/public`. Application code lives in `/opt/fenping`; never move runtime data or `.env` back under the document root.
 
 ## CLI
 

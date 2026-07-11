@@ -1,21 +1,56 @@
-FROM --platform=$BUILDPLATFORM ubuntu:26.04 AS frontend
-ARG DEBIAN_FRONTEND=noninteractive
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates nodejs npm && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY index.html vite.config.js ./
 COPY frontend ./frontend
 RUN npm run build
 
-FROM ubuntu:26.04
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends cron nano apache2 mariadb-client libapache2-mod-php php-mysql dnsmasq-base libxml-xpath-perl nmap iproute2 iputils-ping iputils-arping net-tools php-curl sudo iptables && apt-get clean && rm -rf /var/lib/apt/lists/* /var/www/html
+FROM alpine:3.23
+RUN apk add --no-cache \
+      ca-certificates \
+      dnsmasq \
+      iproute2-minimal \
+      iputils-arping \
+      iputils-ping \
+      mariadb-client \
+      nginx \
+      nmap \
+      nmap-scripts \
+      php84 \
+      php84-ctype \
+      php84-curl \
+      php84-fpm \
+      php84-pdo_mysql \
+      php84-posix \
+      php84-session \
+      php84-sockets \
+      sudo \
+    && adduser -S -D -H -s /sbin/nologin -G www-data www-data
 COPY config.php oui.php /opt/fenping/
-RUN mkdir -p /usr/share/fenping && php -r 'require "/opt/fenping/config.php"; require "/opt/fenping/oui.php"; $result=ieeeOuiRefresh(IEEE_OUI_SEED_PATH); printf("IEEE OUI registry seed: %d assignments from %d registries\n", $result["assignments"], $result["registries"]);'
-RUN PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')" && printf "upload_max_filesize=512M\npost_max_size=512M\nmax_file_uploads=20\nsession.save_path=/run/fenping/sessions\nsession.lazy_write=1\n" > "/etc/php/$PHP_VERSION/apache2/conf.d/99-fenping.ini"
-RUN a2enmod rewrite && echo 'ServerName 127.0.0.1' >> /etc/apache2/apache2.conf
-COPY apache-fenping.conf /etc/apache2/sites-available/000-default.conf
+RUN mkdir -p /usr/share/fenping \
+    && php -r 'require "/opt/fenping/config.php"; require "/opt/fenping/oui.php"; $result=ieeeOuiRefresh(IEEE_OUI_SEED_PATH); printf("IEEE OUI registry seed: %d assignments from %d registries\n", $result["assignments"], $result["registries"]);'
+RUN printf '%s\n' \
+      'upload_max_filesize=512M' \
+      'post_max_size=512M' \
+      'max_file_uploads=20' \
+      'session.save_path=/run/fenping/sessions' \
+      'session.lazy_write=1' \
+      > /etc/php84/conf.d/99-fenping.ini \
+    && sed -i \
+      -e 's/^user = .*/user = www-data/' \
+      -e 's/^group = .*/group = www-data/' \
+      -e 's#^listen = .*#listen = /run/fenping/php-fpm.sock#' \
+      /etc/php84/php-fpm.d/www.conf \
+    && printf '%s\n' \
+      'listen.owner = www-data' \
+      'listen.group = www-data' \
+      'listen.mode = 0660' \
+      'clear_env = no' \
+      'catch_workers_output = yes' \
+      >> /etc/php84/php-fpm.d/www.conf \
+    && sed -i 's#^error_log = .*#error_log = /proc/self/fd/2#' /etc/php84/php-fpm.conf
+COPY nginx-fenping.conf /etc/nginx/nginx.conf
 COPY --from=frontend /app/dist/ /var/www/public/
 COPY public/api.php /var/www/public/
 COPY img/icon.png /var/www/public/icon.png
@@ -23,15 +58,18 @@ COPY favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/
 COPY functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php ipam.php scans.php inventory.php backup.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
-COPY netboot.htaccess /.netboot-htaccess
-RUN install -d -o www-data -g www-data /var/lib/fenping/netboot && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state
-RUN echo 'Defaults env_keep += "DB_HOST DB_PORT DB_USER DB_PASS DB_NAME NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE"' >> /etc/sudoers
-RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts' >> /etc/sudoers
-RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --apply-pending' >> /etc/sudoers
-RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --sync-locked' >> /etc/sudoers
-RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php ping' >> /etc/sudoers
-RUN echo 'www-data ALL = NOPASSWD: /usr/bin/php /opt/fenping/cli.php inventory --work' >> /etc/sudoers
-RUN mkdir -p /etc/dnsmasq.d /var/lib/misc && touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts /var/lib/misc/dnsmasq.leases
+RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
+    && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc \
+    && touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts /var/lib/misc/dnsmasq.leases \
+    && printf '%s\n' \
+      'Defaults env_keep += "DB_HOST DB_PORT DB_USER DB_PASS DB_NAME NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE"' \
+      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts' \
+      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --apply-pending' \
+      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php hosts --sync-locked' \
+      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php ping' \
+      'www-data ALL=(root) NOPASSWD: /usr/bin/php /opt/fenping/cli.php inventory --work' \
+      > /etc/sudoers.d/fenping \
+    && chmod 0440 /etc/sudoers.d/fenping
 COPY boot.sh /.boot
 ENV FENPING_DATA_DIR=/var/lib/fenping
 EXPOSE 80

@@ -100,7 +100,7 @@ docker compose ps
 wait_for_fenping
 
 if [ "$MODE" = "demo" ]; then
-  docker exec fenping sh -c 'install -m 0644 /dev/null /etc/cron.d/fenping'
+  docker exec fenping sh -c 'install -m 0600 /dev/null /etc/crontabs/root'
   BEFORE_DEMO="fenping-before-demo-$(date +%Y%m%d-%H%M%S).tgz"
   docker exec fenping php /opt/fenping/cli.php backup "/var/lib/fenping/backups/$BEFORE_DEMO"
   docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-demo.tgz

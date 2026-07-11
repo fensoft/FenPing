@@ -7,7 +7,7 @@ if [ "$#" -gt 1 ]; then
 fi
 
 IMAGE=${FENPING_IMAGE:-fensoft/fenping}
-VERSION=${1:-${FENPING_VERSION:-1.5}}
+VERSION=${1:-${FENPING_VERSION:-1.6}}
 PLATFORMS=linux/arm64,linux/amd64,linux/arm/v7
 BUILDER=${BUILDX_BUILDER:-fenping-multiarch}
 PUBLISH_LATEST=${PUBLISH_LATEST:-1}

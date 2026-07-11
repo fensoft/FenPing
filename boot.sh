@@ -11,9 +11,9 @@ mkdir -p /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/stat
 chown www-data:www-data /var/lib/fenping/netboot
 install -d -o www-data -g www-data -m 0700 /run/fenping/dnsmasq-pending
 install -d -o www-data -g www-data -m 0700 /run/fenping/sessions
-install -d -o root -g root -m 0755 /run/lock/apache2
+install -d -o www-data -g www-data -m 0700 /tmp/nginx/client-body
+install -d -o www-data -g www-data -m 0700 /tmp/nginx/fastcgi
 install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock
-cmp -s /.netboot-htaccess /var/lib/fenping/netboot/.htaccess || install -o root -g root -m 0644 /.netboot-htaccess /var/lib/fenping/netboot/.htaccess
 MYSQL=$(command -v mariadb || command -v mysql)
 MYSQLADMIN=$(command -v mariadb-admin || command -v mysqladmin)
 DB_HOST=${DB_HOST:-localhost}
@@ -78,28 +78,18 @@ for file in /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /
 done
 mkdir -p /var/lib/misc
 [ -e /var/lib/misc/dnsmasq.leases ] || install -m 0644 /dev/null /var/lib/misc/dnsmasq.leases
-cat > /etc/cron.d/fenping <<EOF
-SHELL=/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-DB_HOST=$DB_HOST
-DB_PORT=$DB_PORT
-DB_USER=$DB_USER
-DB_PASS=$DB_PASS
-DB_NAME=$DB_NAME
-NETWORK=$NETWORK
-IFACE=$IFACE
-IP=$IP
-DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
-FENPING_DATA_DIR=$FENPING_DATA_DIR
-
-0 * * * * root php /opt/fenping/cli.php inventory
-* * * * * root php /opt/fenping/cli.php inventory --work
-17 3 1 * * root php /opt/fenping/cli.php oui-refresh
-*/15 * * * * root php /opt/fenping/cli.php ping
-* * * * * root php /opt/fenping/cli.php dnsmasq-leases
+cat > /etc/crontabs/root <<'EOF'
+0 * * * * php /opt/fenping/cli.php inventory
+* * * * * php /opt/fenping/cli.php inventory --work
+17 3 1 * * php /opt/fenping/cli.php oui-refresh
+*/15 * * * * php /opt/fenping/cli.php ping
+* * * * * php /opt/fenping/cli.php dnsmasq-leases
 EOF
-chmod 0644 /etc/cron.d/fenping
+chmod 0600 /etc/crontabs/root
 php /opt/fenping/cli.php discord-restart || true
 php /opt/fenping/cli.php hosts
-cron
-exec apachectl -D FOREGROUND
+php-fpm84 --test
+nginx -t
+crond -b -l 8 -L /dev/stderr
+php-fpm84 -D
+exec nginx -g 'daemon off;'

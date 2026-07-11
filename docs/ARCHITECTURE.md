@@ -2,7 +2,7 @@
 
 FenPing is a small LAN appliance that combines host inventory, DHCP/DNS management, ping history, nmap scan history, notifications, backup/restore, and netboot image selection in one web UI.
 
-The runtime is managed by Docker Compose. The host-networked `fenping` container runs Apache/PHP, dnsmasq, cron, and scanner tools. The separate `fenping-db` container uses the official MariaDB 11.8 image and owns the persistent SQL data.
+The runtime is managed by Docker Compose. The host-networked Alpine `fenping` container runs nginx/PHP-FPM, dnsmasq, BusyBox cron, and scanner tools. The separate `fenping-db` container uses the official MariaDB 11.8 image and owns the persistent SQL data.
 
 ## High-Level Flow
 
@@ -11,19 +11,19 @@ The runtime is managed by Docker Compose. The host-networked `fenping` container
 3. Compose starts the network-disabled `fenping-db`, mounting `data/db`, the shared SQL socket, and the low-write MariaDB configuration. The official entrypoint upgrades a reused MariaDB data directory when needed, then Compose waits for its authenticated health check.
 4. Compose starts `fenping` with host networking, reduced capabilities, and the remaining persistent mounts.
 5. `boot.sh` waits for MariaDB over loopback and applies `db.sql`.
-6. `boot.sh` verifies the local IEEE vendor registry in MariaDB and imports it only when changed, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, starts cron, and runs Apache in the foreground.
-7. Apache serves the static Vue app from `/var/www/public` and rewrites `/api/...` to the public `api.php` entrypoint, which loads private application code from `/opt/fenping`.
+6. `boot.sh` verifies the local IEEE vendor registry in MariaDB and imports it only when changed, renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
+7. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, and sends `/api/...` to PHP-FPM through a Unix socket. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
 
 ## Docker Build
 
 `Dockerfile` has two stages:
 
-- `frontend`: uses `ubuntu:26.04` with Node/npm to run `npm ci` and `npm run build`.
-- runtime: uses `ubuntu:26.04` and installs Apache, PHP, the MariaDB client, dnsmasq, cron, nmap, ping/arping tools, sudo, and iptables.
+- `frontend`: uses `node:22-alpine` to run `npm ci` and `npm run build`.
+- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM, the MariaDB client, dnsmasq, nmap with scripts, minimal IP/ping/arping tools, and sudo. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
 
 The application image no longer contains a MariaDB server. Compose uses the smaller purpose-built `mariadb:11.8` image for SQL.
 
-Normal runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.5`.
+Normal runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.6`.
 
 `./restart.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev`, pulls only the database image, and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next normal restart uses the configured published version again.
 
@@ -46,7 +46,7 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 | `data/backups` | `/var/lib/fenping/backups` | backup archives and imported dumps |
 | `data/state` | `/var/lib/fenping/state` | refreshed IEEE vendor registry and optional state files |
 
-The web root contains only the built frontend, static scan stylesheet assets, favicons, and the public API entrypoint. PHP modules, CLI code, templates, schema files, `.env` in development, and all persistent state remain outside the web root. Apache also explicitly denies dotfiles, source/config extensions, and legacy runtime URL paths.
+The web root contains only the built frontend, static scan stylesheet assets, favicons, and the public API entrypoint. PHP modules, CLI code, templates, schema files, `.env` in development, and all persistent state remain outside the web root. nginx also explicitly denies dotfiles, source/config extensions, and legacy runtime URL paths.
 
 Avoid destructive edits in `data/` unless explicitly requested.
 
@@ -54,7 +54,7 @@ Avoid destructive edits in `data/` unless explicitly requested.
 
 `mariadb-fenping.cnf` uses `innodb_flush_log_at_trx_commit=2` and a five-second `innodb_flush_log_at_timeout`. This groups durable redo flushes, with the explicit tradeoff that an operating-system crash or power loss can discard approximately five seconds of recent transactions. InnoDB doublewrite remains enabled for torn-page protection, binary/general/slow logging is disabled, and buffer-pool state is not dumped on shutdown.
 
-Compose mounts size-limited tmpfs filesystems for both services. MariaDB's temporary tablespace, scan output, locks, PHP sessions, and lease-import staging therefore avoid persistent writes. Login sessions are cleared on app-container restart. Apache discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP lease history is retained, while `dnsmasq.leases.php` upserts observed rows instead of rebuilding the table. Generated dnsmasq files use content comparison to avoid identical replacements.
+Compose mounts size-limited tmpfs filesystems for both services. MariaDB's temporary tablespace, scan output, nginx upload buffering, locks, PHP sessions, and lease-import staging therefore avoid persistent writes. Login sessions are cleared on app-container restart. nginx discards routine access logs and sends warnings/errors to the bounded Docker `local` log. dnsmasq verbose DHCP logging is disabled. Persistent DHCP lease history is retained, while `dnsmasq.leases.php` upserts observed rows instead of rebuilding the table. Generated dnsmasq files use content comparison to avoid identical replacements.
 
 Stable ping records update their activity timestamp at most once per day; actual status, IP, or MAC changes are still written immediately. The boot-time IEEE sync hashes both registries and skips the 57,000-row transaction when SQL is already current. Backups, netboot uploads, DHCP leases, changed scan results, and actual application mutations remain persistent by design.
 
@@ -141,6 +141,7 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 - Lightweight uses `-F -sS -T4` and has a five-minute timeout.
 - Standard uses `-A --top-ports 1000 -sS -T3` and has a 30-minute timeout.
 - Deep uses `-A -p- -sS -T3` and has a two-hour timeout.
+- Alpine's BusyBox `timeout` sends `TERM` at the profile limit and `KILL` ten seconds later; GNU and BusyBox timeout exit codes are normalized into the same scan state.
 - Profile scan API requests return HTTP `202` after enqueueing and start the coordinator in the background.
 - Timed-out scans are recorded with the `timeout` state.
 - Completed XML is stored in `scan_snapshots`; identical results reuse an existing snapshot rather than storing another copy.
@@ -170,7 +171,7 @@ The required `IFACE` environment variable selects the host network interface tha
 
 Host create, edit, and delete requests hold a shared dnsmasq update lock and a MariaDB transaction while generating and testing a candidate configuration. The candidate is applied before the SQL commit; an apply failure rolls back SQL, while a commit failure regenerates dnsmasq from the committed database state. Netboot image deletion uses the same path because it clears per-host boot assignments. Host names, MAC addresses, router octets, DNS server addresses, IP addresses, and netboot filenames are validated before they can be rendered into dnsmasq files.
 
-Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_images`. Browser downloads are streamed through `/api/netboot/images/{id}/file`; Apache never serves the storage directory directly.
+Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_images`. Browser downloads are streamed through `/api/netboot/images/{id}/file`; nginx denies the entire legacy `/netboot` URL path and never maps the storage directory into the document root, so uploaded PHP-like files cannot execute.
 
 `dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a memory-backed staging table. One InnoDB transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
 
@@ -178,7 +179,7 @@ Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_i
 
 ## Frontend
 
-The UI is a static Vue 3 app built by Vite and routed by Vue Router using browser history. Apache's existing SPA fallback serves `index.html` for direct navigation to frontend routes.
+The UI is a static Vue 3 app built by Vite and routed by Vue Router using browser history. nginx's SPA fallback serves `index.html` for direct navigation to frontend routes.
 
 Important files:
 
@@ -198,7 +199,7 @@ Each route component owns and cancels its loader when it is replaced, preventing
 
 The IPAM route shows pool capacity, pending devices, and approved dynamic devices. Approve/unapprove actions are reversible; Reserve opens the existing fixed-host workflow with no address preselected. The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest lightweight or standard result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
 
-Apache serves real public files directly and falls back all other non-API paths to `index.html`.
+nginx serves real public files directly and falls back all other non-API paths to `index.html`.
 
 ## Auth
 
@@ -226,7 +227,7 @@ Restore supports FenPing `.tgz` archives and raw `.sql` or `.sql.gz` dumps. Afte
 
 ## Cron
 
-`boot.sh` writes `/etc/cron.d/fenping`:
+`boot.sh` writes the BusyBox root crontab at `/etc/crontabs/root`:
 
 - Ping scan every 15 minutes.
 - Inventory discovery and enqueueing every hour.
@@ -243,7 +244,7 @@ Locks use `flock` under `/tmp` to prevent overlapping jobs.
 - HTTP/PHP status.
 - DB connectivity.
 - dnsmasq running.
-- cron running.
+- BusyBox `crond` running.
 - last ping scan time.
 - last inventory scan time and metadata.
 

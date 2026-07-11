@@ -2,7 +2,7 @@
 
 FenPing is a compact LAN appliance for device discovery, uptime history, DHCP/DNS host management, nmap scan history, notifications, backups, and netboot image assignment.
 
-It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, MariaDB, dnsmasq, cron, nmap, ping, ARP, and arping. Docker Compose runs the appliance and database as separate containers.
+It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI backend, MariaDB, dnsmasq, BusyBox cron, nmap, ping, ARP, and arping. Docker Compose runs the appliance and database as separate containers.
 
 ## Features
 
@@ -64,10 +64,10 @@ It uses a static Vue/Vite frontend with Vue Router, a PHP API/CLI backend, Maria
 
 FenPing runs through Docker Compose with two containers:
 
-- `fenping` uses host networking and runs Apache/PHP, dnsmasq, cron, nmap, ping/ARP tools, and the application CLI.
+- `fenping` uses host networking and runs nginx/PHP-FPM, dnsmasq, BusyBox cron, nmap, ping/ARP tools, and the application CLI on Alpine Linux.
 - `fenping-db` runs the official MariaDB 11.8 image and owns `data/db`.
 
-MariaDB has networking disabled. The app connects through a shared Unix socket, preserving compatibility with the existing `root@localhost` account without exposing an SQL port. Compose waits for an authenticated database health check before starting the app, and `boot.sh` applies the idempotent schema before Apache starts.
+MariaDB has networking disabled. The app connects through a shared Unix socket, preserving compatibility with the existing `root@localhost` account without exposing an SQL port. Compose waits for an authenticated database health check before starting the app, and `boot.sh` applies the idempotent schema before nginx and PHP-FPM start.
 
 ## Install
 
@@ -100,7 +100,7 @@ Important `.env` values:
 | `IP` | FenPing LAN address. |
 | `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
 | `FENPING_IMAGE` | Docker Hub repository pulled by `restart.sh`. Defaults to `fensoft/fenping`. |
-| `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.5`. |
+| `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.6`. |
 | `DB_PORT` | TCP port used only when connecting to an external database instead of the Compose Unix socket. Defaults to `3306`. |
 | `DB_USER` | MariaDB application login. Defaults to `root` for compatibility with existing installations. |
 | `DB_PASS` | MariaDB login password and initial root password for a new data directory. Keep it equal to the existing root password when reusing `data/db`; changing this value alone does not rotate an initialized database password. |
@@ -121,7 +121,7 @@ Log in to Docker Hub, then publish the versioned multi-architecture image:
 
 ```bash
 docker login
-./publish.sh 1.5
+./publish.sh 1.6
 ```
 
 The targets are exactly `linux/arm64`, `linux/amd64`, and `linux/arm/v7`. The script automatically runs `tonistiigi/binfmt --install all`, so publishing requires permission to start a privileged Docker container. Set `PUBLISH_LATEST=0` to omit the `latest` tag, or set `FENPING_IMAGE` to publish another Docker Hub repository. The script uses a reusable `fenping-multiarch` Buildx container builder, pushes the version and `latest` manifests, attaches provenance and an SBOM, and inspects the published result.
@@ -149,13 +149,13 @@ Do not delete `data/` casually. It is the appliance state.
 | `data/backups` | `/var/lib/fenping/backups` | Backup archives and imported dumps. |
 | `data/state` | `/var/lib/fenping/state` | Refreshed IEEE vendor registry and optional state/health files. |
 
-Apache serves only `/var/www/public`, which contains the built frontend and the small API entrypoint. PHP application code lives in `/opt/fenping`; runtime files under `/var/lib/fenping` are not directly web-accessible.
+nginx serves only `/var/www/public`, which contains the built frontend and the small API entrypoint. PHP application code lives in `/opt/fenping`; runtime files under `/var/lib/fenping` are not directly web-accessible. nginx explicitly rejects dotfiles, private extensions, and legacy runtime paths, while netboot files can only be downloaded through the validated API route.
 
 ### SSD write endurance
 
 FenPing groups MariaDB redo-log flushes into five-second intervals while retaining InnoDB's doublewrite protection. A host power loss or operating-system crash can therefore lose up to approximately five seconds of recent database changes; a MariaDB process crash remains recoverable from the operating-system cache. DHCP leases, scans, and application data remain persistent.
 
-Routine writes are also limited outside MariaDB: both services use memory-backed `/tmp`, while the app also uses memory-backed `/run` for scan temporaries, locks, PHP sessions, and lease-import staging; Apache access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; lease imports upsert observed rows instead of rebuilding the table; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQL at boot. Login sessions are intentionally cleared when the app container restarts because their files live in `/run`.
+Routine writes are also limited outside MariaDB: both services use memory-backed `/tmp`, while the app also uses memory-backed `/run` for scan temporaries, nginx upload buffering, locks, PHP sessions, and lease-import staging; nginx access logging and verbose DHCP logging are disabled; Docker logs are compressed and rotated; unchanged dnsmasq files are not replaced; lease imports upsert observed rows instead of rebuilding the table; stable ping-history rows are extended at most once per day; and an unchanged IEEE registry is not rewritten into SQL at boot. Login sessions are intentionally cleared when the app container restarts because their files live in `/run`.
 
 ## CLI
 
@@ -315,5 +315,5 @@ docker exec fenping php /opt/fenping/cli.php inventory --work
 The Dockerfile uses an npm cache mount and conservative retry settings. Build and push through the release script so Buildx can reuse its container cache:
 
 ```bash
-./publish.sh 1.5
+./publish.sh 1.6
 ```
