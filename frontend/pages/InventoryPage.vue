@@ -11,23 +11,23 @@
         <div class="text-secondary small filter-count">{{ visibleHosts.length }}/{{ hosts.length }}</div>
       </div>
       <table class="table table-sm inventory-table">
-        <colgroup><col class="col-status" /><col class="col-name" /><col class="col-mac" /><col class="col-vendor" /><col class="col-ip" /><col class="col-actions" /></colgroup>
+        <colgroup><col class="col-status" /><col class="col-name" /><col class="col-mac" /><col class="col-vendor" /><col class="col-ip" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
         <thead><tr>
           <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Close all categories" @click="closeAllCategories"><i class="ti ti-minus"></i></button></th>
           <th scope="col">Name</th><th scope="col">MAC</th><th scope="col">Vendor</th><th scope="col">IP</th>
-          <th scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>Actions</span><button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm inventory-action-btn" type="button" title="Add category" aria-label="Add category" @click="$emit('add-category')"><i class="ti ti-folder-plus"></i><span class="inventory-action-label">Add category</span></button></div></th>
+          <th v-if="isAuthenticated" scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>Actions</span><button class="btn btn-outline-primary btn-sm icon-btn" type="button" title="Add category" aria-label="Add category" @click="$emit('add-category')"><i class="ti ti-folder-plus"></i></button></div></th>
         </tr></thead>
         <tbody>
-          <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" colspan="6">Loading</td></tr>
-          <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" colspan="6">No hosts</td></tr>
-          <tr v-for="row in tableRows" :key="row.key" :class="rowClass(row)">
+          <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">Loading</td></tr>
+          <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">No hosts</td></tr>
+          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), { 'inventory-host-row': row.type === 'host' }]" :tabindex="row.type === 'host' ? 0 : undefined" :aria-label="row.type === 'host' ? `Details for ${row.host.name || row.host.ip || row.host.mac}` : undefined" @click="openRowDetails(row, $event)" @keydown.enter="openRowDetails(row, $event)">
             <template v-if="row.type === 'category'">
               <td><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="row.collapsed ? 'Open category' : 'Close category'" @click="toggleCategory(row.categoryKey)"><i :class="row.collapsed ? 'ti ti-plus' : 'ti ti-minus'"></i></button></td>
               <td class="category-name" colspan="4">{{ row.name }}</td>
-              <td class="text-end category-actions">
+              <td v-if="isAuthenticated" class="text-end category-actions">
                 <div class="inventory-actions">
-                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Rename category" aria-label="Rename category" @click="$emit('rename-category', row)"><i class="ti ti-pencil"></i><span class="inventory-action-label">Rename</span></button>
-                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-danger btn-sm inventory-action-btn" type="button" title="Delete category" aria-label="Delete category" @click="$emit('delete-category', row)"><i class="ti ti-trash"></i><span class="inventory-action-label">Delete</span></button>
+                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-info btn-sm icon-btn" type="button" title="Rename category" aria-label="Rename category" @click="$emit('rename-category', row)"><i class="ti ti-pencil"></i></button>
+                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-danger btn-sm icon-btn" type="button" title="Delete category" aria-label="Delete category" @click="$emit('delete-category', row)"><i class="ti ti-trash"></i></button>
                 </div>
               </td>
             </template>
@@ -41,12 +41,11 @@
               <td class="text-truncate-cell" :title="row.host.name || ''"><a v-if="row.host.web == 1 && row.host.ip" class="host-name-value" :href="`http://${row.host.ip}`" target="_blank" rel="noopener noreferrer">{{ row.host.name }}</a><span v-else class="host-name-value">{{ row.host.name }}</span></td>
               <td class="text-truncate-cell font-monospace" :title="formatMac(row.host.mac)"><span class="mac-value">{{ formatMac(row.host.mac) }}</span><i v-if="row.host.via" class="ti ti-antenna-bars-5 ms-1 text-secondary" :title="row.host.via"></i></td>
               <td class="text-truncate-cell" :title="row.host.vendor || ''">{{ row.host.vendor }}</td><td class="text-truncate-cell font-monospace" :title="row.host.ip || ''">{{ row.host.ip }}</td>
-              <td class="text-end action-cell">
+              <td v-if="isAuthenticated" class="text-end action-cell">
                 <div class="inventory-actions">
-                  <button v-if="row.host.id || row.host.ip" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Host details" aria-label="Host details" @click="$emit('host-detail', row.host)"><i class="ti ti-info-circle"></i><span class="inventory-action-label">Details</span></button>
-                  <button v-if="isAuthenticated && row.host.ip" class="btn btn-sm inventory-action-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
-                  <button v-if="isAuthenticated && row.host.id" class="btn btn-outline-secondary btn-sm inventory-action-btn" type="button" title="Edit host" aria-label="Edit host" @click="$emit('open-edit', row.host)"><i class="ti ti-edit"></i><span class="inventory-action-label">Edit</span></button>
-                  <button v-else-if="isAuthenticated && row.host.mac" class="btn btn-outline-primary btn-sm inventory-action-btn" type="button" title="Create host" aria-label="Create host" @click="$emit('open-create', row.host)"><i class="ti ti-plus"></i><span class="inventory-action-label">Create</span></button>
+                  <button v-if="row.host.ip" class="btn btn-sm inventory-action-btn inventory-scan-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><i :class="isScanRunning(row.host) ? 'ti ti-loader-2' : 'ti ti-search'"></i><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
+                  <button v-if="isAuthenticated && row.host.id" class="btn btn-outline-warning btn-sm icon-btn" type="button" title="Edit host" aria-label="Edit host" @click="$emit('open-edit', row.host)"><i class="ti ti-edit"></i></button>
+                  <button v-else-if="isAuthenticated && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" title="Create host" aria-label="Create host" @click="$emit('open-create', row.host)"><i class="ti ti-plus"></i></button>
                 </div>
               </td>
             </template>
@@ -141,7 +140,7 @@ function matchesFilters(host) {
 function hostKey(host) { return String(host?.ip || host?.id || host?.mac || ''); }
 function isScanningHost(host) { const key = hostKey(host); return key !== '' && props.scanningHosts.has(key); }
 function isScanRunning(host) { return isScanningHost(host) || scanIsActiveState(host?.scan?.state); }
-function scanActionClass(host) { return { 'btn-outline-primary': isScanRunning(host), 'btn-outline-danger': host?.scan?.state === 'failed', 'btn-outline-warning': host?.scan?.state === 'timeout', 'btn-outline-secondary': !isScanRunning(host) && !['failed', 'timeout'].includes(host?.scan?.state), 'is-spinning': isScanRunning(host) }; }
+function scanActionClass(host) { return { 'btn-outline-primary': !['failed', 'timeout'].includes(host?.scan?.state), 'btn-outline-danger': host?.scan?.state === 'failed', 'btn-outline-warning': host?.scan?.state === 'timeout', 'is-spinning': isScanRunning(host) }; }
 function scanButtonLabel(host) {
   if (host?.scan?.state === 'queued') return 'Queued';
   if (isScanRunning(host)) return 'Scanning';
@@ -160,4 +159,9 @@ function stabilityLabel(stability) { return stability?.label || formatPercent(st
 function stabilityClass(stability) { return `stability-badge stability-${stability?.level || 'warn'}`; }
 function stabilityTitle(stability) { return [`Uptime ${formatPercent(stability?.uptime_percent)}`, `${Number(stability?.transitions || 0)} changes`, `Longest down ${formatDuration(stability?.longest_down_seconds)}`, `Current ${stability?.current_status || '-'} ${formatDuration(stability?.current_seconds)}`].join(' | '); }
 function rowClass(row) { return row.type === 'category' ? 'category-row' : row.host.important == 1 && row.host.status !== 'Up' ? 'important-down' : ''; }
+function openRowDetails(row, event) {
+  if (row.type !== 'host' || (!row.host.id && !row.host.ip)) return;
+  if (event.target !== event.currentTarget && event.target.closest('a, button, input, select, textarea, label')) return;
+  emit('host-detail', row.host);
+}
 </script>

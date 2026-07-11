@@ -819,6 +819,19 @@ body {
   background: #fff0f0;
 }
 
+.inventory-host-row {
+  cursor: pointer;
+}
+
+.inventory-host-row:hover > td,
+.inventory-host-row:focus-visible > td {
+  box-shadow: inset 0 1px #8bb9e8, inset 0 -1px #8bb9e8;
+}
+
+.inventory-host-row:focus-visible {
+  outline: none;
+}
+
 .text-truncate-cell {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -926,6 +939,10 @@ body {
   padding: 0 0.42rem;
   text-transform: none;
   white-space: nowrap;
+}
+
+.inventory-table .inventory-scan-btn {
+  min-width: 4rem;
 }
 
 .inventory-action-label {
@@ -1126,6 +1143,11 @@ body {
 
 .scan-modal-dialog {
   max-width: min(1120px, calc(100vw - 1.5rem));
+}
+
+.host-detail-modal-body {
+  max-height: min(78vh, 780px);
+  overflow: auto;
 }
 
 .scan-body {
@@ -1426,6 +1448,11 @@ html[data-bs-theme='dark'] .scan-row-failed td {
   background: #482528;
 }
 
+html[data-bs-theme='dark'] .inventory-host-row:hover > td,
+html[data-bs-theme='dark'] .inventory-host-row:focus-visible > td {
+  box-shadow: inset 0 1px #4f83b8, inset 0 -1px #4f83b8;
+}
+
 html[data-bs-theme='dark'] .scan-row-timeout td {
   background: #422f16;
 }
@@ -1560,6 +1587,10 @@ html[data-bs-theme='dark'] .scan-state-filtered {
     height: 1.5rem;
     padding: 0;
     width: 1.5rem;
+  }
+
+  .inventory-table .inventory-scan-btn {
+    min-width: 1.5rem;
   }
 
   .app-header .container-xl {

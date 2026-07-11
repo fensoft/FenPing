@@ -93,6 +93,21 @@
           <div class="modal-footer"><button class="btn btn-primary" type="button" @click="requestClose">Close</button></div>
         </div>
 
+        <div v-else-if="modal.type === 'hostDetail'">
+          <div class="modal-body host-detail-modal-body">
+            <HostDetailPage
+              embedded
+              :device="modal.host"
+              :is-authenticated="isAuthenticated"
+              :scanning-hosts="scanningHosts"
+              @open-scan="forwardOpenScan"
+              @scan-host="$emit('scan-host', $event)"
+              @open-edit="$emit('open-edit', $event)"
+            />
+          </div>
+          <div class="modal-footer"><button class="btn btn-primary" type="button" @click="requestClose">Close</button></div>
+        </div>
+
         <div v-else-if="modal.type === 'scan'">
           <div class="modal-body scan-body">
             <div v-if="error" class="alert alert-danger">{{ error }}</div><div v-if="modal.loading" class="text-secondary py-4 text-center">Loading</div>
@@ -120,20 +135,22 @@
 
 <script setup>
 import { computed } from 'vue';
+import HostDetailPage from '../pages/HostDetailPage.vue';
 import ModalFooter from './ModalFooter.vue';
 import ScanSimpleSection from './ScanSimpleSection.vue';
 import { useAccessibleModal } from '../composables/useAccessibleModal.js';
 import { formatDuration, formatMac, formatPercent, formatScanDate, formatScanDuration, formatServerDate, historyRowClass, scanStateClass, statusClass, statusIcon, statusTitle } from '../lib/formatters.js';
 import { scanCadenceOptions, scanProfileLabel, scanProfiles } from '../lib/scanProfiles.js';
 
-const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] } });
-const emit = defineEmits(['close', 'delete-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'submit-scan-profile']);
+const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] }, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
+const emit = defineEmits(['close', 'delete-host', 'open-edit', 'open-scan', 'scan-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'submit-scan-profile']);
 const titleId = `fenping-modal-title-${Math.random().toString(36).slice(2)}`;
-const title = computed(() => props.modal.type === 'create' && props.modal.purpose === 'reserve' ? 'Reserve address' : ({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', history: `History ${props.modal.ip || ''}`, scan: `Scan ${props.modal.ip || ''}`, loading: 'Loading' })[props.modal.type] || 'Dialog');
-const dialogClass = computed(() => props.modal.type === 'login' ? 'modal-sm' : props.modal.type === 'scan' ? 'modal-xl scan-modal-dialog' : 'modal-lg');
+const title = computed(() => props.modal.type === 'create' && props.modal.purpose === 'reserve' ? 'Reserve address' : ({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', history: `History ${props.modal.ip || ''}`, hostDetail: 'Host details', scan: `Scan ${props.modal.ip || ''}`, loading: 'Loading' })[props.modal.type] || 'Dialog');
+const dialogClass = computed(() => props.modal.type === 'login' ? 'modal-sm' : ['scan', 'hostDetail'].includes(props.modal.type) ? 'modal-xl scan-modal-dialog' : 'modal-lg');
 const modalRoot = useAccessibleModal(() => props.modal.type, requestClose);
 
 function requestClose() { if (!props.saving) emit('close'); }
+function forwardOpenScan(...args) { emit('open-scan', ...args); }
 function scanModeLabel(scan) { return scan?.merged_with ? `${scanProfileLabel(scan?.metadata?.mode)} + Deep` : scanProfileLabel(scan?.metadata?.mode); }
 function scanHistoryLabel(scan) { return `${formatServerDate(scan.date_end || scan.date_begin || '')} ${scanProfileLabel(scan.mode)} ${scan.status || scan.state || '-'} ${Number(scan.ports_count || 0)}p`; }
 </script>

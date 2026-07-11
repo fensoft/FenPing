@@ -48,7 +48,7 @@
             @notice="setNotice"
             @ping-refresh="refreshScan"
             @scan-host="openScanProfile"
-            @host-detail="navigateHostDetail"
+            @host-detail="openHostDetail"
             @open-history="openHistory"
             @open-scan="openScan"
             @open-edit="openEdit"
@@ -70,6 +70,8 @@
       :saving="saving"
       :network="network"
       :netboot-images="netbootImages"
+      :is-authenticated="isAuthenticated"
+      :scanning-hosts="scanningHosts"
       @close="closeModal"
       @submit-login="submitLogin"
       @submit-edit="submitEdit"
@@ -81,6 +83,9 @@
       @submit-delete-category="submitDeleteCategory"
       @submit-scan-profile="submitScanProfile"
       @select-scan="selectScanHistory"
+      @open-scan="openScan"
+      @scan-host="openScanProfile"
+      @open-edit="openEdit"
     />
   </div>
 </template>
@@ -147,13 +152,10 @@ function controllerValue(key, fallback) {
 }
 
 function go(path) { if (route.path !== path) router.push(path); }
-function navigateHostDetail(host) {
-  if (host && typeof host === 'object') {
-    if (host.id) router.push({ name: routeNames.host, params: { id: host.id } });
-    else if (host.ip) router.push({ name: routeNames.hostByIp, params: { ip: host.ip } });
-    return;
-  }
-  if (host) router.push({ name: routeNames.host, params: { id: host } });
+function openHostDetail(host) {
+  if (!host) return;
+  clearMessages();
+  modal.value = { type: 'hostDetail', host: typeof host === 'object' ? host : { id: host } };
 }
 function setNotice(message) { globalError.value = ''; notice.value = message || ''; }
 

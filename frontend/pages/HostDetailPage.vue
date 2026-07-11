@@ -1,7 +1,7 @@
 <template>
   <section>
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
-    <RouterLink class="btn btn-link btn-sm p-0 mb-1" to="/"><i class="ti ti-arrow-left me-1"></i>Inventory</RouterLink>
+    <RouterLink v-if="!embedded" class="btn btn-link btn-sm p-0 mb-1" to="/"><i class="ti ti-arrow-left me-1"></i>Inventory</RouterLink>
     <div class="page-header host-detail-header">
       <div>
         <h2>{{ title }}</h2><div class="text-secondary small font-monospace">{{ host.ip || 'No IP' }}</div>
@@ -78,7 +78,7 @@ import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRow
 import { scanCadenceLabel, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
-const props = defineProps({ isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
+const props = defineProps({ device: { type: Object, default: null }, embedded: Boolean, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
 defineEmits(['open-edit', 'open-scan', 'scan-host']);
 const route = useRoute();
 const detail = ref(null);
@@ -98,12 +98,13 @@ const managementLabel = computed(() => host.value.id ? 'Managed' : 'Not managed'
 const scanSchedule = computed(() => host.value.id ? `${scanProfileLabel(host.value.scan_profile)} · ${scanCadenceLabel(host.value.scan_interval_hours)}` : 'Not managed');
 const isScanning = computed(() => props.scanningHosts.has(String(host.value?.ip || host.value?.id || host.value?.mac || '')));
 
-usePageController({ loading, label: computed(() => loading.value ? 'Loading' : 'Device'), title: 'Refresh host', disabled: false, refresh: load });
-watch(() => route.fullPath, load, { immediate: true });
+if (!props.embedded)
+  usePageController({ loading, label: computed(() => loading.value ? 'Loading' : 'Device'), title: 'Refresh host', disabled: false, refresh: load });
+watch(() => props.embedded ? `${props.device?.id || ''}|${props.device?.ip || ''}` : route.fullPath, load, { immediate: true });
 
 async function load() {
-  const id = Number(route.params.id || 0);
-  const ip = String(route.params.ip || '');
+  const id = Number((props.embedded ? props.device?.id : route.params.id) || 0);
+  const ip = String((props.embedded ? props.device?.ip : route.params.ip) || '');
   if (!id && !ip) return;
   const signal = request.nextSignal();
   loading.value = true;
