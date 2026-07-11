@@ -2,7 +2,7 @@ FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY index.html vite.config.js ./
+COPY index.html vite.config.js postcss.config.mjs ./
 COPY frontend ./frontend
 RUN npm run build
 
@@ -49,7 +49,7 @@ RUN printf '%s\n' \
 COPY nginx-fenping.conf /etc/nginx/nginx.conf
 COPY --from=frontend /app/dist/ /var/www/public/
 COPY public/api.php /var/www/public/
-COPY img/icon.png /var/www/public/icon.png
+COPY img/icon.webp /var/www/public/icon.webp
 COPY favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/

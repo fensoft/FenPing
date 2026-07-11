@@ -3,7 +3,7 @@
     <div class="app-layout" :inert="modal ? true : undefined" :aria-hidden="modal ? 'true' : undefined">
       <aside class="app-sidebar">
         <div class="app-brand">
-          <img class="app-brand-icon" :src="'/icon.png'" alt="FenPing" />
+          <img class="app-brand-icon" :src="'/icon.webp'" alt="FenPing" />
           <img class="app-brand-favicon" :src="'/favicon-32x32.png'" alt="FenPing" />
         </div>
         <nav class="app-nav" aria-label="Primary navigation">
