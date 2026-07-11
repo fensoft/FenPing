@@ -150,8 +150,8 @@ function getInventory() {
     $sorted_ips[$ipLong] = $data;
   }
   ksort($sorted_ips);
-  global $network;
-  $old_ip = $network . ".0";
+  $old_ip = null;
+  $old_network = null;
   $res = array();
   $stats = get_stats();
   foreach ($sorted_ips as $key => $data) {
@@ -163,11 +163,16 @@ function getInventory() {
     $managed = isset($data['id']) && $data['id'] !== null;
     $data['approved'] = $managed || isset($approvedDevices[$normalizedMac]) ? 1 : 0;
     $data['is_new'] = !$managed && !isset($approvedDevices[$normalizedMac]) ? 1 : 0;
+    $categoryNetwork = substr($ip, 0, strrpos($ip, '.'));
+    if ($categoryNetwork !== $old_network) {
+      $old_network = $categoryNetwork;
+      $old_ip = $categoryNetwork . '.0';
+    }
     $stmt2 = $db->prepare("
       select ip_begin, ip_begin_full, type from (
         select
           ip_begin,
-          case when ip_begin like '%.%' then ip_begin else concat(:network, '.', ip_begin) end as ip_begin_full,
+          case when ip_begin like '%.%' then ip_begin else concat(:category_network, '.', ip_begin) end as ip_begin_full,
           type
         from `range`
       ) ranges
@@ -176,7 +181,7 @@ function getInventory() {
       order by INET_ATON(ip_begin_full) desc
       limit 1
     ");
-    $stmt2->execute(array("network" => $network, "ip_begin" => $old_ip, "ip_end" => $ip));
+    $stmt2->execute(array("category_network" => $categoryNetwork, "ip_begin" => $old_ip, "ip_end" => $ip));
     $data2 = $stmt2->fetch();
     if ($data2 != false) {
       $old_ip = $ip;

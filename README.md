@@ -222,6 +222,14 @@ docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fe
 
 Backups use the version 1.6 JSON format (`db.json` inside the archive). SQL-based backups from earlier versions are not supported.
 
+Legacy 1.2 SQL dumps can be converted offline, without a MariaDB/MySQL server:
+
+```bash
+python3 tools/convert-v1.2-backup.py legacy.sql.gz converted.tgz
+```
+
+The converter parses mysqldump data directly, migrates legacy leases to the current shape, and creates a restore-compatible archive with an empty netboot directory. Use `--force` to replace an existing target.
+
 ## Admin Workflow
 
 The UI starts in guest mode. Guests can view inventory, IPAM utilization, services, history, scans, health, and notifications, but cannot approve devices or change DHCP/DNS/netboot state.
