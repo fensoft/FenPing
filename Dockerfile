@@ -25,6 +25,12 @@ RUN apk add --no-cache \
       php84-posix \
       php84-session \
       php84-sockets \
+    && awk -F'"' '/categories = .*"default"/ { print $2 }' /usr/share/nmap/scripts/script.db > /tmp/nmap-default-scripts \
+    && find /usr/share/nmap/scripts -maxdepth 1 -type f -name '*.nse' | while IFS= read -r script; do \
+         grep -Fqx "${script##*/}" /tmp/nmap-default-scripts || rm -f "$script"; \
+       done \
+    && nmap --script-updatedb >/dev/null \
+    && rm -f /tmp/nmap-default-scripts \
     && adduser -S -D -H -s /sbin/nologin -G www-data www-data
 RUN printf '%s\n' \
       'upload_max_filesize=512M' \
