@@ -24,12 +24,14 @@
           <tr v-else-if="!loading && visibleServices.length === 0"><td class="text-secondary text-center py-4" colspan="8">{{ search ? 'No matching services' : 'No open services found' }}</td></tr>
           <tr v-for="row in visibleServices" :key="`${row.ip}-${row.protocol}-${row.port}`">
             <td class="services-host">
-              <button v-if="row.host_id" class="btn btn-link btn-sm p-0 services-host-name" type="button" @click="$emit('host-detail', row.host_id)">{{ hostName(row) }}</button>
-              <strong v-else>{{ hostName(row) }}</strong>
-              <small v-if="row.mac" class="font-monospace">{{ formatMac(row.mac) }}</small>
-              <small v-if="row.vendor" :title="row.vendor">{{ row.vendor }}</small>
+              <template v-if="row.first_for_host">
+                <button v-if="row.host_id" class="btn btn-link btn-sm p-0 services-host-name" type="button" @click="$emit('host-detail', row.host_id)">{{ hostName(row) }}</button>
+                <strong v-else>{{ hostName(row) }}</strong>
+                <small v-if="row.mac" class="font-monospace">{{ formatMac(row.mac) }}</small>
+                <small v-if="row.vendor" :title="row.vendor">{{ row.vendor }}</small>
+              </template>
             </td>
-            <td class="font-monospace text-nowrap">{{ row.ip }}</td>
+            <td class="font-monospace text-nowrap">{{ row.first_for_host ? row.ip : '' }}</td>
             <td class="font-monospace text-nowrap"><strong>{{ row.port }}</strong>/{{ row.protocol }}</td>
             <td><strong>{{ row.service || 'unknown' }}</strong></td>
             <td class="services-version" :title="row.version || ''">{{ row.version || '-' }}</td>
@@ -64,9 +66,12 @@ const search = ref('');
 const request = useAbortableTask();
 const visibleServices = computed(() => {
   const query = search.value.trim().toLowerCase();
-  if (query === '') return services.value;
-  return services.value.filter((row) => [row.name, row.ip, row.mac, row.vendor, row.port, row.protocol, row.service, row.version, row.source]
+  const rows = query === '' ? services.value : services.value.filter((row) => [row.name, row.ip, row.mac, row.vendor, row.port, row.protocol, row.service, row.version, row.source]
     .some((value) => String(value || '').toLowerCase().includes(query)));
+  return rows.map((row, index) => ({
+    ...row,
+    first_for_host: index === 0 || String(rows[index - 1]?.ip || '') !== String(row.ip || '')
+  }));
 });
 
 usePageController({ loading, label: computed(() => loading.value ? 'Loading' : 'Services'), title: 'Refresh services', disabled: false, refresh: load });
