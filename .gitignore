@@ -13,3 +13,5 @@ inspect.*
 q.sh
 *.tgz
 .vscode/settings.json
+node_modules/
+dist/

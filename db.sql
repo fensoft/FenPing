@@ -144,6 +144,14 @@ CREATE TABLE IF NOT EXISTS `scans` (
   `snapshot_id` int(11) unsigned DEFAULT NULL,
   `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0,
   `port_changes_processed` tinyint(1) unsigned NOT NULL DEFAULT 0,
+  `scanner` varchar(50) DEFAULT NULL,
+  `scanner_version` varchar(50) DEFAULT NULL,
+  `scan_args` text DEFAULT NULL,
+  `host_reason` varchar(100) DEFAULT NULL,
+  `host_reason_ttl` smallint(5) unsigned DEFAULT NULL,
+  `last_boot` datetime DEFAULT NULL,
+  `uptime_seconds` bigint(20) unsigned DEFAULT NULL,
+  `distance` smallint(5) unsigned DEFAULT NULL,
   `error` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `scans_ip_date` (`ip`, `date_begin`),
@@ -151,18 +159,6 @@ CREATE TABLE IF NOT EXISTS `scans` (
   KEY `scans_snapshot_id` (`snapshot_id`),
   KEY `scans_state` (`state`),
   KEY `scans_queue` (`state`, `mode`, `id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
-
-CREATE TABLE IF NOT EXISTS `scan_snapshots` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `ip` varchar(50) NOT NULL,
-  `mode` varchar(20) NOT NULL,
-  `result_hash` char(64) NOT NULL,
-  `xml` mediumblob NOT NULL,
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `scan_snapshots_result` (`ip`, `mode`, `result_hash`),
-  KEY `scan_snapshots_ip_mode_id` (`ip`, `mode`, `id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `scan_port_changes` (
@@ -183,6 +179,206 @@ CREATE TABLE IF NOT EXISTS `scan_port_changes` (
   KEY `scan_port_changes_created` (`created_at`),
   KEY `scan_port_changes_ip_created` (`ip`, `created_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP PROCEDURE IF EXISTS `discard_legacy_scan_xml`;
+DELIMITER ;;
+CREATE PROCEDURE `discard_legacy_scan_xml`()
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema=DATABASE() AND table_name='scan_snapshots' AND column_name='xml'
+  ) THEN
+    DELETE FROM `scan_port_changes`;
+    DELETE FROM `scans`;
+    DROP TABLE IF EXISTS `scan_snapshot_script_nodes`;
+    DROP TABLE IF EXISTS `scan_snapshot_scripts`;
+    DROP TABLE IF EXISTS `scan_snapshot_trace_hops`;
+    DROP TABLE IF EXISTS `scan_snapshot_os_cpes`;
+    DROP TABLE IF EXISTS `scan_snapshot_os_classes`;
+    DROP TABLE IF EXISTS `scan_snapshot_os_matches`;
+    DROP TABLE IF EXISTS `scan_snapshot_extra_reasons`;
+    DROP TABLE IF EXISTS `scan_snapshot_extra_ports`;
+    DROP TABLE IF EXISTS `scan_snapshot_port_cpes`;
+    DROP TABLE IF EXISTS `scan_snapshot_ports`;
+    DROP TABLE IF EXISTS `scan_snapshot_hostnames`;
+    DROP TABLE IF EXISTS `scan_snapshot_addresses`;
+    DROP TABLE IF EXISTS `scan_snapshot_scopes`;
+    DROP TABLE `scan_snapshots`;
+  END IF;
+END;;
+DELIMITER ;
+CALL `discard_legacy_scan_xml`();
+DROP PROCEDURE IF EXISTS `discard_legacy_scan_xml`;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshots` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `ip` varchar(50) NOT NULL,
+  `mode` varchar(20) NOT NULL,
+  `result_hash` char(64) NOT NULL,
+  `content_hash` char(64) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshots_content` (`ip`, `mode`, `content_hash`),
+  KEY `scan_snapshots_result` (`ip`, `mode`, `result_hash`),
+  KEY `scan_snapshots_ip_mode_id` (`ip`, `mode`, `id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_scopes` (
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) NOT NULL,
+  `port_begin` int(11) unsigned NOT NULL,
+  `port_end` int(11) unsigned NOT NULL,
+  PRIMARY KEY (`snapshot_id`, `protocol`, `port_begin`, `port_end`),
+  CONSTRAINT `scan_snapshot_scopes_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_addresses` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `address` varchar(255) NOT NULL,
+  `address_type` varchar(20) NOT NULL,
+  `vendor` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshot_addresses_item` (`snapshot_id`, `address_type`, `address`),
+  CONSTRAINT `scan_snapshot_addresses_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_hostnames` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `hostname` varchar(255) NOT NULL,
+  `hostname_type` varchar(50) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshot_hostnames_item` (`snapshot_id`, `hostname_type`, `hostname`),
+  CONSTRAINT `scan_snapshot_hostnames_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_ports` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) NOT NULL,
+  `port` int(11) unsigned NOT NULL,
+  `state` varchar(30) NOT NULL,
+  `reason` varchar(100) DEFAULT NULL,
+  `reason_ttl` smallint(5) unsigned DEFAULT NULL,
+  `service` varchar(255) DEFAULT NULL,
+  `product` varchar(255) DEFAULT NULL,
+  `version` varchar(255) DEFAULT NULL,
+  `extra_info` text DEFAULT NULL,
+  `tunnel` varchar(50) DEFAULT NULL,
+  `method` varchar(50) DEFAULT NULL,
+  `confidence` tinyint(3) unsigned DEFAULT NULL,
+  `os_type` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshot_ports_item` (`snapshot_id`, `protocol`, `port`),
+  KEY `scan_snapshot_ports_service` (`service`, `port`),
+  CONSTRAINT `scan_snapshot_ports_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_port_cpes` (
+  `port_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `cpe` varchar(1024) NOT NULL,
+  PRIMARY KEY (`port_id`, `position`),
+  CONSTRAINT `scan_snapshot_port_cpes_port_fk` FOREIGN KEY (`port_id`) REFERENCES `scan_snapshot_ports` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_extra_ports` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `state` varchar(30) NOT NULL,
+  `count` int(11) unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `scan_snapshot_extra_ports_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_extra_reasons` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `extra_port_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `reason` varchar(100) NOT NULL,
+  `count` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) DEFAULT NULL,
+  `ports` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `scan_snapshot_extra_reasons_port_fk` FOREIGN KEY (`extra_port_id`) REFERENCES `scan_snapshot_extra_ports` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_os_matches` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `name` varchar(1024) NOT NULL,
+  `accuracy` tinyint(3) unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `scan_snapshot_os_matches_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_os_classes` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `os_match_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `vendor` varchar(255) DEFAULT NULL,
+  `os_family` varchar(255) DEFAULT NULL,
+  `os_generation` varchar(255) DEFAULT NULL,
+  `device_type` varchar(255) DEFAULT NULL,
+  `accuracy` tinyint(3) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `scan_snapshot_os_classes_match_fk` FOREIGN KEY (`os_match_id`) REFERENCES `scan_snapshot_os_matches` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_os_cpes` (
+  `os_class_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `cpe` varchar(1024) NOT NULL,
+  PRIMARY KEY (`os_class_id`, `position`),
+  CONSTRAINT `scan_snapshot_os_cpes_class_fk` FOREIGN KEY (`os_class_id`) REFERENCES `scan_snapshot_os_classes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_scripts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `port_id` bigint(20) unsigned DEFAULT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `script_id` varchar(255) NOT NULL,
+  `output` longtext DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_scripts_snapshot` (`snapshot_id`, `port_id`),
+  CONSTRAINT `scan_snapshot_scripts_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `scan_snapshot_scripts_port_fk` FOREIGN KEY (`port_id`) REFERENCES `scan_snapshot_ports` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_script_nodes` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `script_id` bigint(20) unsigned NOT NULL,
+  `parent_id` bigint(20) unsigned DEFAULT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `node_type` varchar(10) NOT NULL,
+  `node_key` varchar(1024) DEFAULT NULL,
+  `value` longtext DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_script_nodes_parent` (`script_id`, `parent_id`, `position`),
+  CONSTRAINT `scan_snapshot_script_nodes_script_fk` FOREIGN KEY (`script_id`) REFERENCES `scan_snapshot_scripts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `scan_snapshot_script_nodes_parent_fk` FOREIGN KEY (`parent_id`) REFERENCES `scan_snapshot_script_nodes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `scan_snapshot_trace_hops` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) DEFAULT NULL,
+  `port` int(11) unsigned DEFAULT NULL,
+  `ttl` smallint(5) unsigned NOT NULL,
+  `ip` varchar(255) NOT NULL,
+  `hostname` varchar(255) DEFAULT NULL,
+  `rtt` decimal(12,3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `scan_snapshot_trace_hops_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `users` (
   `login` varchar(50) DEFAULT NULL,
@@ -223,6 +419,14 @@ CREATE INDEX IF NOT EXISTS `ips_netboot_image_id` ON `ips` (`netboot_image_id`);
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `snapshot_id` int(11) unsigned DEFAULT NULL AFTER `ports_count`;
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0 AFTER `snapshot_id`;
 ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `port_changes_processed` tinyint(1) unsigned NOT NULL DEFAULT 0 AFTER `result_changed`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `scanner` varchar(50) DEFAULT NULL AFTER `port_changes_processed`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `scanner_version` varchar(50) DEFAULT NULL AFTER `scanner`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `scan_args` text DEFAULT NULL AFTER `scanner_version`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `host_reason` varchar(100) DEFAULT NULL AFTER `scan_args`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `host_reason_ttl` smallint(5) unsigned DEFAULT NULL AFTER `host_reason`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `last_boot` datetime DEFAULT NULL AFTER `host_reason_ttl`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `uptime_seconds` bigint(20) unsigned DEFAULT NULL AFTER `last_boot`;
+ALTER TABLE `scans` ADD COLUMN IF NOT EXISTS `distance` smallint(5) unsigned DEFAULT NULL AFTER `uptime_seconds`;
 CREATE INDEX IF NOT EXISTS `scans_ip_id` ON `scans` (`ip`, `id`);
 CREATE INDEX IF NOT EXISTS `scans_snapshot_id` ON `scans` (`snapshot_id`);
 CREATE INDEX IF NOT EXISTS `scans_queue` ON `scans` (`state`, `mode`, `id`);

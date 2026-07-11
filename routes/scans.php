@@ -161,14 +161,14 @@ function scanJsonResponse(string $ip, ?int $id = null): array {
   if ($id !== null && $metadata === null)
     jsonError(404, 'scan not found');
 
-  $xml = scanReadXml($ip, $metadata);
+  $scan = scanReadSnapshot($ip, $metadata);
   $deepMetadata = $metadata !== null && scanProfileIsPartial((string)($metadata['mode'] ?? ''))
     ? scanMetadataPreviousResult($ip, 'deep', (int)$metadata['id'])
     : null;
-  if ($xml === null && $deepMetadata === null)
+  if ($scan === null && $deepMetadata === null)
     jsonError(404, 'scan not found');
 
-  $scan = $xml === null
+  $scan = $scan === null
     ? array(
       'ip' => $ip,
       'args' => '',
@@ -184,12 +184,12 @@ function scanJsonResponse(string $ip, ?int $id = null): array {
       'metadata' => $metadata,
       'xml' => null
     )
-    : scanParseXml($xml, $metadata ?: array('ip' => $ip));
+    : $scan;
 
   if ($deepMetadata !== null) {
-    $deepXml = scanReadXml($ip, $deepMetadata);
-    if ($deepXml !== null)
-      $scan = scanMergePartialWithDeep($scan, scanParseXml($deepXml, $deepMetadata), $deepMetadata);
+    $deepScan = scanReadSnapshot($ip, $deepMetadata);
+    if ($deepScan !== null)
+      $scan = scanMergePartialWithDeep($scan, $deepScan, $deepMetadata);
   }
 
   if ($metadata === null)
@@ -202,12 +202,12 @@ function streamScanXml(string $ip, ?int $id = null): void {
   if ($id !== null && $metadata === null)
     jsonError(404, 'scan not found');
 
-  $xml = scanReadXml($ip, $metadata);
-  if ($xml === null)
+  $scan = scanReadSnapshot($ip, $metadata);
+  if ($scan === null)
     jsonError(404, 'scan not found');
 
   header('Content-Type: application/xml; charset=utf-8');
-  echo $xml;
+  echo scanRenderXml($scan);
   exit;
 }
 

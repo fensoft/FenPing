@@ -293,16 +293,8 @@ function inventoryScan(string $ip, string $mode = 'deep', ?int $scanId = null): 
     $xml = scanNormalizeXml($xml);
     $scan = scanParseXml($xml, array('ip' => $ip));
     $status = $scan['status'] ?: 'unknown';
-    $xmlHash = scanXmlHash($xml, $ip);
     $saved = $status === 'up';
-    $changed = scanMetadataComplete(
-      $scanId,
-      $status,
-      count($scan['ports']),
-      $scan['duration'],
-      $saved ? $xml : null,
-      $saved ? $xmlHash : null
-    );
+    $changed = scanMetadataComplete($scanId, $scan);
     if ($saved && function_exists('sendDiscordPortChangesForScan'))
       sendDiscordPortChangesForScan($scanId);
     scanPruneHistory($ip);

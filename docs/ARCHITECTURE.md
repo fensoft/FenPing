@@ -112,12 +112,15 @@ Important tables:
 - `device_approvals`: reversible acknowledgements for dynamic devices, keyed by normalized MAC address.
 - `oui_vendors`: locally imported IEEE assignments keyed by 24-, 28-, or 36-bit prefix.
 - `scans`: nmap job metadata and references to stored results.
-- `scan_snapshots`: deduplicated nmap XML keyed by host, mode, and semantic result hash.
+- `scan_snapshots`: deduplicated structured nmap result headers keyed by host, mode, semantic result hash, and exact retained-content hash.
+- `scan_snapshot_*`: normalized scan scopes, addresses, hostnames, ports/CPEs, closed-port summaries, OS matches/classes/CPEs, NSE scripts and structured script nodes, and traceroute hops.
 - `scan_port_changes`: appeared, disappeared, and service/version-change events linked to the scan that observed them.
 - `netboot_images`: uploaded netboot file metadata.
 - `users`: legacy table still present in schema.
 
 `db.sql` is run at container boot and after restore. Keep it idempotent with `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, safe cleanup/update statements, and repeatable procedures.
+
+The normalized scan-storage migration intentionally does not import legacy XML. When `scan_snapshots.xml` is detected, existing scan jobs, snapshots, and port-change events are discarded before the structured tables are created; other application tables are untouched.
 
 The `update_status` procedure appends to `stats` immediately when status/IP/MAC changes; otherwise it extends the current row at most once per day.
 
@@ -144,13 +147,14 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 - Alpine's BusyBox `timeout` sends `TERM` at the profile limit and `KILL` ten seconds later; GNU and BusyBox timeout exit codes are normalized into the same scan state.
 - Profile scan API requests return HTTP `202` after enqueueing and start the coordinator in the background.
 - Timed-out scans are recorded with the `timeout` state.
-- Completed XML is stored in `scan_snapshots`; identical results reuse an existing snapshot rather than storing another copy.
-- Scan profiles are compared independently. Default scan details prefer the latest changed deep snapshot and fall back to the newest partial result only when no deep result exists.
+- Completed nmap XML is parsed once and discarded. Retained scan facts are stored in normalized `scan_snapshot_*` tables; no raw XML or binary scan column remains.
+- Exact retained content is deduplicated with `content_hash`, while `result_hash` controls user-visible inventory change detection so volatile NSE output does not create noisy service-change events.
+- Scan profiles are compared independently. Default scan details prefer the latest deep snapshot and fall back to the newest partial result only when no deep result exists.
 - Selecting a lightweight or standard snapshot merges it at read time with the preceding deep snapshot. Partial values override matching ports; deep-only ports and OS data remain and each port carries its source profile.
 - Port-change detection builds an effective view from the latest deep snapshot plus every newer partial observation in chronological order. It removes only ports included in each scan scope, retains richer version data when partial detection is incomplete, and records services in the first usable result as newly appeared.
 - Service-change events are retained for one week, returned by `/api/notify`, rendered alongside host-status changes, and optionally posted to Discord after the scan transaction commits.
-- Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
-- History pruning keeps one week of jobs plus the latest changed result for each profile.
+- Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained structured snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
+- History pruning keeps one week of jobs plus the latest complete and latest changed result for each profile.
 
 `oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains a validated seed at `/usr/share/fenping/ieee-oui.json`; the monthly refresh command downloads the complete registries with short timeouts and atomically writes `/var/lib/fenping/state/ieee-oui.json`. Boot runs `oui-sync` after schema setup, hashes the source and SQL rows, and transactionally replaces `oui_vendors` only when they differ. A successful monthly download also performs this sync. Invalid or failed refreshes leave the previous data untouched. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the JSON registry remains a lookup fallback if SQL is unavailable.
 

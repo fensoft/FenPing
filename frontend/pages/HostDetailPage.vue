@@ -88,7 +88,7 @@ const request = useAbortableTask();
 const host = computed(() => detail.value?.host || {});
 const latestScan = computed(() => detail.value?.latest_scan || null);
 const scans = computed(() => detail.value?.scans || []);
-const viewScan = computed(() => scans.value.find(scanHasXml) || null);
+const viewScan = computed(() => scans.value.find(scanHasResult) || null);
 const scanResult = ref(null);
 const scanResultError = ref('');
 const historyRows = computed(() => detail.value?.history?.rows || []);
@@ -116,7 +116,7 @@ async function load() {
     const data = await apiJson(endpoint, { signal });
     if (!request.isCurrent(signal)) return;
     detail.value = data;
-    const resultMetadata = (data.scans || []).find(scanHasXml);
+    const resultMetadata = (data.scans || []).find(scanHasResult);
     if (resultMetadata) {
       try {
         scanResult.value = await apiJson(`/api/scans/${encodeURIComponent(data.host.ip)}/history/${encodeURIComponent(resultMetadata.id)}`, { signal });
@@ -131,8 +131,9 @@ async function load() {
   }
 }
 
-function scanHasXml(scan) {
+function scanHasResult(scan) {
   if (!scan) return false;
+  if (Object.prototype.hasOwnProperty.call(scan, 'result_available')) return Boolean(scan.result_available);
   return Object.prototype.hasOwnProperty.call(scan, 'xml_usable') ? Boolean(scan.xml_usable) : Boolean(scan.xml || scan.xml_url);
 }
 </script>

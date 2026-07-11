@@ -255,7 +255,7 @@ Useful endpoints:
 | `GET` | `/api/scans/{ip}` | Preferred scan result as JSON, favoring the latest deep result. |
 | `GET` | `/api/scans/profiles` | List available scan profiles and timeout limits. |
 | `POST` | `/api/scans/{ip}` | Queue the requested `lightweight`, `standard`, or `deep` profile and return HTTP `202`. |
-| `GET` | `/api/scans/{ip}/xml` | Preferred database-backed scan XML. |
+| `GET` | `/api/scans/{ip}/xml` | Compatibility XML generated from the normalized scan tables. |
 | `POST` | `/api/scans/{ip}/quick` | Legacy alias that queues a lightweight scan. |
 | `GET` | `/api/netboot/images` | List netboot images. |
 | `POST` | `/api/netboot/images` | Upload a netboot image. |

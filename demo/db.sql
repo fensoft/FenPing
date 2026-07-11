@@ -1,9 +1,4 @@
 /*M!999999\- enable the sandbox mode */ 
--- MariaDB dump 10.19-11.8.6-MariaDB, for debian-linux-gnu (aarch64)
---
--- Host: 127.0.0.1    Database: ping
--- ------------------------------------------------------
--- Server version	11.8.8-MariaDB-ubu2404
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -16,20 +11,9 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
 
---
--- Current Database: `ping`
---
-
-/*!40000 DROP DATABASE IF EXISTS `ping`*/;
-
 CREATE DATABASE /*!32312 IF NOT EXISTS*/ `ping` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci */;
 
 USE `ping`;
-
---
--- Table structure for table `device_approvals`
---
-
 DROP TABLE IF EXISTS `device_approvals`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -41,25 +25,16 @@ CREATE TABLE `device_approvals` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `device_approvals`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `device_approvals` WRITE;
 /*!40000 ALTER TABLE `device_approvals` DISABLE KEYS */;
 INSERT INTO `device_approvals` VALUES
-('3c:22:fb:95:02:05','2026-06-05 23:33:01'),
-('8c:f5:a3:92:02:02','2026-06-20 23:33:01');
+('3c:22:fb:95:02:05','2026-06-06 14:44:51'),
+('8c:f5:a3:92:02:02','2026-06-21 14:44:51');
 /*!40000 ALTER TABLE `device_approvals` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `ips`
---
-
 DROP TABLE IF EXISTS `ips`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -84,10 +59,6 @@ CREATE TABLE `ips` (
 ) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `ips`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `ips` WRITE;
 /*!40000 ALTER TABLE `ips` DISABLE KEYS */;
@@ -104,11 +75,6 @@ INSERT INTO `ips` VALUES
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `leases`
---
-
 DROP TABLE IF EXISTS `leases`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -128,29 +94,20 @@ CREATE TABLE `leases` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `leases`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `leases` WRITE;
 /*!40000 ALTER TABLE `leases` DISABLE KEYS */;
 INSERT INTO `leases` VALUES
-('192.168.1.201','3c:22:fb:91:02:01','alex-iphone','2026-07-11 07:33:01','2026-06-24 23:33:01','2026-07-10 23:31:01',1),
-('192.168.1.205','3c:22:fb:95:02:05','old-phone','2026-06-28 23:33:01','2026-05-31 23:33:01','2026-06-28 23:33:01',0),
-('192.168.1.210','3c:52:a1:70:02:10','laser-printer','2026-07-11 08:33:01','2026-05-11 23:33:01','2026-07-10 23:28:01',1),
-('192.168.1.202','8c:f5:a3:92:02:02','meeting-tablet','2026-07-11 09:33:01','2026-06-09 23:33:01','2026-07-10 23:30:01',1),
-('192.168.1.204','d8:f1:5b:94:02:04','air-quality','2026-07-11 10:33:01','2026-07-08 23:33:01','2026-07-10 23:29:01',1),
-('192.168.1.203','f8:db:88:93:02:03','guest-laptop','2026-07-11 01:33:01','2026-07-09 23:33:01','2026-07-10 22:56:01',1);
+('192.168.1.201','3c:22:fb:91:02:01','alex-iphone','2026-07-11 22:44:51','2026-06-25 14:44:51','2026-07-11 14:42:51',1),
+('192.168.1.205','3c:22:fb:95:02:05','old-phone','2026-06-29 14:44:51','2026-06-01 14:44:51','2026-06-29 14:44:51',0),
+('192.168.1.210','3c:52:a1:70:02:10','laser-printer','2026-07-11 23:44:51','2026-05-12 14:44:51','2026-07-11 14:39:51',1),
+('192.168.1.202','8c:f5:a3:92:02:02','meeting-tablet','2026-07-12 00:44:51','2026-06-10 14:44:51','2026-07-11 14:41:51',1),
+('192.168.1.204','d8:f1:5b:94:02:04','air-quality','2026-07-12 01:44:51','2026-07-09 14:44:51','2026-07-11 14:40:51',1),
+('192.168.1.203','f8:db:88:93:02:03','guest-laptop','2026-07-11 16:44:51','2026-07-10 14:44:51','2026-07-11 14:07:51',1);
 /*!40000 ALTER TABLE `leases` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `netboot_images`
---
-
 DROP TABLE IF EXISTS `netboot_images`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -166,25 +123,16 @@ CREATE TABLE `netboot_images` (
 ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `netboot_images`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `netboot_images` WRITE;
 /*!40000 ALTER TABLE `netboot_images` DISABLE KEYS */;
 INSERT INTO `netboot_images` VALUES
-(1,'Linux Rescue','demo-linux-rescue.ipxe','linux-rescue.ipxe',223,'2026-06-19 23:33:01'),
-(2,'Hardware Diagnostics','demo-diagnostics.ipxe','diagnostics.ipxe',201,'2026-06-26 23:33:01');
+(1,'Linux Rescue','demo-linux-rescue.ipxe','linux-rescue.ipxe',223,'2026-06-20 14:44:51'),
+(2,'Hardware Diagnostics','demo-diagnostics.ipxe','diagnostics.ipxe',201,'2026-06-27 14:44:51');
 /*!40000 ALTER TABLE `netboot_images` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `oui_vendors`
---
-
 DROP TABLE IF EXISTS `oui_vendors`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -195,10 +143,6 @@ CREATE TABLE `oui_vendors` (
   PRIMARY KEY (`prefix_length`,`prefix`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `oui_vendors`
---
 
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `oui_vendors` WRITE;
@@ -218,11 +162,6 @@ INSERT INTO `oui_vendors` VALUES
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `ping`
---
-
 DROP TABLE IF EXISTS `ping`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -236,35 +175,26 @@ CREATE TABLE `ping` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `ping`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `ping` WRITE;
 /*!40000 ALTER TABLE `ping` DISABLE KEYS */;
 INSERT INTO `ping` VALUES
-('192.168.1.1','74:83:c2:10:00:01','Up','2026-07-10 23:31:01'),
-('192.168.1.10','00:11:32:20:00:10','Up','2026-07-10 23:31:01'),
-('192.168.1.120','b8:27:eb:60:01:20','Down','2026-07-10 23:31:01'),
-('192.168.1.15','b8:27:eb:30:00:15','Down','2026-07-10 23:31:01'),
-('192.168.1.201','3c:22:fb:91:02:01','Up','2026-07-10 23:31:01'),
-('192.168.1.202','8c:f5:a3:92:02:02','Up','2026-07-10 23:31:01'),
-('192.168.1.203','f8:db:88:93:02:03','Down','2026-07-10 23:31:01'),
-('192.168.1.204','d8:f1:5b:94:02:04','Up','2026-07-10 23:31:01'),
-('192.168.1.210','3c:52:a1:70:02:10','Up','2026-07-10 23:31:01'),
-('192.168.1.220','00:40:8c:80:02:20','Down','2026-07-10 23:31:01'),
-('192.168.1.42','f8:db:88:40:00:42','Up','2026-07-10 23:31:01'),
-('192.168.1.90','f4:f5:d8:50:00:90','Up','2026-07-10 23:31:01');
+('192.168.1.1','74:83:c2:10:00:01','Up','2026-07-11 14:42:51'),
+('192.168.1.10','00:11:32:20:00:10','Up','2026-07-11 14:42:51'),
+('192.168.1.120','b8:27:eb:60:01:20','Down','2026-07-11 14:42:51'),
+('192.168.1.15','b8:27:eb:30:00:15','Down','2026-07-11 14:42:51'),
+('192.168.1.201','3c:22:fb:91:02:01','Up','2026-07-11 14:42:51'),
+('192.168.1.202','8c:f5:a3:92:02:02','Up','2026-07-11 14:42:51'),
+('192.168.1.203','f8:db:88:93:02:03','Down','2026-07-11 14:42:51'),
+('192.168.1.204','d8:f1:5b:94:02:04','Up','2026-07-11 14:42:51'),
+('192.168.1.210','3c:52:a1:70:02:10','Up','2026-07-11 14:42:51'),
+('192.168.1.220','00:40:8c:80:02:20','Down','2026-07-11 14:42:51'),
+('192.168.1.42','f8:db:88:40:00:42','Up','2026-07-11 14:42:51'),
+('192.168.1.90','f4:f5:d8:50:00:90','Up','2026-07-11 14:42:51');
 /*!40000 ALTER TABLE `ping` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `range`
---
-
 DROP TABLE IF EXISTS `range`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -274,10 +204,6 @@ CREATE TABLE `range` (
   KEY `range_ip_begin` (`ip_begin`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `range`
---
 
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `range` WRITE;
@@ -292,11 +218,6 @@ INSERT INTO `range` VALUES
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `scan_port_changes`
---
-
 DROP TABLE IF EXISTS `scan_port_changes`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -320,26 +241,376 @@ CREATE TABLE `scan_port_changes` (
 ) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `scan_port_changes`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `scan_port_changes` WRITE;
 /*!40000 ALTER TABLE `scan_port_changes` DISABLE KEYS */;
 INSERT INTO `scan_port_changes` VALUES
-(1,2,'192.168.1.10','deep','appeared','tcp',5001,NULL,NULL,'https','Synology DSM 7.2','2026-07-10 18:33:01'),
-(2,5,'192.168.1.210','deep','changed','tcp',80,'http','HP Embedded Web Server 4.2','http','HP Embedded Web Server 5.1','2026-07-10 11:33:01'),
-(3,6,'192.168.1.220','standard','disappeared','tcp',22,'ssh','Dropbear sshd 2020.81',NULL,NULL,'2026-07-10 19:33:01');
+(1,2,'192.168.1.10','deep','appeared','tcp',5001,NULL,NULL,'https','Synology DSM 7.2','2026-07-11 09:44:51'),
+(2,5,'192.168.1.210','deep','changed','tcp',80,'http','HP Embedded Web Server 4.2','http','HP Embedded Web Server 5.1','2026-07-11 02:44:51'),
+(3,6,'192.168.1.220','standard','disappeared','tcp',22,'ssh','Dropbear sshd 2020.81',NULL,NULL,'2026-07-11 10:44:51');
 /*!40000 ALTER TABLE `scan_port_changes` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_addresses`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_addresses` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `address` varchar(255) NOT NULL,
+  `address_type` varchar(20) NOT NULL,
+  `vendor` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshot_addresses_item` (`snapshot_id`,`address_type`,`address`),
+  CONSTRAINT `scan_snapshot_addresses_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `scan_snapshots`
---
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_addresses` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_addresses` DISABLE KEYS */;
+INSERT INTO `scan_snapshot_addresses` VALUES
+(1,1,0,'192.168.1.1','ipv4',NULL),
+(2,1,1,'74:83:C2:10:00:01','mac','Ubiquiti Inc.'),
+(3,2,0,'192.168.1.10','ipv4',NULL),
+(4,2,1,'00:11:32:20:00:10','mac','Synology Incorporated'),
+(5,3,0,'192.168.1.42','ipv4',NULL),
+(6,3,1,'F8:DB:88:40:00:42','mac','Dell Technologies'),
+(7,4,0,'192.168.1.90','ipv4',NULL),
+(8,4,1,'F4:F5:D8:50:00:90','mac','Google, Inc.'),
+(9,5,0,'192.168.1.210','ipv4',NULL),
+(10,5,1,'3C:52:A1:70:02:10','mac','HP Inc.'),
+(11,6,0,'192.168.1.220','ipv4',NULL),
+(12,6,1,'00:40:8C:80:02:20','mac','Axis Communications AB');
+/*!40000 ALTER TABLE `scan_snapshot_addresses` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_extra_ports`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_extra_ports` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `state` varchar(30) NOT NULL,
+  `count` int(11) unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_extra_ports_snapshot_fk` (`snapshot_id`),
+  CONSTRAINT `scan_snapshot_extra_ports_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_extra_ports` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_extra_ports` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_extra_ports` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_extra_reasons`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_extra_reasons` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `extra_port_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `reason` varchar(100) NOT NULL,
+  `count` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) DEFAULT NULL,
+  `ports` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_extra_reasons_port_fk` (`extra_port_id`),
+  CONSTRAINT `scan_snapshot_extra_reasons_port_fk` FOREIGN KEY (`extra_port_id`) REFERENCES `scan_snapshot_extra_ports` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_extra_reasons` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_extra_reasons` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_extra_reasons` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_hostnames`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_hostnames` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `hostname` varchar(255) NOT NULL,
+  `hostname_type` varchar(50) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshot_hostnames_item` (`snapshot_id`,`hostname_type`,`hostname`),
+  CONSTRAINT `scan_snapshot_hostnames_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_hostnames` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_hostnames` DISABLE KEYS */;
+INSERT INTO `scan_snapshot_hostnames` VALUES
+(1,1,0,'gateway','PTR'),
+(2,2,0,'nas','PTR'),
+(3,3,0,'office-pc','PTR'),
+(4,4,0,'living-room-tv','PTR'),
+(5,5,0,'laser-printer','PTR'),
+(6,6,0,'front-camera','PTR');
+/*!40000 ALTER TABLE `scan_snapshot_hostnames` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_os_classes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_os_classes` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `os_match_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `vendor` varchar(255) DEFAULT NULL,
+  `os_family` varchar(255) DEFAULT NULL,
+  `os_generation` varchar(255) DEFAULT NULL,
+  `device_type` varchar(255) DEFAULT NULL,
+  `accuracy` tinyint(3) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_os_classes_match_fk` (`os_match_id`),
+  CONSTRAINT `scan_snapshot_os_classes_match_fk` FOREIGN KEY (`os_match_id`) REFERENCES `scan_snapshot_os_matches` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_os_classes` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_os_classes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_os_classes` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_os_cpes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_os_cpes` (
+  `os_class_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `cpe` varchar(1024) NOT NULL,
+  PRIMARY KEY (`os_class_id`,`position`),
+  CONSTRAINT `scan_snapshot_os_cpes_class_fk` FOREIGN KEY (`os_class_id`) REFERENCES `scan_snapshot_os_classes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_os_cpes` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_os_cpes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_os_cpes` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_os_matches`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_os_matches` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `name` varchar(1024) NOT NULL,
+  `accuracy` tinyint(3) unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_os_matches_snapshot_fk` (`snapshot_id`),
+  CONSTRAINT `scan_snapshot_os_matches_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_os_matches` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_os_matches` DISABLE KEYS */;
+INSERT INTO `scan_snapshot_os_matches` VALUES
+(1,1,0,'Linux 5.15 - 6.8',100),
+(2,2,0,'Linux 5.10',100),
+(3,3,0,'Microsoft Windows 11',100),
+(4,4,0,'Linux 4.9',96),
+(5,5,0,'HP printer embedded Linux',100),
+(6,6,0,'Linux 4.14',100);
+/*!40000 ALTER TABLE `scan_snapshot_os_matches` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_port_cpes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_port_cpes` (
+  `port_id` bigint(20) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `cpe` varchar(1024) NOT NULL,
+  PRIMARY KEY (`port_id`,`position`),
+  CONSTRAINT `scan_snapshot_port_cpes_port_fk` FOREIGN KEY (`port_id`) REFERENCES `scan_snapshot_ports` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_port_cpes` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_port_cpes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_port_cpes` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_ports`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_ports` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) NOT NULL,
+  `port` int(11) unsigned NOT NULL,
+  `state` varchar(30) NOT NULL,
+  `reason` varchar(100) DEFAULT NULL,
+  `reason_ttl` smallint(5) unsigned DEFAULT NULL,
+  `service` varchar(255) DEFAULT NULL,
+  `product` varchar(255) DEFAULT NULL,
+  `version` varchar(255) DEFAULT NULL,
+  `extra_info` text DEFAULT NULL,
+  `tunnel` varchar(50) DEFAULT NULL,
+  `method` varchar(50) DEFAULT NULL,
+  `confidence` tinyint(3) unsigned DEFAULT NULL,
+  `os_type` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `scan_snapshot_ports_item` (`snapshot_id`,`protocol`,`port`),
+  KEY `scan_snapshot_ports_service` (`service`,`port`),
+  CONSTRAINT `scan_snapshot_ports_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_ports` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_ports` DISABLE KEYS */;
+INSERT INTO `scan_snapshot_ports` VALUES
+(1,1,'tcp',22,'open',NULL,NULL,'ssh','OpenSSH','9.6',NULL,NULL,NULL,NULL,NULL),
+(2,1,'tcp',53,'open',NULL,NULL,'domain','dnsmasq','2.90',NULL,NULL,NULL,NULL,NULL),
+(3,1,'tcp',80,'open',NULL,NULL,'http','nginx','1.26.1',NULL,NULL,NULL,NULL,NULL),
+(4,1,'tcp',443,'open',NULL,NULL,'https','nginx','1.26.1',NULL,'ssl',NULL,NULL,NULL),
+(5,2,'tcp',22,'open',NULL,NULL,'ssh','OpenSSH','9.2',NULL,NULL,NULL,NULL,NULL),
+(6,2,'tcp',80,'open',NULL,NULL,'http','nginx','1.24.0',NULL,NULL,NULL,NULL,NULL),
+(7,2,'tcp',443,'open',NULL,NULL,'https','nginx','1.24.0',NULL,'ssl',NULL,NULL,NULL),
+(8,2,'tcp',445,'open',NULL,NULL,'microsoft-ds','Samba smbd','4.18.6',NULL,NULL,NULL,NULL,NULL),
+(9,2,'tcp',5001,'open',NULL,NULL,'https','Synology DSM','7.2',NULL,'ssl',NULL,NULL,NULL),
+(10,3,'tcp',135,'open',NULL,NULL,'msrpc','Microsoft Windows RPC',NULL,NULL,NULL,NULL,NULL,NULL),
+(11,3,'tcp',445,'open',NULL,NULL,'microsoft-ds','Microsoft Windows 11',NULL,NULL,NULL,NULL,NULL,NULL),
+(12,3,'tcp',3389,'open',NULL,NULL,'ms-wbt-server','Microsoft Terminal Services',NULL,NULL,NULL,NULL,NULL,NULL),
+(13,4,'tcp',8008,'open',NULL,NULL,'http','Google Cast',NULL,NULL,NULL,NULL,NULL,NULL),
+(14,4,'tcp',8009,'open',NULL,NULL,'ajp13','Google Cast',NULL,NULL,NULL,NULL,NULL,NULL),
+(15,5,'tcp',80,'open',NULL,NULL,'http','HP Embedded Web Server',NULL,NULL,NULL,NULL,NULL,NULL),
+(16,5,'tcp',443,'open',NULL,NULL,'https','HP Embedded Web Server',NULL,NULL,'ssl',NULL,NULL,NULL),
+(17,5,'tcp',631,'open',NULL,NULL,'ipp','CUPS','2.4',NULL,NULL,NULL,NULL,NULL),
+(18,5,'tcp',9100,'open',NULL,NULL,'jetdirect','HP JetDirect',NULL,NULL,NULL,NULL,NULL,NULL),
+(19,6,'tcp',80,'open',NULL,NULL,'http','AXIS Camera Station','5.56',NULL,NULL,NULL,NULL,NULL),
+(20,6,'tcp',443,'open',NULL,NULL,'https','AXIS Camera Station','5.56',NULL,'ssl',NULL,NULL,NULL),
+(21,6,'tcp',554,'open',NULL,NULL,'rtsp','AXIS Media Control',NULL,NULL,NULL,NULL,NULL,NULL);
+/*!40000 ALTER TABLE `scan_snapshot_ports` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_scopes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_scopes` (
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) NOT NULL,
+  `port_begin` int(11) unsigned NOT NULL,
+  `port_end` int(11) unsigned NOT NULL,
+  PRIMARY KEY (`snapshot_id`,`protocol`,`port_begin`,`port_end`),
+  CONSTRAINT `scan_snapshot_scopes_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_scopes` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_scopes` DISABLE KEYS */;
+INSERT INTO `scan_snapshot_scopes` VALUES
+(1,'tcp',1,65535),
+(2,'tcp',1,65535),
+(5,'tcp',1,65535);
+/*!40000 ALTER TABLE `scan_snapshot_scopes` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_script_nodes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_script_nodes` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `script_id` bigint(20) unsigned NOT NULL,
+  `parent_id` bigint(20) unsigned DEFAULT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `node_type` varchar(10) NOT NULL,
+  `node_key` varchar(1024) DEFAULT NULL,
+  `value` longtext DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_script_nodes_parent` (`script_id`,`parent_id`,`position`),
+  KEY `scan_snapshot_script_nodes_parent_fk` (`parent_id`),
+  CONSTRAINT `scan_snapshot_script_nodes_parent_fk` FOREIGN KEY (`parent_id`) REFERENCES `scan_snapshot_script_nodes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `scan_snapshot_script_nodes_script_fk` FOREIGN KEY (`script_id`) REFERENCES `scan_snapshot_scripts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_script_nodes` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_script_nodes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_script_nodes` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_scripts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_scripts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `port_id` bigint(20) unsigned DEFAULT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `script_id` varchar(255) NOT NULL,
+  `output` longtext DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_scripts_snapshot` (`snapshot_id`,`port_id`),
+  KEY `scan_snapshot_scripts_port_fk` (`port_id`),
+  CONSTRAINT `scan_snapshot_scripts_port_fk` FOREIGN KEY (`port_id`) REFERENCES `scan_snapshot_ports` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `scan_snapshot_scripts_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_scripts` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_scripts` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_scripts` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+DROP TABLE IF EXISTS `scan_snapshot_trace_hops`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scan_snapshot_trace_hops` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `snapshot_id` int(11) unsigned NOT NULL,
+  `position` int(11) unsigned NOT NULL,
+  `protocol` varchar(10) DEFAULT NULL,
+  `port` int(11) unsigned DEFAULT NULL,
+  `ttl` smallint(5) unsigned NOT NULL,
+  `ip` varchar(255) NOT NULL,
+  `hostname` varchar(255) DEFAULT NULL,
+  `rtt` decimal(12,3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scan_snapshot_trace_hops_snapshot_fk` (`snapshot_id`),
+  CONSTRAINT `scan_snapshot_trace_hops_snapshot_fk` FOREIGN KEY (`snapshot_id`) REFERENCES `scan_snapshots` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `scan_snapshot_trace_hops` WRITE;
+/*!40000 ALTER TABLE `scan_snapshot_trace_hops` DISABLE KEYS */;
+/*!40000 ALTER TABLE `scan_snapshot_trace_hops` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 DROP TABLE IF EXISTS `scan_snapshots`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -348,37 +619,29 @@ CREATE TABLE `scan_snapshots` (
   `ip` varchar(50) NOT NULL,
   `mode` varchar(20) NOT NULL,
   `result_hash` char(64) NOT NULL,
-  `xml` mediumblob NOT NULL,
+  `content_hash` char(64) NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `scan_snapshots_result` (`ip`,`mode`,`result_hash`),
+  UNIQUE KEY `scan_snapshots_content` (`ip`,`mode`,`content_hash`),
+  KEY `scan_snapshots_result` (`ip`,`mode`,`result_hash`),
   KEY `scan_snapshots_ip_mode_id` (`ip`,`mode`,`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `scan_snapshots`
---
 
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `scan_snapshots` WRITE;
 /*!40000 ALTER TABLE `scan_snapshots` DISABLE KEYS */;
 INSERT INTO `scan_snapshots` VALUES
-(1,'192.168.1.1','deep','ba6e58d3d0f346ea08f15eb4ca3ffb651304149eaba8d11f6e95b72f1d91e7cd','<nmaprun scanner=\"nmap\" args=\"nmap -T3 -A -p- 192.168.1.1\" startstr=\"Demo scan\"><scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"65535\" services=\"1-65535\"/><host><status state=\"up\"/><address addr=\"192.168.1.1\" addrtype=\"ipv4\"/><address addr=\"74:83:C2:10:00:01\" addrtype=\"mac\" vendor=\"Ubiquiti Inc.\"/><hostnames><hostname name=\"gateway\" type=\"PTR\"/></hostnames><ports><port protocol=\"tcp\" portid=\"22\"><state state=\"open\"/><service name=\"ssh\" product=\"OpenSSH\" version=\"9.6\"/></port><port protocol=\"tcp\" portid=\"53\"><state state=\"open\"/><service name=\"domain\" product=\"dnsmasq\" version=\"2.90\"/></port><port protocol=\"tcp\" portid=\"80\"><state state=\"open\"/><service name=\"http\" product=\"nginx\" version=\"1.26.1\"/></port><port protocol=\"tcp\" portid=\"443\"><state state=\"open\"/><service name=\"https\" product=\"nginx\" version=\"1.26.1\" tunnel=\"ssl\"/></port></ports><os><osmatch name=\"Linux 5.15 - 6.8\" accuracy=\"100\"/></os><uptime lastboot=\"2026-06-27 08:12:01\"/></host><runstats><finished elapsed=\"73.44\"/></runstats></nmaprun>','2026-07-10 21:33:01'),
-(2,'192.168.1.10','deep','033e3497a994c13e4df4e9d34bb1bdf22372bec486a2242bfa78f9077fc1a05f','<nmaprun scanner=\"nmap\" args=\"nmap -T3 -A -p- 192.168.1.10\" startstr=\"Demo scan\"><scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"65535\" services=\"1-65535\"/><host><status state=\"up\"/><address addr=\"192.168.1.10\" addrtype=\"ipv4\"/><address addr=\"00:11:32:20:00:10\" addrtype=\"mac\" vendor=\"Synology Incorporated\"/><hostnames><hostname name=\"nas\" type=\"PTR\"/></hostnames><ports><port protocol=\"tcp\" portid=\"22\"><state state=\"open\"/><service name=\"ssh\" product=\"OpenSSH\" version=\"9.2\"/></port><port protocol=\"tcp\" portid=\"80\"><state state=\"open\"/><service name=\"http\" product=\"nginx\" version=\"1.24.0\"/></port><port protocol=\"tcp\" portid=\"443\"><state state=\"open\"/><service name=\"https\" product=\"nginx\" version=\"1.24.0\" tunnel=\"ssl\"/></port><port protocol=\"tcp\" portid=\"445\"><state state=\"open\"/><service name=\"microsoft-ds\" product=\"Samba smbd\" version=\"4.18.6\"/></port><port protocol=\"tcp\" portid=\"5001\"><state state=\"open\"/><service name=\"https\" product=\"Synology DSM\" version=\"7.2\" tunnel=\"ssl\"/></port></ports><os><osmatch name=\"Linux 5.10\" accuracy=\"100\"/></os><uptime lastboot=\"2026-07-01 06:45:18\"/></host><runstats><finished elapsed=\"118.17\"/></runstats></nmaprun>','2026-07-10 18:33:01'),
-(3,'192.168.1.42','standard','1159628dc246568ae6871aab63764a33f86a6f7d28689c9d597180e33b945bf3','<nmaprun scanner=\"nmap\" args=\"nmap -T3 -A --top-ports 1000 192.168.1.42\" startstr=\"Demo scan\"><scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"1000\" services=\"top-1000\"/><host><status state=\"up\"/><address addr=\"192.168.1.42\" addrtype=\"ipv4\"/><address addr=\"F8:DB:88:40:00:42\" addrtype=\"mac\" vendor=\"Dell Technologies\"/><hostnames><hostname name=\"office-pc\" type=\"PTR\"/></hostnames><ports><port protocol=\"tcp\" portid=\"135\"><state state=\"open\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\"/></port><port protocol=\"tcp\" portid=\"445\"><state state=\"open\"/><service name=\"microsoft-ds\" product=\"Microsoft Windows 11\"/></port><port protocol=\"tcp\" portid=\"3389\"><state state=\"open\"/><service name=\"ms-wbt-server\" product=\"Microsoft Terminal Services\"/></port></ports><os><osmatch name=\"Microsoft Windows 11\" accuracy=\"100\"/></os><uptime lastboot=\"2026-07-10 07:54:12\"/></host><runstats><finished elapsed=\"24.70\"/></runstats></nmaprun>','2026-07-10 16:33:01'),
-(4,'192.168.1.90','lightweight','4636c7e0a28abc3e623b4f4b8d515bc26ac0edf853746ba9c63d6aed598cb6d5','<nmaprun scanner=\"nmap\" args=\"nmap -F -T4 192.168.1.90\" startstr=\"Demo scan\"><scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"100\" services=\"top-100\"/><host><status state=\"up\"/><address addr=\"192.168.1.90\" addrtype=\"ipv4\"/><address addr=\"F4:F5:D8:50:00:90\" addrtype=\"mac\" vendor=\"Google, Inc.\"/><hostnames><hostname name=\"living-room-tv\" type=\"PTR\"/></hostnames><ports><port protocol=\"tcp\" portid=\"8008\"><state state=\"open\"/><service name=\"http\" product=\"Google Cast\"/></port><port protocol=\"tcp\" portid=\"8009\"><state state=\"open\"/><service name=\"ajp13\" product=\"Google Cast\"/></port></ports><os><osmatch name=\"Linux 4.9\" accuracy=\"96\"/></os></host><runstats><finished elapsed=\"3.31\"/></runstats></nmaprun>','2026-07-10 22:33:01'),
-(5,'192.168.1.210','deep','058f2138b6d2057e7ddd0a8525a266312f42ea95a21bb219e126dfceb807260d','<nmaprun scanner=\"nmap\" args=\"nmap -T3 -A -p- 192.168.1.210\" startstr=\"Demo scan\"><scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"65535\" services=\"1-65535\"/><host><status state=\"up\"/><address addr=\"192.168.1.210\" addrtype=\"ipv4\"/><address addr=\"3C:52:A1:70:02:10\" addrtype=\"mac\" vendor=\"HP Inc.\"/><hostnames><hostname name=\"laser-printer\" type=\"PTR\"/></hostnames><ports><port protocol=\"tcp\" portid=\"80\"><state state=\"open\"/><service name=\"http\" product=\"HP Embedded Web Server\"/></port><port protocol=\"tcp\" portid=\"443\"><state state=\"open\"/><service name=\"https\" product=\"HP Embedded Web Server\" tunnel=\"ssl\"/></port><port protocol=\"tcp\" portid=\"631\"><state state=\"open\"/><service name=\"ipp\" product=\"CUPS\" version=\"2.4\"/></port><port protocol=\"tcp\" portid=\"9100\"><state state=\"open\"/><service name=\"jetdirect\" product=\"HP JetDirect\"/></port></ports><os><osmatch name=\"HP printer embedded Linux\" accuracy=\"100\"/></os><uptime lastboot=\"2026-06-18 11:02:44\"/></host><runstats><finished elapsed=\"91.03\"/></runstats></nmaprun>','2026-07-10 11:33:01'),
-(6,'192.168.1.220','standard','df64ce474800bef5f08383538b807d8672768c153d87c15b5060d6de9f96ab60','<nmaprun scanner=\"nmap\" args=\"nmap -T3 -A --top-ports 1000 192.168.1.220\" startstr=\"Demo scan\"><scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"1000\" services=\"top-1000\"/><host><status state=\"up\"/><address addr=\"192.168.1.220\" addrtype=\"ipv4\"/><address addr=\"00:40:8C:80:02:20\" addrtype=\"mac\" vendor=\"Axis Communications AB\"/><hostnames><hostname name=\"front-camera\" type=\"PTR\"/></hostnames><ports><port protocol=\"tcp\" portid=\"80\"><state state=\"open\"/><service name=\"http\" product=\"AXIS Camera Station\" version=\"5.56\"/></port><port protocol=\"tcp\" portid=\"443\"><state state=\"open\"/><service name=\"https\" product=\"AXIS Camera Station\" version=\"5.56\" tunnel=\"ssl\"/></port><port protocol=\"tcp\" portid=\"554\"><state state=\"open\"/><service name=\"rtsp\" product=\"AXIS Media Control\"/></port></ports><os><osmatch name=\"Linux 4.14\" accuracy=\"100\"/></os><uptime lastboot=\"2026-07-03 14:22:09\"/></host><runstats><finished elapsed=\"32.08\"/></runstats></nmaprun>','2026-07-10 19:33:01');
+(1,'192.168.1.1','deep','df0cd762e09b9dab854d185ba95dc8b4513d827476b5c0955589ef67a0c276c8','de0ec19b3aa3e485579758888b61c0fa660a5a50aebe988781dbc226c3dd503d','2026-07-11 14:44:58'),
+(2,'192.168.1.10','deep','0df5a7c47344ee8e0ea303b53387416b13d212087de5d1bd9053814f7b0ec497','9868eeafe1425c5383329ece2f2bb39b0e4e2cd18a3ddd4488928d878f080c7a','2026-07-11 14:44:58'),
+(3,'192.168.1.42','standard','d02b8cc094f532f7a9dce54dad72939a0ee3ec92407cb0676186175ef743d170','fd4c10e74d1a50357a66ac082d709cda4505199880768abef83c9b0b6ab57b45','2026-07-11 14:44:58'),
+(4,'192.168.1.90','lightweight','3309e334b2c2de09cb386be61488cd6071bc5138b65792df4d1505e0acbdab38','01872f9567a5dd7783c4d47bb267ddc3bf122b77dd3b55141f3d5e1d0e1a6750','2026-07-11 14:44:58'),
+(5,'192.168.1.210','deep','74db1545280ca0ba0ea3bcd9288d71d1fcc0916bb498f5c114335f7e7a0df7e1','a92a32fa9a29d5cf64221e7c49173e308f0f5255c7a065290fa302ecbc42dfe4','2026-07-11 14:44:58'),
+(6,'192.168.1.220','standard','00c78026af6bc8d79369ca629ba76699c99592dce3835621f3ba029314e5afe4','14eaac0a9673a0cf09d437a65fb6fb86c3cf9086b219e250373f6b1cf88720ed','2026-07-11 14:44:58');
 /*!40000 ALTER TABLE `scan_snapshots` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `scans`
---
-
 DROP TABLE IF EXISTS `scans`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -395,6 +658,14 @@ CREATE TABLE `scans` (
   `snapshot_id` int(11) unsigned DEFAULT NULL,
   `result_changed` tinyint(1) unsigned NOT NULL DEFAULT 0,
   `port_changes_processed` tinyint(1) unsigned NOT NULL DEFAULT 0,
+  `scanner` varchar(50) DEFAULT NULL,
+  `scanner_version` varchar(50) DEFAULT NULL,
+  `scan_args` text DEFAULT NULL,
+  `host_reason` varchar(100) DEFAULT NULL,
+  `host_reason_ttl` smallint(5) unsigned DEFAULT NULL,
+  `last_boot` datetime DEFAULT NULL,
+  `uptime_seconds` bigint(20) unsigned DEFAULT NULL,
+  `distance` smallint(5) unsigned DEFAULT NULL,
   `error` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `scans_ip_date` (`ip`,`date_begin`),
@@ -405,31 +676,22 @@ CREATE TABLE `scans` (
 ) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `scans`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `scans` WRITE;
 /*!40000 ALTER TABLE `scans` DISABLE KEYS */;
 INSERT INTO `scans` VALUES
-(1,'192.168.1.1','deep','complete','up','2026-07-10 21:31:47','2026-07-10 21:33:01',74,4,1,1,1,NULL),
-(2,'192.168.1.10','deep','complete','up','2026-07-10 18:31:02','2026-07-10 18:33:01',119,5,2,1,1,NULL),
-(3,'192.168.1.42','standard','complete','up','2026-07-10 16:32:36','2026-07-10 16:33:01',25,3,3,1,1,NULL),
-(4,'192.168.1.90','lightweight','complete','up','2026-07-10 22:32:57','2026-07-10 22:33:01',4,2,4,1,1,NULL),
-(5,'192.168.1.210','deep','complete','up','2026-07-10 11:31:29','2026-07-10 11:33:01',92,4,5,1,1,NULL),
-(6,'192.168.1.220','standard','complete','up','2026-07-10 19:32:28','2026-07-10 19:33:01',33,3,6,1,1,NULL),
-(7,'192.168.1.15','standard','timeout',NULL,'2026-07-10 07:33:01','2026-07-10 08:03:01',1800,0,NULL,0,1,'nmap timed out after 30 minutes'),
-(8,'192.168.1.120','lightweight','complete','down','2026-07-10 17:33:01','2026-07-10 17:33:03',2,0,NULL,0,1,NULL);
+(1,'192.168.1.1','deep','complete','up','2026-07-11 12:43:37','2026-07-11 12:44:51',74,4,1,1,1,'nmap',NULL,'nmap -T3 -A -p- 192.168.1.1',NULL,NULL,'2026-06-27 08:12:01',NULL,NULL,NULL),
+(2,'192.168.1.10','deep','complete','up','2026-07-11 09:42:52','2026-07-11 09:44:51',119,5,2,1,1,'nmap',NULL,'nmap -T3 -A -p- 192.168.1.10',NULL,NULL,'2026-07-01 06:45:18',NULL,NULL,NULL),
+(3,'192.168.1.42','standard','complete','up','2026-07-11 07:44:26','2026-07-11 07:44:51',25,3,3,1,1,'nmap',NULL,'nmap -T3 -A --top-ports 1000 192.168.1.42',NULL,NULL,'2026-07-10 07:54:12',NULL,NULL,NULL),
+(4,'192.168.1.90','lightweight','complete','up','2026-07-11 13:44:47','2026-07-11 13:44:51',4,2,4,1,1,'nmap',NULL,'nmap -F -T4 192.168.1.90',NULL,NULL,NULL,NULL,NULL,NULL),
+(5,'192.168.1.210','deep','complete','up','2026-07-11 02:43:19','2026-07-11 02:44:51',92,4,5,1,1,'nmap',NULL,'nmap -T3 -A -p- 192.168.1.210',NULL,NULL,'2026-06-18 11:02:44',NULL,NULL,NULL),
+(6,'192.168.1.220','standard','complete','up','2026-07-11 10:44:18','2026-07-11 10:44:51',33,3,6,1,1,'nmap',NULL,'nmap -T3 -A --top-ports 1000 192.168.1.220',NULL,NULL,'2026-07-03 14:22:09',NULL,NULL,NULL),
+(7,'192.168.1.15','standard','timeout',NULL,'2026-07-10 22:44:51','2026-07-10 23:14:51',1800,0,NULL,0,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'nmap timed out after 30 minutes'),
+(8,'192.168.1.120','lightweight','complete','down','2026-07-11 08:44:51','2026-07-11 08:44:53',2,0,NULL,0,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `scans` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `stats`
---
-
 DROP TABLE IF EXISTS `stats`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -449,40 +711,31 @@ CREATE TABLE `stats` (
 ) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `stats`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `stats` WRITE;
 /*!40000 ALTER TABLE `stats` DISABLE KEYS */;
 INSERT INTO `stats` VALUES
-(1,'192.168.1.1','74:83:c2:10:00:01','Up','2026-07-03 23:33:01','2026-07-10 23:33:01',672),
-(2,'192.168.1.10','00:11:32:20:00:10','Up','2026-07-03 23:33:01','2026-07-10 23:33:01',672),
-(3,'192.168.1.15','b8:27:eb:30:00:15','Up','2026-07-07 23:33:01','2026-07-10 05:33:01',210),
-(4,'192.168.1.15','b8:27:eb:30:00:15','Down','2026-07-10 05:33:01','2026-07-10 23:33:01',72),
-(5,'192.168.1.42','f8:db:88:40:00:42','Up','2026-07-06 23:33:01','2026-07-10 15:33:01',350),
-(6,'192.168.1.42','f8:db:88:40:00:42','Down','2026-07-10 15:33:01','2026-07-10 16:33:01',4),
-(7,'192.168.1.42','f8:db:88:40:00:42','Up','2026-07-10 16:33:01','2026-07-10 23:33:01',28),
-(8,'192.168.1.90','f4:f5:d8:50:00:90','Up','2026-07-04 23:33:01','2026-07-10 21:33:01',560),
-(9,'192.168.1.90','f4:f5:d8:50:00:90','arp-down','2026-07-10 21:33:01','2026-07-10 22:33:01',3),
-(10,'192.168.1.90','f4:f5:d8:50:00:90','Up','2026-07-10 22:33:01','2026-07-10 23:33:01',4),
-(11,'192.168.1.120','b8:27:eb:60:01:20','Up','2026-07-08 23:33:01','2026-07-10 17:33:01',160),
-(12,'192.168.1.120','b8:27:eb:60:01:20','Down','2026-07-10 17:33:01','2026-07-10 23:33:01',24),
-(13,'192.168.1.210','3c:52:a1:70:02:10','Up','2026-07-03 23:33:01','2026-07-10 23:33:01',672),
-(14,'192.168.1.220','00:40:8c:80:02:20','Up','2026-07-07 23:33:01','2026-07-10 20:33:01',260),
-(15,'192.168.1.220','00:40:8c:80:02:20','Down','2026-07-10 20:33:01','2026-07-10 23:33:01',12),
-(16,'192.168.1.201','3c:22:fb:91:02:01','Down','2026-07-09 23:33:01','2026-07-10 13:33:01',30),
-(17,'192.168.1.201','3c:22:fb:91:02:01','Up','2026-07-10 13:33:01','2026-07-10 23:33:01',40);
+(1,'192.168.1.1','74:83:c2:10:00:01','Up','2026-07-04 14:44:51','2026-07-11 14:44:51',672),
+(2,'192.168.1.10','00:11:32:20:00:10','Up','2026-07-04 14:44:51','2026-07-11 14:44:51',672),
+(3,'192.168.1.15','b8:27:eb:30:00:15','Up','2026-07-08 14:44:51','2026-07-10 20:44:51',210),
+(4,'192.168.1.15','b8:27:eb:30:00:15','Down','2026-07-10 20:44:51','2026-07-11 14:44:51',72),
+(5,'192.168.1.42','f8:db:88:40:00:42','Up','2026-07-07 14:44:51','2026-07-11 06:44:51',350),
+(6,'192.168.1.42','f8:db:88:40:00:42','Down','2026-07-11 06:44:51','2026-07-11 07:44:51',4),
+(7,'192.168.1.42','f8:db:88:40:00:42','Up','2026-07-11 07:44:51','2026-07-11 14:44:51',28),
+(8,'192.168.1.90','f4:f5:d8:50:00:90','Up','2026-07-05 14:44:51','2026-07-11 12:44:51',560),
+(9,'192.168.1.90','f4:f5:d8:50:00:90','arp-down','2026-07-11 12:44:51','2026-07-11 13:44:51',3),
+(10,'192.168.1.90','f4:f5:d8:50:00:90','Up','2026-07-11 13:44:51','2026-07-11 14:44:51',4),
+(11,'192.168.1.120','b8:27:eb:60:01:20','Up','2026-07-09 14:44:51','2026-07-11 08:44:51',160),
+(12,'192.168.1.120','b8:27:eb:60:01:20','Down','2026-07-11 08:44:51','2026-07-11 14:44:51',24),
+(13,'192.168.1.210','3c:52:a1:70:02:10','Up','2026-07-04 14:44:51','2026-07-11 14:44:51',672),
+(14,'192.168.1.220','00:40:8c:80:02:20','Up','2026-07-08 14:44:51','2026-07-11 11:44:51',260),
+(15,'192.168.1.220','00:40:8c:80:02:20','Down','2026-07-11 11:44:51','2026-07-11 14:44:51',12),
+(16,'192.168.1.201','3c:22:fb:91:02:01','Down','2026-07-10 14:44:51','2026-07-11 04:44:51',30),
+(17,'192.168.1.201','3c:22:fb:91:02:01','Up','2026-07-11 04:44:51','2026-07-11 14:44:51',40);
 /*!40000 ALTER TABLE `stats` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `stats_old`
---
-
 DROP TABLE IF EXISTS `stats_old`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -494,10 +747,6 @@ CREATE TABLE `stats_old` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `stats_old`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `stats_old` WRITE;
 /*!40000 ALTER TABLE `stats_old` DISABLE KEYS */;
@@ -505,11 +754,6 @@ LOCK TABLES `stats_old` WRITE;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Table structure for table `users`
---
-
 DROP TABLE IF EXISTS `users`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -519,10 +763,6 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `users`
---
-
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
@@ -530,10 +770,6 @@ LOCK TABLES `users` WRITE;
 UNLOCK TABLES;
 COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
-
---
--- Dumping routines for database 'ping'
---
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION' */ ;
 /*!50003 DROP PROCEDURE IF EXISTS `update_status` */;
@@ -544,7 +780,7 @@ SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 /*!50003 SET character_set_results = latin1 */ ;
 /*!50003 SET collation_connection  = latin1_swedish_ci */ ;
 DELIMITER ;;
-CREATE DEFINER=`root`@`%` PROCEDURE `update_status`(IN p_ip VARCHAR(50), IN p_mac VARCHAR(50), IN p_status VARCHAR(50))
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_status`(IN p_ip VARCHAR(50), IN p_mac VARCHAR(50), IN p_status VARCHAR(50))
 BEGIN
 DECLARE var_id INT;
 DECLARE var_status VARCHAR(50);
@@ -562,7 +798,8 @@ IF var_status = var_next_status AND (var_ip=p_ip OR (var_ip IS NULL AND p_ip IS 
 ELSE
   INSERT INTO stats (ip,mac,status) VALUES (p_ip, p_mac, var_next_status);
 END IF;
-END ;;
+END
+;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
@@ -577,8 +814,6 @@ DELIMITER ;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
-
--- Dump completed on 2026-07-10 23:33:07
 
 -- Keep demo activity recent whenever this archive is restored.
 USE `ping`;
@@ -600,7 +835,8 @@ SET `date_begin`=DATE_ADD(`date_begin`, INTERVAL @fenping_demo_shift_seconds SEC
     `date_end`=DATE_ADD(`date_end`, INTERVAL @fenping_demo_shift_seconds SECOND);
 UPDATE `scans`
 SET `date_begin`=DATE_ADD(`date_begin`, INTERVAL @fenping_demo_shift_seconds SECOND),
-    `date_end`=DATE_ADD(`date_end`, INTERVAL @fenping_demo_shift_seconds SECOND);
+    `date_end`=DATE_ADD(`date_end`, INTERVAL @fenping_demo_shift_seconds SECOND),
+    `last_boot`=DATE_ADD(`last_boot`, INTERVAL @fenping_demo_shift_seconds SECOND);
 UPDATE `scan_snapshots`
 SET `created_at`=DATE_ADD(`created_at`, INTERVAL @fenping_demo_shift_seconds SECOND);
 UPDATE `scan_port_changes`

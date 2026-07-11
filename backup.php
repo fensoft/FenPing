@@ -281,7 +281,14 @@ function backupScanCounts(): array {
     SELECT
       (SELECT COUNT(*) FROM scans) AS scan_rows,
       (SELECT COUNT(*) FROM scan_snapshots) AS snapshot_rows,
-      (SELECT COALESCE(SUM(OCTET_LENGTH(xml)), 0) FROM scan_snapshots) AS snapshot_bytes
+      (
+        (SELECT COALESCE(SUM(OCTET_LENGTH(output)), 0) FROM scan_snapshot_scripts) +
+        (SELECT COALESCE(SUM(OCTET_LENGTH(value)), 0) FROM scan_snapshot_script_nodes) +
+        (SELECT COALESCE(SUM(
+          OCTET_LENGTH(COALESCE(service, '')) + OCTET_LENGTH(COALESCE(product, '')) +
+          OCTET_LENGTH(COALESCE(version, '')) + OCTET_LENGTH(COALESCE(extra_info, ''))
+        ), 0) FROM scan_snapshot_ports)
+      ) AS snapshot_bytes
   ");
   $counts = $stmt->fetch(PDO::FETCH_ASSOC);
   return array(

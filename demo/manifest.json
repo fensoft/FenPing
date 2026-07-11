@@ -12,8 +12,8 @@
         "netboot_files": 2,
         "scan_rows": 8,
         "scan_snapshot_rows": 6,
-        "scan_snapshot_bytes": 5787,
+        "scan_snapshot_bytes": 443,
         "netboot_rows": 2
     },
-    "db_sql_bytes": 31312
+    "db_sql_bytes": 42584
 }

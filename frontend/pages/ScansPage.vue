@@ -33,7 +33,7 @@
               <button v-if="isAuthenticated && scan.ip" class="btn btn-outline-secondary btn-sm icon-btn" :class="{ 'is-spinning': isScanning(scan) || scan.state === 'running' }" type="button" :disabled="isScanning(scan) || scanIsActiveState(scan.state)" title="Scan host" @click="$emit('scan-host', scan)">
                 <i :class="isScanning(scan) || scan.state === 'running' ? 'ti ti-loader-2' : 'ti ti-search'"></i>
               </button>
-              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!scan.xml_usable" @click="$emit('open-scan', scan.ip, scan.id)"><i class="ti ti-file-search"></i></button>
+              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!(scan.result_available ?? scan.xml_usable)" @click="$emit('open-scan', scan.ip, scan.id)"><i class="ti ti-file-search"></i></button>
             </td>
           </tr>
         </tbody>
