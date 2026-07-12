@@ -1,0 +1,281 @@
+<?php
+
+declare(strict_types=1);
+
+namespace FenPing\Backend;
+
+use InvalidArgumentException;
+use OutOfBoundsException;
+use PDO;
+use PDOException;
+use RuntimeException;
+
+trait RoutesHostsBehavior
+{
+public function hostsApiRoutes(): array {
+  return array(
+    $this->apiRoute('GET', '/history/{ip:ipv4}', 'handleHostHistory'),
+    $this->apiRoute('GET', '/hosts/{id:int}/detail', 'handleHostDetail'),
+    $this->apiRoute('GET', '/hosts/by-ip/{ip:ipv4}/detail', 'handleHostDetailByIp'),
+    $this->apiRoute('GET', '/hosts/{id:int}', 'handleHostGet'),
+    $this->apiRoute('POST', '/hosts', 'handleHostCreate', 'body'),
+    $this->apiRoute('PUT', '/hosts/{id:int}', 'handleHostEdit', 'body'),
+    $this->apiRoute('DELETE', '/hosts/{id:int}', 'handleHostDelete', 'body'),
+    $this->apiRoute('POST', '/categories', 'handleCategoryCreate', 'body'),
+    $this->apiRoute('PUT', '/categories', 'handleCategoryRename', 'body'),
+    $this->apiRoute('DELETE', '/categories', 'handleCategoryDelete', 'body')
+  );
+}
+
+public function handleHostHistory(array $params): array {
+  return $this->get_history_response($params['ip']);
+}
+
+public function handleHostGet(array $params): array {
+  $host = $this->getId($params['id']);
+  if ($host === false)
+    $this->jsonError(404, 'host not found');
+  return $host;
+}
+
+public function handleHostDetail(array $params): array {
+  $host = $this->getId($params['id']);
+  if ($host === false)
+    $this->jsonError(404, 'host not found');
+
+  return $this->buildHostDetailResponse($this->normalizeHostDetail($host));
+}
+
+public function handleHostDetailByIp(array $params): array {
+  $ip = $params['ip'];
+  $inventoryHost = null;
+  foreach ($this->getInventory() as $candidate) {
+    if (($candidate['ip'] ?? '') === $ip) {
+      $inventoryHost = $candidate;
+      break;
+    }
+  }
+
+  if ($inventoryHost === null)
+    $this->jsonError(404, 'host not found');
+
+  if (($inventoryHost['id'] ?? null) !== null)
+    return $this->handleHostDetail(array('id' => (int)$inventoryHost['id']));
+
+  return $this->buildHostDetailResponse($this->normalizeUnmanagedHostDetail($inventoryHost));
+}
+
+public function buildHostDetailResponse(array $host): array {
+  $ip = (string)($host['ip'] ?? '');
+
+  $history = $ip !== '' ? $this->get_history_response($ip) : array('summary' => null, 'rows' => array());
+  $scans = $ip !== '' ? $this->scanMetadataForIp($ip, 50) : array();
+  $latestScan = $ip !== '' ? $this->scanMetadataLatest($ip) : null;
+  if ($latestScan !== null) {
+    $latestScan['xml_usable'] = $this->scanMetadataXmlUsable($latestScan);
+    $latestScan['xml_url'] = $latestScan['xml_usable'] ? $this->scanXmlUrl($latestScan['ip'], $latestScan['id']) : null;
+  }
+  $netbootImage = null;
+
+  if (!empty($host['netboot_image_id'])) {
+    $netbootImage = $this->get_netboot_image((int)$host['netboot_image_id']);
+    if ($netbootImage === false)
+      $netbootImage = null;
+  }
+
+  return array(
+    'host' => $host,
+    'history' => $history,
+    'scans' => $scans,
+    'latest_scan' => $latestScan,
+    'netboot_image' => $netbootImage
+  );
+}
+
+public function handleHostCreate(array $params): array {
+  $body = $this->requestBody();
+  $ip = $this->normalizeHostIp($body['ip'] ?? null);
+
+  try {
+    $values = $this->validateDhcpHostCreate($ip, $body['mac'] ?? '');
+  } catch (InvalidArgumentException $e) {
+    $this->jsonError(400, $e->getMessage());
+  }
+
+  try {
+    $change = $this->commitDhcpMutation(fn() => $this->create($values['ip'], $values['mac']));
+  } catch (PDOException $e) {
+    $this->handleHostConstraintError($e);
+  }
+
+  return array('id' => (int)$change['result'], 'log' => $change['log']);
+}
+
+public function handleHostEdit(array $params): array {
+  $body = $this->requestBody();
+  $id = $params['id'];
+  $existing = $this->getId($id);
+  if ($existing === false)
+    $this->jsonError(404, 'host not found');
+  $ip = $this->normalizeHostIp($body['ip'] ?? null);
+  $netbootImageId = $this->normalizeNetbootImageId($body['netboot_image_id'] ?? null);
+
+  try {
+    $values = $this->validateDhcpHostEdit(
+      $ip,
+      $body['mac'] ?? '',
+      $body['name'] ?? '',
+      $body['router'] ?? null,
+      $body['dns'] ?? null
+    );
+    $scanProfile = $this->normalizeScheduledScanProfile($body['scan_profile'] ?? $existing['scan_profile'] ?? self::SCAN_MANAGED_DEFAULT_PROFILE);
+    $scanIntervalHours = $this->normalizeScanIntervalHours($body['scan_interval_hours'] ?? $existing['scan_interval_hours'] ?? self::SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
+  } catch (InvalidArgumentException $e) {
+    $this->jsonError(400, $e->getMessage());
+  }
+
+  try {
+    $change = $this->commitDhcpMutation(function () use ($id, $values, $body, $netbootImageId, $scanProfile, $scanIntervalHours) {
+      if ($this->getId($id) === false)
+        throw new DhcpHostNotFoundException('host not found');
+      if ($netbootImageId !== null && !$this->netboot_image_exists($netbootImageId))
+        throw new DhcpHostInputException('invalid netboot image');
+
+      $this->edit(
+        $id,
+        $values['ip'],
+        $values['mac'],
+        $values['name'],
+        $this->toDbFlag($body['repeater'] ?? null),
+        $this->toDbFlag($body['important'] ?? null),
+        $this->toDbFlag($body['web'] ?? null),
+        $values['router'],
+        $values['dns'],
+        $netbootImageId,
+        $scanProfile,
+        $scanIntervalHours
+      );
+      return true;
+    });
+  } catch (DhcpHostNotFoundException $e) {
+    $this->jsonError(404, $e->getMessage());
+  } catch (DhcpHostInputException $e) {
+    $this->jsonError(400, $e->getMessage());
+  } catch (PDOException $e) {
+    $this->handleHostConstraintError($e);
+  }
+
+  return array('saved' => true, 'log' => $change['log']);
+}
+
+public function handleHostDelete(array $params): array {
+  $id = $params['id'];
+
+  try {
+    $change = $this->commitDhcpMutation(function () use ($id) {
+      if ($this->getId($id) === false)
+        throw new DhcpHostNotFoundException('host not found');
+      $this->del($id);
+      return true;
+    });
+  } catch (DhcpHostNotFoundException $e) {
+    $this->jsonError(404, $e->getMessage());
+  }
+
+  return array('deleted' => true, 'log' => $change['log']);
+}
+
+public function handleHostConstraintError(PDOException $error): void {
+  if ((string)$error->getCode() === '23000')
+    $this->jsonError(409, 'host name, MAC address, and IP address must be unique');
+  throw $error;
+}
+
+public function handleCategoryCreate(array $params): array {
+  $body = $this->requestBody();
+  $this->addCategory($body['ip'] ?? '', $body['name'] ?? '');
+  return array('created' => true);
+}
+
+public function handleCategoryRename(array $params): array {
+  $body = $this->requestBody();
+  try {
+    $updated = $this->renameCategory($body['ip'] ?? '', $body['name'] ?? '');
+  } catch (InvalidArgumentException $e) {
+    $this->jsonError(400, $e->getMessage());
+  }
+
+  if ($updated < 1)
+    $this->jsonError(404, 'category not found');
+
+  return array('renamed' => true);
+}
+
+public function handleCategoryDelete(array $params): array {
+  $body = $this->requestBody();
+  $this->delCategory($body['ip'] ?? '');
+  return array('deleted' => true);
+}
+
+public function normalizeHostDetail(array $host): array {
+  $host['id'] = (int)$host['id'];
+  $host['important'] = (int)($host['important'] ?? 0);
+  $host['repeater'] = (int)($host['repeater'] ?? 0);
+  $host['web'] = (int)($host['web'] ?? 0);
+  $host['netboot_image_id'] = $host['netboot_image_id'] === null ? null : (int)$host['netboot_image_id'];
+  $host['scan_profile'] = $this->normalizeScheduledScanProfile($host['scan_profile'] ?? self::SCAN_MANAGED_DEFAULT_PROFILE);
+  $host['scan_interval_hours'] = $this->normalizeScanIntervalHours($host['scan_interval_hours'] ?? self::SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
+  $host['mac'] = strtolower((string)($host['mac'] ?? ''));
+  $host['vendor'] = $this->hostVendorFromCache($host['mac']);
+  $ping = $this->hostPingState($host);
+  $host['status'] = $ping['status'];
+  $host['date'] = $ping['date'];
+  return $host;
+}
+
+public function normalizeUnmanagedHostDetail(array $host): array {
+  $host = $this->normalizeInventoryRow($host, $host['ip'] ?? '');
+  $host['id'] = null;
+  $host['important'] = (int)($host['important'] ?? 0);
+  $host['repeater'] = (int)($host['repeater'] ?? 0);
+  $host['web'] = (int)($host['web'] ?? 0);
+  $host['approved'] = (int)($host['approved'] ?? 0);
+  $host['is_new'] = (int)($host['is_new'] ?? 0);
+  $host['mac'] = strtolower((string)($host['mac'] ?? ''));
+  $host['vendor'] = (string)($host['vendor'] ?? $this->getVendor($host['mac']));
+  $host['router'] = '';
+  $host['dns'] = '';
+  $host['scan_profile'] = null;
+  $host['scan_interval_hours'] = 0;
+  $host['netboot_image_id'] = null;
+  return $host;
+}
+
+public function hostVendorFromCache(string $mac): string {
+  return $this->getVendor($mac);
+}
+
+public function hostPingState(array $host): array {
+  $ip = (string)($host['ip'] ?? '');
+  $mac = strtolower((string)($host['mac'] ?? ''));
+  if ($ip === '' && $mac === '')
+    return array('status' => '', 'date' => null);
+
+  $stmt = $this->getDb()->prepare("
+    SELECT status, date
+    FROM ping
+    WHERE (:ip<>'' AND ip=:ip)
+       OR (:mac<>'' AND LOWER(mac)=:mac)
+    ORDER BY CASE WHEN ip=:ip THEN 0 ELSE 1 END, date DESC
+    LIMIT 1
+  ");
+  $stmt->execute(array('ip' => $ip, 'mac' => $mac));
+  $row = $stmt->fetch(PDO::FETCH_ASSOC);
+  if ($row === false)
+    return array('status' => '', 'date' => null);
+  return array(
+    'status' => $row['status'] ?? '',
+    'date' => $row['date'] ?? null
+  );
+}
+}

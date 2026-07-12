@@ -1,3 +1,5 @@
+FROM composer:2 AS composer
+
 FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -6,7 +8,7 @@ COPY index.html vite.config.js postcss.config.mjs ./
 COPY frontend ./frontend
 RUN npm run build
 
-FROM alpine:3.23
+FROM alpine:3.23 AS runtime-base
 RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-nselib.php,readonly \
     apk add --no-cache \
       ca-certificates \
@@ -55,15 +57,39 @@ RUN printf '%s\n' \
       'catch_workers_output = yes' \
       >> /etc/php84/php-fpm.d/www.conf \
     && sed -i 's#^error_log = .*#error_log = /proc/self/fd/2#' /etc/php84/php-fpm.conf
+
+FROM runtime-base AS backend-deps
+RUN apk add --no-cache php84-mbstring php84-phar
+WORKDIR /app
+COPY --from=composer /usr/bin/composer /usr/bin/composer
+COPY composer.json composer.lock ./
+COPY src ./src
+RUN composer install --no-dev --no-interaction --prefer-dist --classmap-authoritative
+
+FROM runtime-base AS backend-test
+RUN apk add --no-cache php84-dom php84-mbstring php84-phar php84-tokenizer php84-xml php84-xmlwriter
+WORKDIR /app
+COPY --from=composer /usr/bin/composer /usr/bin/composer
+COPY composer.json composer.lock phpunit.xml ./
+COPY src ./src
+COPY tests ./tests
+COPY migrations ./migrations
+COPY demo ./demo
+COPY db.sql ./
+RUN composer install --no-interaction --prefer-dist --classmap-authoritative \
+    && composer test
+
+FROM runtime-base
 COPY nginx-fenping.conf /etc/nginx/nginx.conf
 COPY --from=frontend /app/dist/ /var/www/public/
 COPY public/api.php /var/www/public/
 COPY img/icon.webp /var/www/public/icon.webp
 COPY favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
-COPY routes /opt/fenping/routes/
+COPY --from=backend-deps /app/vendor /opt/fenping/vendor
+COPY src /opt/fenping/src/
 COPY migrations /opt/fenping/migrations/
-COPY config.php functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php http.php ipam.php scans.php inventory.php backup.php oui.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
+COPY composer.json composer.lock api.php cli.php dnsmasq.conf.template db.sql /opt/fenping/
 RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
     && install -d -o www-data -g www-data -m 2770 /var/lib/fenping/database \
     && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc \

@@ -1,0 +1,96 @@
+<?php
+
+declare(strict_types=1);
+
+namespace FenPing\Backend;
+
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
+
+trait CliBehavior
+{
+public function runLockedCliCommand(string $path, string $label, callable $callback): int {
+  $lock = fopen($path, 'c');
+  if ($lock === false) {
+    fwrite(STDERR, "failed to open $label lock" . PHP_EOL);
+    return 1;
+  }
+  if (!flock($lock, LOCK_EX | LOCK_NB)) {
+    fclose($lock);
+    fwrite(STDERR, "$label already running" . PHP_EOL);
+    return 75;
+  }
+
+  try {
+    return $callback();
+  } finally {
+    flock($lock, LOCK_UN);
+    fclose($lock);
+  }
+}
+
+public function runScanPortBackfillCommand() {
+  $inserted = $this->scanPortChangesBackfill();
+  echo "scan port changes backfill: $inserted inserted" . PHP_EOL;
+  return 0;
+}
+
+public function runDnsmasqLeasesCommand(array $args): int {
+  if (count($args) !== 0) {
+    fwrite(STDERR, "Usage: php cli.php dnsmasq-leases" . PHP_EOL);
+    return 2;
+  }
+
+  try {
+    $this->importDnsmasqLeases();
+    return 0;
+  } catch (Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . PHP_EOL);
+    return 1;
+  }
+}
+
+public function runPingCommand($args) {
+  $arg = $args[0] ?? '';
+  $debugEnv = getenv('DEBUG');
+  $debug = $arg !== '' || ($debugEnv !== false && $debugEnv !== '');
+  $from = 1;
+  $to = 254;
+
+  if ($arg !== '' && $arg !== 'DEBUG') {
+    if (!ctype_digit($arg) || intval($arg) < 1 || intval($arg) > 254) {
+      fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]\n");
+      return 2;
+    }
+    $from = intval($arg);
+    $to = $from;
+  }
+
+  $targets = array();
+  for ($i = $from; $i <= $to; $i++)
+    $targets[$i] = $this->config->network . "." . $i;
+
+  $notifyAfterId = $this->discordNotificationsEnabled() ? $this->statsMaxId() : null;
+  $hosts = $this->pingHosts($targets, $this->config->interface ?? '', array_filter(array_unique(array(
+    getenv('IP') ?: '',
+    $this->config->applianceIp ?? ''
+  ))));
+  $this->sendDiscordStatusChangesSince($notifyAfterId);
+
+  if ($debug) {
+    foreach ($hosts as $host)
+      echo $host["ip"] . " " . $host["status"] . PHP_EOL;
+  }
+
+  return 0;
+}
+
+public function runDiscordRestartCommand() {
+  if ($this->sendDiscordRestartNotification())
+    echo "discord restart notification sent" . PHP_EOL;
+  else
+    echo "discord restart notification skipped" . PHP_EOL;
+  return 0;
+}
+}

@@ -243,7 +243,7 @@ Netboot uploads accept UEFI applications (`.efi`), iPXE/PXE loaders (`.kpxe`, `.
 
 ## API
 
-The PHP API is routed by `api.php` and grouped under `routes/`.
+The PHP API enters through the thin `api.php` wrapper and is dispatched by the typed kernel and route objects under `src/Api/`.
 
 Useful endpoints:
 
@@ -286,11 +286,11 @@ docker build --check .
 docker build -t fenping-check .
 npm test
 npm run build
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/database_migrations.php
-php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
-php tests/database_migrations.php
-DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
-DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
+composer validate --strict
+composer dump-autoload --optimize --strict-psr
+composer test
+find src tests/Php -name '*.php' -type f -print0 | xargs -0 -n1 php -l
+docker build --target backend-test -t fenping-backend-test .
 ```
 
 Smoke test a running instance:

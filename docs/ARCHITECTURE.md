@@ -26,7 +26,7 @@ Normal runtime deployment never builds locally. `publish.sh` automatically insta
 
 `./restart.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev` and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next normal restart uses the configured published version again.
 
-`config.php` is committed as a generic, environment-driven config file. Runtime values should come from `.env`/container environment variables; do not hardcode machine-specific secrets in `config.php`.
+`FenPing\Config\AppConfig` loads the committed environment contract at runtime. Values should come from `.env`/container environment variables; do not hardcode machine-specific secrets.
 
 `DATABASE_PATH` defaults to `/var/lib/fenping/database/fenping.sqlite3`. It can be overridden for testing, but production should keep it within the mounted database directory.
 
@@ -59,22 +59,11 @@ Stable ping records update their activity timestamp at most once per day; actual
 
 ### API
 
-`api.php` is the JSON API front controller. It:
+`api.php` is a thin stable entrypoint that loads the Composer autoloader and delegates to `FenPing\Application`. The typed API kernel normalizes and matches `/api/...` routes, converts typed parameters, enforces explicit auth policy, and returns direct success documents or `{ "error": "message" }` errors.
 
-- Normalizes `/api/...` paths.
-- Matches route patterns by hand.
-- Converts typed params like `{id:int}` and `{ip:ipv4}`.
-- Enforces route auth metadata.
-- Returns direct JSON for success and `{ "error": "message" }` for errors.
+Class-owned implementation modules live under `src/Backend/` and are composed by the injected `FenPing\Backend\Backend` object. The former root modules, route directory, procedural compatibility functions, and `src/Legacy/` tree are absent; an architecture test enforces one primary type per production file, no free functions, and a 400-line ceiling.
 
-Route modules:
-
-- `routes/auth.php`: session, login, logout.
-- `routes/system.php`: health, inventory, notify, ping refresh.
-- `routes/hosts.php`: host CRUD, managed-ID and inventory-IP detail/history, category create/rename/delete.
-- `routes/ipam.php`: IPAM summary plus authenticated device approve/unapprove actions.
-- `routes/scans.php`: scan profiles, queueing, scan status/history, and database-backed XML/JSON responses.
-- `routes/netboot.php`: netboot image list/upload/delete.
+The typed API kernel, router, request, authorization policies, and JSON/XML/file responses live under `src/Api/`. Domain-facing behavior is exposed through injected services and repositories under `src/`.
 
 ### CLI
 
@@ -98,7 +87,7 @@ Prefer adding operational jobs here instead of creating new shell scripts.
 
 ## Database
 
-The application database is the SQLite file at `DATABASE_PATH`. `database.php` configures WAL, `synchronous=NORMAL`, a 30-second busy timeout, foreign keys, memory-backed temporary storage, and the deterministic `ipv4_num()` ordering helper. `db.sql` is the canonical idempotent schema for new databases. Existing databases advance through ordered files in `migrations/`, with `PRAGMA user_version` recording the applied version.
+The application database is the SQLite file at `DATABASE_PATH`. `FenPing\Database\DatabaseManager` configures WAL, `synchronous=NORMAL`, a 30-second busy timeout, foreign keys, memory-backed temporary storage, and the deterministic `ipv4_num()` ordering helper. `db.sql` is the canonical idempotent schema for new databases. Existing databases advance through ordered files in `migrations/`, with `PRAGMA user_version` recording the applied version.
 
 SQLite permits concurrent readers and one writer. Mutation paths use immediate write transactions. Scan queue capacity is counted and claimed atomically, so concurrent coordinators cannot collectively exceed four running jobs. Ping detection completes before one batched transaction writes the latest state and status history.
 
@@ -128,7 +117,7 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 
 ## Scanning
 
-`ping.php` implements the ping scanner:
+`FenPing\Ping\PingScanner` implements the ping scanner:
 
 - `php cli.php ping` scans the configured `/24`.
 - `php cli.php ping 42` scans one host.
@@ -137,7 +126,7 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 - `/proc/net/arp` is read directly for MAC discovery.
 - `arping` helps distinguish `arp` from `arp-down`.
 
-`inventory.php` performs discovery and queued nmap scans:
+The inventory and scan services under `src/Inventory/` and `src/Scan/` perform discovery and queued nmap scans:
 
 - Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and applies the automatic scan schedule.
 - Managed hosts store `scan_profile` and `scan_interval_hours`. New managed hosts default to Standard every 24 hours, while existing settings remain unchanged. Automatic discovery queues only hosts whose latest successful scan for that profile is due; `0` disables scheduled scans. Explicit API and CLI scans ignore cadence. Unmanaged hosts use Lightweight every 24 hours, with their first scan distributed across deterministic UTC hour slots to avoid an initial queue spike.
@@ -158,13 +147,13 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 - Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained structured snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
 - History pruning keeps one week of jobs plus the latest complete and latest changed result for each profile.
 
-`oui.php` resolves vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains no vendor database. Boot and the monthly refresh command download the complete registries with short timeouts and atomically write `/var/lib/fenping/state/ieee-oui.json`, then hash the source and SQL rows and transactionally replace `oui_vendors` only when they differ. Invalid or failed refreshes leave previous cache and SQL data untouched; a first startup without IEEE connectivity continues without vendor names. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the runtime JSON registry remains a lookup fallback if SQL is unavailable.
+`FenPing\Oui\OuiRegistryService` and `FenPing\Vendor\VendorLookup` resolve vendors locally using longest-prefix matching over the official IEEE MA-L, MA-M, MA-S, and historical IAB listings. The Docker image contains no vendor database. Boot and the monthly refresh command download the complete registries with short timeouts and atomically write `/var/lib/fenping/state/ieee-oui.json`, then hash the source and SQL rows and transactionally replace `oui_vendors` only when they differ. Invalid or failed refreshes leave previous cache and SQL data untouched; a first startup without IEEE connectivity continues without vendor names. Inventory and host requests never perform vendor-network calls or disclose individual LAN MAC addresses; the runtime JSON registry remains a lookup fallback if SQL is unavailable.
 
 Avoid default inventory scans in tests unless the user accepts LAN scan traffic.
 
 ## dnsmasq, DHCP, DNS, And Netboot
 
-`hosts.php` generates:
+The DHCP services under `src/Dhcp/` generate:
 
 - `/etc/dnsmasq.d/fenping.dhcp-hosts`
 - `/etc/dnsmasq.d/fenping.dhcp-opts`
@@ -181,7 +170,7 @@ Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_i
 
 `dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a temporary staging table. One immediate SQLite transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
 
-`ipam.php` combines lease, ping, and status observations by MAC. Devices seen within seven days remain pending until approved or converted into a managed fixed host. Approval only updates `device_approvals`; it never changes DHCP access or reloads dnsmasq. Pool utilization counts the union of active unexpired leases and fixed MAC reservations within the configured dynamic range, so overlapping addresses count once.
+`FenPing\Ipam\IpamService` combines lease, ping, and status observations by MAC. Devices seen within seven days remain pending until approved or converted into a managed fixed host. Approval only updates `device_approvals`; it never changes DHCP access or reloads dnsmasq. Pool utilization counts the union of active unexpired leases and fixed MAC reservations within the configured dynamic range, so overlapping addresses count once.
 
 ## Frontend
 
@@ -218,11 +207,11 @@ Authentication is session based.
 - Session validity is tied to the configured `SECRET` and password.
 - Guest users can read inventory/health/notify/scans but cannot mutate state.
 
-Never place secrets in docs, commits, logs, generated files, or the committed generic `config.php`.
+Never place secrets in docs, commits, logs, generated files, or the environment-driven `AppConfig`.
 
 ## Backup And Restore
 
-`backup.php` creates a version 1.6 archive containing:
+`FenPing\Backup\BackupService` creates a version 1.6 archive containing:
 
 - `db.json`, with the configured app DB represented as named tables, column lists, and rows.
 - Deduplicated nmap snapshots through `db.json`.
@@ -269,11 +258,11 @@ docker build --check .
 docker build -t fenping-check .
 npm test
 npm run build
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/backup_format.php tests/database_migrations.php
-php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
-php tests/database_migrations.php
-DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
-DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
+composer validate --strict
+composer dump-autoload --optimize --strict-psr
+composer test
+find src tests/Php -name '*.php' -type f -print0 | xargs -0 -n1 php -l
+docker build --target backend-test -t fenping-backend-test .
 curl -fsS http://127.0.0.1/api/health
 curl -fsS http://127.0.0.1/api/inventory
 ```
