@@ -98,7 +98,7 @@ Prefer adding operational jobs here instead of creating new shell scripts.
 
 ## Database
 
-The application database is the SQLite file at `DATABASE_PATH`. `database.php` configures WAL, `synchronous=NORMAL`, a 30-second busy timeout, foreign keys, memory-backed temporary storage, and the deterministic `ipv4_num()` ordering helper. `db.sql` is the canonical idempotent schema and `PRAGMA user_version` tracks future migrations.
+The application database is the SQLite file at `DATABASE_PATH`. `database.php` configures WAL, `synchronous=NORMAL`, a 30-second busy timeout, foreign keys, memory-backed temporary storage, and the deterministic `ipv4_num()` ordering helper. `db.sql` is the canonical idempotent schema for new databases. Existing databases advance through ordered files in `migrations/`, with `PRAGMA user_version` recording the applied version.
 
 SQLite permits concurrent readers and one writer. Mutation paths use immediate write transactions. Scan queue capacity is counted and claimed atomically, so concurrent coordinators cannot collectively exceed four running jobs. Ping detection completes before one batched transaction writes the latest state and status history.
 
@@ -118,7 +118,9 @@ Important tables:
 - `netboot_images`: uploaded netboot file metadata.
 - `users`: legacy table still present in schema.
 
-`db.sql` is run at container boot and after restore. Keep it idempotent with `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, safe cleanup/update statements, and repeatable procedures.
+`databaseInitialize()` creates a version-zero database from the current `db.sql`. For an older nonzero database, it requires every sequential `NNNN_description.sql` file through `DATABASE_SCHEMA_VERSION` and applies each file in its own `BEGIN IMMEDIATE` transaction. The framework advances `PRAGMA user_version` only after the SQL succeeds, so a failed migration rolls back both schema/data changes and the version. Migration files must not manage transactions or set `user_version` themselves.
+
+Every schema change must update the canonical `db.sql`, increment both `DATABASE_SCHEMA_VERSION` and the final `PRAGMA user_version`, and add the next immutable migration file. Released migrations must never be edited or skipped.
 
 The normalized scan-storage migration intentionally does not import legacy XML. When `scan_snapshots.xml` is detected, existing scan jobs, snapshots, and port-change events are discarded before the structured tables are created; other application tables are untouched.
 
@@ -227,7 +229,7 @@ Never place secrets in docs, commits, logs, generated files, or the committed ge
 
 Default backups go to `/var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz`, mounted at `data/backups`.
 
-Restore supports version 1.6 (and compatible later 1.x) FenPing `.tgz` archives. It validates `manifest.json` and `db.json`, reapplies the current idempotent `db.sql` schema, imports the JSON data transactionally, restores netboot files, and regenerates dnsmasq files. Pre-1.6 SQL-based archives and raw `.sql`/`.sql.gz` dumps are intentionally unsupported.
+Restore supports version 1.6 (and compatible later 1.x) FenPing `.tgz` archives. It validates `manifest.json` and `db.json`, initializes or migrates the database to the current schema, imports the JSON data transactionally, restores netboot files, and regenerates dnsmasq files. Pre-1.6 SQL-based archives and raw `.sql`/`.sql.gz` dumps are intentionally unsupported.
 
 The 1.x JSON contract is forward-compatible with future FenPing backups: later 1.x writers may add top-level metadata, tables, and columns, while preserving the existing `tables.<name>.columns` plus parallel `rows` structure. Readers ignore unknown metadata, tables, and columns, so a 1.6 reader can restore the subset it understands from a later 1.x backup. Removing or changing existing fields requires a new major backup version. Future application releases must continue accepting version 1.6 backups and fill newly introduced columns from schema defaults. The optional `restore.timestamp_shift` extension is used only by the synthetic demo to keep its dated activity relative to restore time.
 
@@ -263,8 +265,9 @@ bash -n boot.sh restart.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/backup_format.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/backup_format.php tests/database_migrations.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
+php tests/database_migrations.php
 DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
 DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
 curl -fsS http://127.0.0.1/api/health

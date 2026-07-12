@@ -62,6 +62,7 @@ COPY img/icon.webp /var/www/public/icon.webp
 COPY favicon.ico favicon-32x32.png /var/www/public/
 COPY res/xsl /var/www/public/res/xsl/
 COPY routes /opt/fenping/routes/
+COPY migrations /opt/fenping/migrations/
 COPY config.php functions.php api.php auth.php cli.php database.php discord.php hosts.php health.php http.php ipam.php scans.php inventory.php backup.php oui.php dnsmasq.conf.template ping.php dnsmasq.leases.php db.sql /opt/fenping/
 RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
     && install -d -o www-data -g www-data -m 2770 /var/lib/fenping/database \

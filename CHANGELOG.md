@@ -12,6 +12,7 @@ Development after the `1.5` tag through 2026-07-12.
 
 - Added a single-file SQLite database at `data/database/fenping.sqlite3`, with automatic schema initialization and integrity checking at boot.
 - Added SQLite concurrency safeguards: WAL journaling, `synchronous=NORMAL`, a 30-second busy timeout, foreign-key enforcement, memory-backed temporary storage, `BEGIN IMMEDIATE` writer coordination, and a deterministic `ipv4_num()` function.
+- Added ordered, transactional SQLite migrations with strict version sequencing, automatic rollback, immutable numbered files, and upgrade-path tests.
 - Added normalized, relational nmap snapshot storage for scan scopes, addresses, hostnames, ports and CPEs, closed-port summaries, OS matches and classes, NSE scripts and nodes, and traceroute hops.
 - Added database-neutral version 1.6 JSON backups with manifests, portable table/column data, netboot metadata, forward-compatible 1.x restore behavior, integrity checks, explicit-ID restoration, and demo timestamp shifting.
 - Added an offline FenPing 1.2 backup converter. It accepts `.sql`, `.sql.gz`, or `.sql.tgz` data plus an nmap archive containing one `IP.xml` per host, converts legacy leases and categories, imports each XML file as the latest deep scan, and writes a restore-compatible 1.6 archive without requiring MySQL or MariaDB.

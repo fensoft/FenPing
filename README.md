@@ -282,8 +282,9 @@ bash -n boot.sh restart.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/database_migrations.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
+php tests/database_migrations.php
 DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
 DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
 ```

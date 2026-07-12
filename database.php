@@ -1,7 +1,8 @@
 <?php
 
-const DATABASE_SCHEMA_VERSION = 1;
+const DATABASE_SCHEMA_VERSION = 2;
 const DATABASE_BUSY_TIMEOUT_MS = 30000;
+const DATABASE_MIGRATIONS_DIR = __DIR__ . '/migrations';
 
 function db(): PDO {
   static $database = null;
@@ -36,25 +37,103 @@ function databaseIpv4Number($value): ?int {
 
 function databaseInitialize(): void {
   $database = db();
-  $version = (int)$database->query('PRAGMA user_version')->fetchColumn();
+  $version = databaseSchemaVersion($database);
   if ($version > DATABASE_SCHEMA_VERSION)
     throw new RuntimeException("database schema version $version is newer than supported version " . DATABASE_SCHEMA_VERSION);
-  if ($version === DATABASE_SCHEMA_VERSION)
-    return;
-  if ($version !== 0)
-    throw new RuntimeException("unsupported database schema version: $version");
 
+  if ($version === 0)
+    databaseApplyBaseSchema($database);
+  else
+    databaseApplyMigrations($database, DATABASE_SCHEMA_VERSION, DATABASE_MIGRATIONS_DIR);
+
+  $version = databaseSchemaVersion($database);
+  if ($version !== DATABASE_SCHEMA_VERSION)
+    throw new RuntimeException("database schema initialization stopped at version $version; expected " . DATABASE_SCHEMA_VERSION);
+}
+
+function databaseApplyBaseSchema(PDO $database): void {
   $schema = file_get_contents(__DIR__ . '/db.sql');
   if ($schema === false)
     throw new RuntimeException('failed to read db.sql');
+
   dbBeginImmediate($database);
   try {
     $database->exec($schema);
+    $version = databaseSchemaVersion($database);
+    if ($version !== DATABASE_SCHEMA_VERSION)
+      throw new RuntimeException("db.sql created schema version $version; expected " . DATABASE_SCHEMA_VERSION);
     dbCommit($database);
   } catch (Throwable $error) {
     dbRollback($database);
     throw $error;
   }
+}
+
+function databaseApplyMigrations(PDO $database, int $targetVersion, string $directory): void {
+  $currentVersion = databaseSchemaVersion($database);
+  if ($currentVersion > $targetVersion)
+    throw new RuntimeException("database schema version $currentVersion is newer than supported version $targetVersion");
+
+  $migrations = databaseMigrationFiles($directory, $targetVersion);
+  for ($version = $currentVersion + 1; $version <= $targetVersion; $version++) {
+    if (!isset($migrations[$version]))
+      throw new RuntimeException("missing database migration for version $version");
+    databaseApplyMigration($database, $version, $migrations[$version]);
+  }
+}
+
+function databaseMigrationFiles(string $directory, int $targetVersion): array {
+  if (!is_dir($directory))
+    throw new RuntimeException("database migrations directory not found: $directory");
+
+  $migrations = array();
+  foreach (glob(rtrim($directory, '/') . '/*.sql') ?: array() as $path) {
+    $filename = basename($path);
+    if (!preg_match('/^(\d{4})_[a-z0-9][a-z0-9_-]*\.sql$/', $filename, $matches))
+      throw new RuntimeException("invalid database migration filename: $filename");
+
+    $version = (int)$matches[1];
+    if ($version < 2)
+      throw new RuntimeException("database migration versions must begin at 2: $filename");
+    if ($version > $targetVersion)
+      throw new RuntimeException("database migration $filename exceeds schema version $targetVersion");
+    if (isset($migrations[$version]))
+      throw new RuntimeException("duplicate database migration version $version");
+    $migrations[$version] = $path;
+  }
+
+  ksort($migrations, SORT_NUMERIC);
+  return $migrations;
+}
+
+function databaseApplyMigration(PDO $database, int $version, string $path): void {
+  $filename = basename($path);
+  $sql = file_get_contents($path);
+  if ($sql === false)
+    throw new RuntimeException("failed to read database migration: $filename");
+  if (trim($sql) === '')
+    throw new RuntimeException("database migration is empty: $filename");
+  $guardSql = preg_replace(array('/--[^\r\n]*/', '/\/\*.*?\*\//s'), '', $sql);
+  if (preg_match('/\bPRAGMA\s+user_version\b/i', $guardSql))
+    throw new RuntimeException("database migration must not set user_version: $filename");
+  if (preg_match('/(?:^|;)\s*(?:BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\b/i', $guardSql))
+    throw new RuntimeException("database migration must not manage transactions: $filename");
+
+  dbBeginImmediate($database);
+  try {
+    $database->exec($sql);
+    $database->exec('PRAGMA user_version=' . $version);
+    if (databaseSchemaVersion($database) !== $version)
+      throw new RuntimeException("database migration did not reach version $version: $filename");
+    dbCommit($database);
+  } catch (Throwable $error) {
+    dbRollback($database);
+    throw new RuntimeException("database migration $filename failed: " . $error->getMessage(), 0, $error);
+  }
+}
+
+function databaseSchemaVersion(PDO $database): int {
+  return (int)$database->query('PRAGMA user_version')->fetchColumn();
 }
 
 function dbBeginImmediate(?PDO $database = null): void {

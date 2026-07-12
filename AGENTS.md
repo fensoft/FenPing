@@ -39,8 +39,9 @@ Do not add a separate database service or split dnsmasq into another container u
 - `routes/`: route modules for auth, system, hosts/categories, IPAM, scans, netboot.
 - `functions.php`: domain helpers for inventory, host CRUD, categories, history, notify, netboot.
 - `ipam.php`: dynamic-device approval, observation aggregation, and DHCP pool utilization.
-- `database.php`: configured PDO SQLite singleton, schema initialization, integrity checks, transaction helpers, and status-history writer.
-- `db.sql`: idempotent SQLite schema tracked with `PRAGMA user_version`.
+- `database.php`: configured PDO SQLite singleton, schema initialization and ordered migrations, integrity checks, transaction helpers, and status-history writer.
+- `db.sql`: canonical idempotent SQLite schema for new databases, tracked with `PRAGMA user_version`.
+- `migrations/`: immutable sequential SQLite upgrades for existing nonzero schema versions.
 - `ping.php`: ping scanner and status writer.
 - `hosts.php`: DHCP field validation, transactional dnsmasq candidate generation, and local reload/start logic.
 - `inventory.php`, `scans.php`: nmap scanning, XML parsing, scan metadata/history, and effective port-change detection.
@@ -105,8 +106,9 @@ docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
 npm run build
-php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php tests/backup_format.php
+php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php tests/backup_format.php tests/database_migrations.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
+php tests/database_migrations.php
 DATABASE_PATH=/tmp/fenping-sqlite-test.sqlite3 php tests/sqlite.php
 DATABASE_PATH=/tmp/fenping-scan-test.sqlite3 php tests/scan_storage.php
 ```
@@ -123,6 +125,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - Do not revert unrelated dirty work.
 - `data/` is live state.
 - Keep `db.sql` idempotent.
+- For every schema change, update `db.sql`, increment `DATABASE_SCHEMA_VERSION` and its final `PRAGMA user_version`, and add the next immutable `migrations/NNNN_description.sql` file.
 - SQLite WAL plus `synchronous=NORMAL` is an intentional SSD-endurance tradeoff. Keep the busy timeout, foreign keys, and integrity checks enabled.
 - Keep `DATABASE_PATH` inside the local `data/database` bind mount in production; SQLite must not be placed on a network filesystem.
 - `/tmp` and `/run` are tmpfs; persistent state must remain under the documented bind mounts.

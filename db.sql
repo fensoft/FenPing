@@ -1,3 +1,5 @@
+-- Canonical schema for new databases. Existing databases advance through migrations/.
+
 CREATE TABLE IF NOT EXISTS netboot_images (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -299,4 +301,4 @@ CREATE INDEX IF NOT EXISTS scan_snapshot_ports_service ON scan_snapshot_ports (s
 CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scripts (snapshot_id, port_id);
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
 
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
