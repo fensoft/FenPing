@@ -3,27 +3,27 @@
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="table-wrap">
       <div class="table-toolbar">
-        <div class="input-icon filter-search"><span class="input-icon-addon"><AppIcon name="search" /></span><input v-model="filters.search" class="form-control form-control-sm" type="search" placeholder="Search" /></div>
+        <div class="input-icon filter-search"><span class="input-icon-addon"><AppIcon name="search" /></span><input v-model="filters.search" class="form-control form-control-sm" type="search" placeholder="Search devices" /></div>
         <label class="form-check form-switch toolbar-switch"><input v-model="filters.onlyDown" class="form-check-input" type="checkbox" /><span class="form-check-label">Down</span></label>
         <label class="form-check form-switch toolbar-switch"><input v-model="filters.onlyImportant" class="form-check-input" type="checkbox" /><span class="form-check-label">Important</span></label>
         <label class="form-check form-switch toolbar-switch"><input v-model="filters.hideUnknown" class="form-check-input" type="checkbox" /><span class="form-check-label">Hide new</span></label>
         <button v-if="hasActiveFilters" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Clear filters" @click="resetFilters"><AppIcon name="filter-x" /></button>
-        <div class="text-secondary small filter-count">{{ visibleHosts.length }}/{{ hosts.length }}</div>
+        <div class="inventory-summary" aria-live="polite"><strong>{{ inventorySummary.devices }}</strong> devices <span aria-hidden="true">·</span> <span class="inventory-summary-online">{{ inventorySummary.online }} online</span> <span v-if="inventorySummary.newDevices > 0" aria-hidden="true">·</span> <span v-if="inventorySummary.newDevices > 0" class="inventory-summary-new">{{ inventorySummary.newDevices }} new</span></div>
       </div>
       <table class="table table-sm inventory-table">
-        <colgroup><col class="col-status" /><col class="col-name" /><col class="col-mac" /><col class="col-vendor" /><col class="col-ip" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
+        <colgroup><col class="col-status" /><col class="col-device" /><col class="col-ip" /><col class="col-vendor" /><col class="col-activity" /><col class="col-services" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
         <thead><tr>
           <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="allCategoriesCollapsed ? 'Open all categories' : 'Close all categories'" :aria-label="allCategoriesCollapsed ? 'Open all categories' : 'Close all categories'" :disabled="categoryKeys.length === 0" @click="toggleAllCategories"><AppIcon :name="allCategoriesCollapsed ? 'plus' : 'minus'" /></button></th>
-          <th scope="col">Name</th><th scope="col">MAC</th><th scope="col">Vendor</th><th scope="col">IP</th>
+          <th scope="col">Device</th><th scope="col">IP</th><th scope="col" class="inventory-vendor-column">Vendor</th><th scope="col" class="inventory-activity-column">Activity</th><th scope="col" class="inventory-services-column">Services</th>
           <th v-if="isAuthenticated" scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>Actions</span><button class="btn btn-outline-primary btn-sm icon-btn" type="button" title="Add category" aria-label="Add category" @click="$emit('add-category')"><AppIcon name="folder-plus" /></button></div></th>
         </tr></thead>
         <tbody>
-          <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">Loading</td></tr>
-          <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">No hosts</td></tr>
+          <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 7 : 6">Loading</td></tr>
+          <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 7 : 6">No hosts</td></tr>
           <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
             <template v-if="row.type === 'category'">
-              <td><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="row.collapsed ? 'Open category' : 'Close category'" @click="toggleCategory(row.categoryKey)"><AppIcon :name="row.collapsed ? 'plus' : 'minus'" /></button></td>
-              <td class="category-name" colspan="4">{{ row.name }}</td>
+              <td><button class="btn category-toggle" type="button" :title="row.collapsed ? 'Open category' : 'Close category'" :aria-label="row.collapsed ? 'Open category' : 'Close category'" @click="toggleCategory(row.categoryKey)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" /></button></td>
+              <td class="category-name" colspan="5"><span class="category-title">{{ row.name }}</span><span class="category-summary">{{ row.total }} {{ row.total === 1 ? 'device' : 'devices' }} <span aria-hidden="true">·</span> {{ row.online }} online</span></td>
               <td v-if="isAuthenticated" class="text-end category-actions">
                 <div class="inventory-actions">
                   <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-info btn-sm icon-btn" type="button" title="Rename category" aria-label="Rename category" @click="$emit('rename-category', row)"><AppIcon name="pencil" /></button>
@@ -33,14 +33,20 @@
             </template>
             <template v-else>
               <td class="status-cell"><div class="status-icons">
-                <span :class="statusClass(row.host.status)" :title="statusTitle(row.host.status)" class="status-pill"><AppIcon :name="statusIcon(row.host.status)" /></span>
-                <AppIcon v-if="toFlag(row.host.is_new)" name="alert-triangle" class="text-warning host-role-icon" title="New device — approve it in IPAM" />
-                <button v-if="showStability(row.host)" :class="stabilityClass(row.host.stability)" type="button" :title="stabilityTitle(row.host.stability)" @click="$emit('open-history', row.host.ip)">{{ stabilityLabel(row.host.stability) }}</button>
-                <AppIcon v-if="toFlag(row.host.repeater)" name="wifi" class="text-secondary host-role-icon" title="Router/repeater" />
+                <span :class="statusClass(row.host.status)" :title="statusTitle(row.host.status)" :aria-label="statusTitle(row.host.status)" class="status-pill" role="img"><AppIcon :name="statusIcon(row.host.status)" /></span>
               </div></td>
-              <td class="text-truncate-cell" :title="row.host.name || ''"><a v-if="row.host.web == 1 && row.host.ip" class="host-name-value" :href="`http://${row.host.ip}`" target="_blank" rel="noopener noreferrer">{{ row.host.name }}</a><span v-else class="host-name-value">{{ row.host.name }}</span></td>
-              <td class="text-truncate-cell font-monospace" :title="formatMac(row.host.mac)"><span class="mac-value">{{ formatMac(row.host.mac) }}</span><AppIcon v-if="row.host.via" name="antenna-bars-5" class="ms-1 text-secondary" :title="row.host.via" /></td>
-              <td class="text-truncate-cell" :title="row.host.vendor || ''">{{ row.host.vendor }}</td><td class="text-truncate-cell font-monospace" :title="row.host.ip || ''">{{ row.host.ip }}</td>
+              <td class="inventory-device-cell text-truncate-cell" :title="deviceTitle(row.host)">
+                <span class="host-name-value">{{ row.host.name || row.host.ip || formatMac(row.host.mac) }}</span>
+                <AppIcon v-if="toFlag(row.host.is_new)" name="alert-triangle" class="text-warning host-role-icon" title="New device — approve it in IPAM" />
+                <AppIcon v-if="toFlag(row.host.repeater)" name="wifi" class="text-secondary host-role-icon" title="Router/repeater" />
+                <AppIcon v-if="row.host.via" name="antenna-bars-5" class="text-secondary host-role-icon" :title="row.host.via" />
+                <a v-if="row.host.web == 1 && row.host.ip" class="host-web-link" :href="`http://${row.host.ip}`" target="_blank" rel="noopener noreferrer" title="Open web interface" aria-label="Open web interface"><AppIcon name="external-link" /></a>
+                <span class="inventory-mobile-meta">{{ mobileMeta(row.host) }}</span>
+              </td>
+              <td class="text-truncate-cell font-monospace inventory-ip-cell" :title="row.host.ip || ''">{{ row.host.ip }}</td>
+              <td class="text-truncate-cell inventory-vendor-column" :title="row.host.vendor || 'Unknown vendor'">{{ row.host.vendor || 'Unknown' }}</td>
+              <td class="text-truncate-cell inventory-activity-column" :title="activityTitle(row.host)">{{ activityLabel(row.host) }}</td>
+              <td class="text-truncate-cell inventory-services-column" :title="serviceTitle(row.host)">{{ serviceLabel(row.host) }}</td>
               <td v-if="isAuthenticated" class="text-end action-cell">
                 <div class="inventory-actions">
                   <button v-if="row.host.ip" class="btn btn-sm inventory-action-btn inventory-scan-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><AppIcon :name="isScanRunning(row.host) ? 'loader-2' : 'search'" /><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
@@ -60,8 +66,9 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
-import { formatDuration, formatMac, formatPercent, formatServerDate, scanIsActiveState, statusClass, statusIcon, statusTitle, toFlag } from '../lib/formatters.js';
+import { formatDuration, formatMac, formatServerDate, parseServerDate, scanIsActiveState, statusClass, statusIcon, statusTitle, toFlag } from '../lib/formatters.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({
@@ -75,6 +82,7 @@ const hosts = ref([]);
 const loading = ref(false);
 const error = ref('');
 const request = useAbortableTask();
+const now = useNow(30000);
 const defaults = { search: '', onlyDown: false, onlyImportant: false, hideUnknown: false };
 const filters = ref({ ...defaults, ...readStorage('fenping_filters', {}) });
 const collapsed = ref(new Set(readStorage('fenping_collapsed_categories', [])));
@@ -88,7 +96,24 @@ const categorizedHosts = computed(() => {
   return rows;
 });
 const visibleHosts = computed(() => categorizedHosts.value.filter(matchesFilters));
+const inventorySummary = computed(() => ({
+  devices: hasActiveFilters.value ? `${visibleHosts.value.length}/${hosts.value.length}` : hosts.value.length,
+  online: visibleHosts.value.filter(isOnline).length,
+  newDevices: visibleHosts.value.filter((host) => toFlag(host.is_new)).length
+}));
 const categoryKeys = computed(() => Array.from(new Set(categorizedHosts.value.map((host) => host.categoryContext?.key).filter(Boolean))));
+const categorySummaries = computed(() => {
+  const summaries = new Map();
+  for (const host of visibleHosts.value) {
+    const key = host.categoryContext?.key;
+    if (!key) continue;
+    const summary = summaries.get(key) || { total: 0, online: 0 };
+    summary.total++;
+    if (isOnline(host)) summary.online++;
+    summaries.set(key, summary);
+  }
+  return summaries;
+});
 const allCategoriesCollapsed = computed(() => categoryKeys.value.length > 0 && categoryKeys.value.every((key) => collapsed.value.has(key)));
 const tableRows = computed(() => {
   const rows = []; let current = '';
@@ -96,7 +121,7 @@ const tableRows = computed(() => {
     const category = host.categoryContext;
     if (category && category.key !== current) {
       current = category.key;
-      rows.push({ type: 'category', key: current, categoryKey: current, name: category.name, categoryIp: category.ip, collapsed: collapsed.value.has(current) });
+      rows.push({ type: 'category', key: current, categoryKey: current, name: category.name, categoryIp: category.ip, collapsed: collapsed.value.has(current), ...(categorySummaries.value.get(current) || { total: 0, online: 0 }) });
     }
     rows.push({ type: 'host', key: `host-${host.id || host.ip || host.mac}`, host, collapsed: current !== '' && collapsed.value.has(current) });
   }
@@ -156,10 +181,43 @@ function scanButtonTitle(host) {
   if (host?.scan?.state === 'timeout') return `Scan timed out${host.scan.error ? `: ${host.scan.error}` : ''}`;
   return host?.scan?.date_end ? `Scan host, last ${formatServerDate(host.scan.date_end)}` : 'Scan host';
 }
-function showStability(host) { return Boolean(host?.stability && !host.stability.stable); }
-function stabilityLabel(stability) { return stability?.label || formatPercent(stability?.uptime_percent); }
-function stabilityClass(stability) { return `stability-badge stability-${stability?.level || 'warn'}`; }
-function stabilityTitle(stability) { return [`Uptime ${formatPercent(stability?.uptime_percent)}`, `${Number(stability?.transitions || 0)} changes`, `Longest down ${formatDuration(stability?.longest_down_seconds)}`, `Current ${stability?.current_status || '-'} ${formatDuration(stability?.current_seconds)}`].join(' | '); }
+function isOnline(host) { return ['Up', 'arp'].includes(host?.status); }
+function activityAge(host) {
+  const timestamp = parseServerDate(host?.date);
+  return Number.isNaN(timestamp) ? null : Math.max(0, Math.floor((now.value - timestamp) / 1000));
+}
+function activityLabel(host) {
+  if (!isOnline(host) && host?.stability?.current_seconds !== undefined)
+    return `Down ${formatDuration(host.stability.current_seconds)}`;
+  const age = activityAge(host);
+  if (age === null) return host?.status || '-';
+  return `${isOnline(host) ? 'Seen' : 'Checked'} ${formatDuration(age)} ago`;
+}
+function activityTitle(host) {
+  const parts = [activityLabel(host)];
+  if (host?.date) parts.push(formatServerDate(host.date));
+  if (host?.stability) parts.push(`Uptime ${Math.round(Number(host.stability.uptime_percent || 0))}%`, `${Number(host.stability.transitions || 0)} changes`);
+  return parts.join(' | ');
+}
+function serviceLabel(host) {
+  if (isScanRunning(host)) return host?.scan?.state === 'queued' ? 'Queued' : 'Scanning';
+  if (host?.scan?.state === 'failed') return 'Scan failed';
+  if (host?.scan?.state === 'timeout') return 'Timed out';
+  if (!host?.scan?.result_available && !host?.scan?.snapshot_id) return '-';
+  const count = Number(host?.scan?.ports_count || 0);
+  return `${count} ${count === 1 ? 'service' : 'services'}`;
+}
+function serviceTitle(host) {
+  if (!host?.scan) return 'No scan available';
+  const last = host.scan.date_end || host.scan.date_begin;
+  return `${serviceLabel(host)}${last ? ` | Last scan ${formatServerDate(last)}` : ''}`;
+}
+function deviceTitle(host) {
+  return [host?.name, formatMac(host?.mac), host?.vendor].filter(Boolean).join(' | ');
+}
+function mobileMeta(host) {
+  return [host?.vendor || 'Unknown vendor', formatMac(host?.mac), activityLabel(host), serviceLabel(host)].filter(Boolean).join(' · ');
+}
 function rowClass(row) { return row.type === 'category' ? 'category-row' : row.host.important == 1 && row.host.status !== 'Up' ? 'important-down' : ''; }
 function rowAriaLabel(row) {
   if (row.type === 'category') return `${row.collapsed ? 'Open' : 'Close'} category ${row.name}`;
