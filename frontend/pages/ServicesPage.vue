@@ -33,12 +33,14 @@
             </td>
             <td class="font-monospace text-nowrap">{{ row.first_for_host ? row.ip : '' }}</td>
             <td class="font-monospace text-nowrap"><strong>{{ row.port }}</strong>/{{ row.protocol }}</td>
-            <td><strong>{{ row.service || t('unknown') }}</strong></td>
+            <td>
+              <a v-if="serviceUrl(row)" :href="serviceUrl(row)" target="_blank" rel="noopener noreferrer" :title="t('Open web service')"><strong>{{ row.service || t('unknown') }}</strong></a>
+              <strong v-else>{{ row.service || t('unknown') }}</strong>
+            </td>
             <td class="services-version" :title="row.version || ''">{{ row.version || '-' }}</td>
             <td><span class="badge" :class="scanProfileBadgeClass(row.source || row.scan_mode)">{{ scanProfileLabel(row.source || row.scan_mode) }}</span></td>
             <td class="text-nowrap"><span>{{ formatScanDate(row.scan_date) }}</span><small v-if="row.merged">{{ scanProfileLabel(row.scan_mode) }} + {{ t('Deep') }}</small></td>
             <td class="text-end action-cell">
-              <a v-if="serviceUrl(row)" class="btn btn-outline-primary btn-sm icon-btn" :href="serviceUrl(row)" target="_blank" rel="noopener noreferrer" :title="t('Open web service')"><AppIcon name="external-link" /></a>
               <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('View scan')" @click="$emit('open-scan', row.ip, row.scan_id)"><AppIcon name="file-search" /></button>
             </td>
           </tr>
