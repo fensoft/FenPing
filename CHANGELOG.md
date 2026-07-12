@@ -23,6 +23,7 @@ Development after the `1.5` tag through 2026-07-12.
 - Added compact inventory summaries showing device, online, and new-device totals.
 - Added category bars with device and online counts.
 - Added responsive inventory metadata that combines vendor, MAC address, activity, and services on narrow screens.
+- Added persistent segmented tri-state Inventory filters for status, importance, and new-device state, including compatibility with saved checkbox-era preferences.
 
 ### Changed
 

@@ -7,6 +7,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 ## Features
 
 - Live inventory table for known and newly discovered devices.
+- Persistent tri-state inventory filters for status, importance, and new-device state.
 - Status tracking with `Up`, `Down`, `arp`, and `arp-down` states.
 - Stability, host history, and a 24-hour notify view.
 - Static DHCP/DNS host management through dnsmasq.
@@ -282,6 +283,8 @@ bash -n boot.sh restart.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
+npm test
+npm run build
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/database_migrations.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 php tests/database_migrations.php

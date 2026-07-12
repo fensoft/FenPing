@@ -106,6 +106,7 @@ docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
 npm run build
+npm test
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php oui.php tests/backup_format.php tests/database_migrations.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 php tests/database_migrations.php

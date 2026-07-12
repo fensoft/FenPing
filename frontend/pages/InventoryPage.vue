@@ -4,9 +4,15 @@
     <div class="table-wrap">
       <div class="table-toolbar">
         <div class="input-icon filter-search"><span class="input-icon-addon"><AppIcon name="search" /></span><input v-model="filters.search" class="form-control form-control-sm" type="search" placeholder="Search devices" /></div>
-        <label class="form-check form-switch toolbar-switch"><input v-model="filters.onlyDown" class="form-check-input" type="checkbox" /><span class="form-check-label">Down</span></label>
-        <label class="form-check form-switch toolbar-switch"><input v-model="filters.onlyImportant" class="form-check-input" type="checkbox" /><span class="form-check-label">Important</span></label>
-        <label class="form-check form-switch toolbar-switch"><input v-model="filters.hideUnknown" class="form-check-input" type="checkbox" /><span class="form-check-label">Hide new</span></label>
+        <fieldset v-for="group in filterGroups" :key="group.key" class="filter-segment">
+          <legend class="visually-hidden">{{ group.label }}</legend>
+          <div class="btn-group" role="group" :aria-label="group.label">
+            <template v-for="option in group.options" :key="option.value">
+              <input :id="`inventory-filter-${group.key}-${option.value}`" v-model="filters[group.key]" class="btn-check" type="radio" :name="`inventory-filter-${group.key}`" :value="option.value" autocomplete="off" />
+              <label class="btn btn-outline-secondary btn-sm" :for="`inventory-filter-${group.key}-${option.value}`">{{ option.label }}</label>
+            </template>
+          </div>
+        </fieldset>
         <button v-if="hasActiveFilters" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Clear filters" @click="resetFilters"><AppIcon name="filter-x" /></button>
         <div class="inventory-summary" aria-live="polite"><strong>{{ inventorySummary.devices }}</strong> devices <span aria-hidden="true">·</span> <span class="inventory-summary-online">{{ inventorySummary.online }} online</span> <span v-if="inventorySummary.newDevices > 0" aria-hidden="true">·</span> <span v-if="inventorySummary.newDevices > 0" class="inventory-summary-new">{{ inventorySummary.newDevices }} new</span></div>
       </div>
@@ -65,6 +71,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
+import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, normalizeInventoryFilters } from '../lib/inventoryFilters.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
@@ -83,10 +90,15 @@ const loading = ref(false);
 const error = ref('');
 const request = useAbortableTask();
 const now = useNow(30000);
-const defaults = { search: '', onlyDown: false, onlyImportant: false, hideUnknown: false };
-const filters = ref({ ...defaults, ...readStorage('fenping_filters', {}) });
+const filterGroups = Object.freeze([
+  Object.freeze({ key: 'status', label: 'Status filter', options: Object.freeze([{ value: 'down', label: 'Down' }, { value: 'all', label: 'All' }, { value: 'up', label: 'Up' }]) }),
+  Object.freeze({ key: 'importance', label: 'Importance filter', options: Object.freeze([{ value: 'normal', label: 'Normal' }, { value: 'all', label: 'All' }, { value: 'important', label: 'Important' }]) }),
+  Object.freeze({ key: 'newness', label: 'New-device filter', options: Object.freeze([{ value: 'known', label: 'Known' }, { value: 'all', label: 'All' }, { value: 'new', label: 'New' }]) })
+]);
+const filters = ref(normalizeInventoryFilters(readStorage('fenping_filters', inventoryFilterDefaults)));
+writeStorage('fenping_filters', filters.value);
 const collapsed = ref(new Set(readStorage('fenping_collapsed_categories', [])));
-const hasActiveFilters = computed(() => filters.value.search.trim() !== '' || filters.value.onlyDown || filters.value.onlyImportant || filters.value.hideUnknown);
+const hasActiveFilters = computed(() => inventoryFiltersActive(filters.value));
 const categorizedHosts = computed(() => {
   const rows = []; let category = null;
   for (const host of hosts.value) {
@@ -95,7 +107,7 @@ const categorizedHosts = computed(() => {
   }
   return rows;
 });
-const visibleHosts = computed(() => categorizedHosts.value.filter(matchesFilters));
+const visibleHosts = computed(() => categorizedHosts.value.filter((host) => inventoryHostMatches(host, filters.value)));
 const inventorySummary = computed(() => ({
   devices: hasActiveFilters.value ? `${visibleHosts.value.length}/${hosts.value.length}` : hosts.value.length,
   online: visibleHosts.value.filter(isOnline).length,
@@ -153,17 +165,10 @@ async function load() {
 
 function readStorage(name, fallback) { try { const value = localStorage.getItem(name); return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
 function writeStorage(name, value) { try { localStorage.setItem(name, JSON.stringify(value)); } catch {} }
-function resetFilters() { filters.value = { ...defaults }; }
+function resetFilters() { filters.value = { ...inventoryFilterDefaults }; }
 function categoryKey(host) { return `category-${host.category_ip || host.category}`; }
 function toggleCategory(key) { const next = new Set(collapsed.value); next.has(key) ? next.delete(key) : next.add(key); collapsed.value = next; }
 function toggleAllCategories() { collapsed.value = allCategoriesCollapsed.value ? new Set() : new Set(categoryKeys.value); }
-function matchesFilters(host) {
-  if (filters.value.onlyDown && host.status === 'Up') return false;
-  if (filters.value.onlyImportant && !toFlag(host.important)) return false;
-  if (filters.value.hideUnknown && toFlag(host.is_new)) return false;
-  const query = filters.value.search.trim().toLowerCase();
-  return query === '' || [host.name, host.ip, host.mac, host.vendor, host.status, host.scan?.status, host.scan?.state, host.scan?.mode].some((value) => String(value || '').toLowerCase().includes(query));
-}
 function hostKey(host) { return String(host?.ip || host?.id || host?.mac || ''); }
 function isScanningHost(host) { const key = hostKey(host); return key !== '' && props.scanningHosts.has(key); }
 function isScanRunning(host) { return isScanningHost(host) || scanIsActiveState(host?.scan?.state); }

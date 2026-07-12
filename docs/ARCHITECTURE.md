@@ -203,6 +203,8 @@ Important files:
 
 Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock for running durations and relative times. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
 
+Inventory filters use persisted three-way status, importance, and new-device choices. Stored checkbox-era preferences are normalized into the current string-valued filter document on load, while search and all filter dimensions combine with AND semantics.
+
 The IPAM route shows pool capacity, pending devices, and approved dynamic devices. Approve/unapprove actions are reversible; Reserve opens the existing fixed-host workflow with no address preselected. The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest lightweight or standard result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
 
 nginx serves real public files directly and falls back all other non-API paths to `index.html`.
@@ -265,6 +267,8 @@ bash -n boot.sh restart.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
+npm test
+npm run build
 php -l public/api.php api.php functions.php database.php cli.php ping.php hosts.php inventory.php ipam.php scans.php health.php backup.php tests/backup_format.php tests/database_migrations.php
 php -l routes/auth.php routes/system.php routes/hosts.php routes/ipam.php routes/netboot.php routes/scans.php
 php tests/database_migrations.php
