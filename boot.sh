@@ -18,6 +18,7 @@ install -d -o www-data -g www-data -m 2770 "$(dirname "$DATABASE_PATH")"
 install -d -o www-data -g www-data -m 0750 /run/fenping
 install -d -o www-data -g www-data -m 0700 /run/fenping/dnsmasq-pending
 install -d -o www-data -g www-data -m 0700 /run/fenping/sessions
+install -d -o www-data -g www-data -m 0750 /tmp/nginx
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/client-body
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/fastcgi
 install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock

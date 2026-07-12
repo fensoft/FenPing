@@ -223,13 +223,13 @@ docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fe
 
 Backups use the database-neutral version 1.6 JSON format (`db.json` inside the archive). Existing version 1.6 archives created by MariaDB-based FenPing releases remain restorable into SQLite. SQL-based backups from earlier versions are not supported.
 
-Legacy 1.2 SQL dumps can be converted offline, without a MariaDB/MySQL server:
+Legacy 1.2 SQL and nmap backups can be converted offline, without a MariaDB/MySQL server. The nmap archive must contain one latest result per host named `IP.xml`:
 
 ```bash
-python3 tools/convert-v1.2-backup.py legacy.sql.gz converted.tgz
+python3 tools/convert-v1.2-backup.py legacy.sql.tgz legacy.nmap.tgz
 ```
 
-The converter parses mysqldump data directly, migrates legacy leases to the current shape, and creates a restore-compatible archive with an empty netboot directory. Use `--force` to replace an existing target.
+The converter parses mysqldump and nmap XML data directly, migrates legacy leases to the current shape, imports each XML file as the host's latest deep scan, and creates a restore-compatible archive with an empty netboot directory. The output defaults to the SQL filename without `.sql` (for example, `legacy.tgz`). Use `--target converted.tgz` to select another destination and `--force` to replace an existing target.
 
 ## Admin Workflow
 

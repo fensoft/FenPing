@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import gzip
+import io
 import json
 import subprocess
 import sys
@@ -60,17 +61,54 @@ CREATE TABLE `vendors` (
 INSERT INTO `vendors` VALUES ('aa:bb:cc:dd:ee:ff','Example');
 """
 
+NMAP_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<nmaprun scanner="nmap" args="nmap -T2 -A -p- 192.168.1.20" start="1767225600" version="7.98">
+<scaninfo type="syn" protocol="tcp" services="1-65535"/>
+<host starttime="1767225601" endtime="1767225660">
+<status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="192.168.1.20" addrtype="ipv4"/>
+<address addr="AA:BB:CC:DD:EE:FF" addrtype="mac" vendor="Example Devices"/>
+<hostnames><hostname name="example-device" type="PTR"/></hostnames>
+<ports>
+<extraports state="closed" count="65534"><extrareasons reason="resets" count="65534"/></extraports>
+<port protocol="tcp" portid="443"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="https" product="Example HTTP" version="1.2" tunnel="ssl" method="probed" conf="10"><cpe>cpe:/a:example:http:1.2</cpe></service><script id="http-title" output="Example"><table key="titles"><elem>Example</elem></table></script></port>
+</ports>
+<os><osmatch name="Example OS" accuracy="100"><osclass type="router" vendor="Example" osfamily="Linux" osgen="6" accuracy="100"><cpe>cpe:/o:linux:linux_kernel:6</cpe></osclass></osmatch></os>
+<uptime seconds="3600" lastboot="Thu Jan  1 00:01:00 2026"/>
+<distance value="1"/>
+<hostscript><script id="uptime" output="one hour"/></hostscript>
+<trace proto="tcp" port="443"><hop ttl="1" ipaddr="192.168.1.20" host="example-device" rtt="0.42"/></trace>
+</host>
+<runstats><finished time="1767225661" elapsed="61.2"/><hosts up="1" down="0" total="1"/></runstats>
+</nmaprun>
+"""
+
 
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="fenping-converter-test-") as temporary:
         root = Path(temporary)
-        source = root / "legacy.sql.gz"
+        source = root / "legacy.sql.tgz"
+        nmap = root / "legacy.nmap.tgz"
         target = root / "converted.tgz"
-        with gzip.open(source, "wt", encoding="utf-8") as stream:
-            stream.write(SQL)
+        sql_bytes = gzip.compress(SQL.encode("utf-8"))
+        with tarfile.open(source, "w:gz") as archive:
+            member = tarfile.TarInfo("database/legacy.sql.gz")
+            member.size = len(sql_bytes)
+            archive.addfile(member, io.BytesIO(sql_bytes))
+        with tarfile.open(nmap, "w:gz") as archive:
+            member = tarfile.TarInfo("nmap/192.168.1.20.xml")
+            member.size = len(NMAP_XML)
+            archive.addfile(member, io.BytesIO(NMAP_XML))
 
         result = subprocess.run(
-            [sys.executable, str(CONVERTER), str(source), str(target)],
+            [
+                sys.executable,
+                str(CONVERTER),
+                str(source),
+                str(nmap),
+                "--target",
+                str(target),
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -85,9 +123,11 @@ def main() -> None:
 
         assert manifest["format"] == "fenping-backup"
         assert manifest["version"] == "1.6"
-        assert manifest["database"]["rows"] == 5
+        assert manifest["counts"]["scan_rows"] == 1
+        assert manifest["counts"]["scan_snapshot_rows"] == 1
         assert database["format"] == "fenping-db"
         assert database["conversion"]["offline"] is True
+        assert database["conversion"]["nmap_source"] == "legacy.nmap.tgz"
         assert "vendors" not in database["tables"]
         assert database["tables"]["ips"]["rows"][0][1] == "router's"
         assert database["tables"]["ips"]["rows"][0][5] == "207.246.121.77 8.8.8.8"
@@ -105,6 +145,29 @@ def main() -> None:
             "2026-01-01 02:00:00",
             1,
         ]]
+        assert database["tables"]["scan_snapshots"]["rows"][0][1:3] == [
+            "192.168.1.20",
+            "deep",
+        ]
+        scan = database["tables"]["scans"]["rows"][0]
+        assert scan[1:5] == ["192.168.1.20", "deep", "complete", "up"]
+        assert scan[8:10] == [1, 1]
+        port = database["tables"]["scan_snapshot_ports"]["rows"][0]
+        assert port[2:5] == ["tcp", 443, "open"]
+        assert port[7:12] == ["https", "Example HTTP", "1.2", None, "ssl"]
+        assert database["tables"]["scan_snapshot_os_matches"]["rows"][0][3:] == [
+            "Example OS",
+            100,
+        ]
+        assert len(database["tables"]["scan_snapshot_scripts"]["rows"]) == 2
+        assert len(database["tables"]["scan_snapshot_script_nodes"]["rows"]) == 2
+        assert database["tables"]["scan_snapshot_trace_hops"]["rows"][0][5:8] == [
+            1,
+            "192.168.1.20",
+            "example-device",
+        ]
+        table_rows = sum(len(table["rows"]) for table in database["tables"].values())
+        assert manifest["database"]["rows"] == table_rows
 
     print("legacy backup converter tests passed")
 
