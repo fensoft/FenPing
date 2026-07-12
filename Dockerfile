@@ -7,7 +7,8 @@ COPY frontend ./frontend
 RUN npm run build
 
 FROM alpine:3.23
-RUN apk add --no-cache \
+RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-nselib.php,readonly \
+    apk add --no-cache \
       ca-certificates \
       doas \
       dnsmasq \
@@ -29,7 +30,9 @@ RUN apk add --no-cache \
     && find /usr/share/nmap/scripts -maxdepth 1 -type f -name '*.nse' | while IFS= read -r script; do \
          grep -Fqx "${script##*/}" /tmp/nmap-default-scripts || rm -f "$script"; \
        done \
+    && php /tmp/prune-nmap-nselib.php /usr/share/nmap \
     && nmap --script-updatedb >/dev/null \
+    && nmap --script-help default >/dev/null \
     && rm -f /tmp/nmap-default-scripts /usr/share/nmap/nmap-mac-prefixes \
     && adduser -S -D -H -s /sbin/nologin -G www-data www-data
 RUN printf '%s\n' \
