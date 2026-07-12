@@ -266,5 +266,8 @@
   "cancelled": "تم الإلغاء",
   "open": "يفتح",
   "closed": "مغلق",
-  "filtered": "تمت تصفيته"
+  "filtered": "تمت تصفيته",
+  "Network": "الشبكة",
+  "DHCP": "DHCP",
+  "Not routed": "غير موجّه"
 }

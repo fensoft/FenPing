@@ -3,6 +3,14 @@
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="table-wrap">
       <div class="table-toolbar">
+        <label class="inventory-network-selector">
+          <span class="visually-hidden">{{ t('Network') }}</span>
+          <select v-model="selectedCidr" class="form-select form-select-sm" :aria-label="t('Network')" @change="selectNetwork">
+            <option v-for="item in networks" :key="item.cidr" :value="item.cidr">
+              {{ item.cidr }}{{ item.dhcp ? ` (${t('DHCP')})` : !item.routed ? ` (${t('Not routed')})` : '' }}
+            </option>
+          </select>
+        </label>
         <div class="input-icon filter-search"><span class="input-icon-addon"><AppIcon name="search" /></span><input v-model="filters.search" class="form-control form-control-sm" type="search" :placeholder="t('Search devices')" /></div>
         <fieldset v-for="group in filterGroups" :key="group.key" class="filter-segment">
           <legend class="visually-hidden">{{ group.label }}</legend>
@@ -21,7 +29,7 @@
         <thead><tr>
           <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :aria-label="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :disabled="categoryKeys.length === 0" @click="toggleAllCategories"><AppIcon :name="allCategoriesCollapsed ? 'plus' : 'minus'" /></button></th>
           <th scope="col">{{ t('Device') }}</th><th scope="col">IP</th><th scope="col" class="inventory-vendor-column">{{ t('Vendor') }}</th><th scope="col" class="inventory-activity-column">{{ t('Activity') }}</th><th scope="col" class="inventory-services-column">{{ t('Services') }}</th>
-          <th v-if="isAuthenticated" scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>{{ t('Actions') }}</span><button class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Add category')" :aria-label="t('Add category')" @click="$emit('add-category')"><AppIcon name="folder-plus" /></button></div></th>
+          <th v-if="isAuthenticated" scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>{{ t('Actions') }}</span><button v-if="isDhcpSelected" class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Add category')" :aria-label="t('Add category')" @click="$emit('add-category')"><AppIcon name="folder-plus" /></button></div></th>
         </tr></thead>
         <tbody>
           <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 7 : 6">{{ t('Loading') }}</td></tr>
@@ -32,8 +40,8 @@
               <td class="category-name" colspan="5"><span class="category-title">{{ row.name }}</span><span class="category-summary">{{ row.total }} {{ t(row.total === 1 ? 'device' : 'devices') }} <span aria-hidden="true">·</span> {{ row.online }} {{ t('online') }}</span></td>
               <td v-if="isAuthenticated" class="text-end category-actions">
                 <div class="inventory-actions">
-                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-info btn-sm icon-btn" type="button" :title="t('Rename category')" :aria-label="t('Rename category')" @click="$emit('rename-category', row)"><AppIcon name="pencil" /></button>
-                  <button v-if="isAuthenticated && row.categoryIp" class="btn btn-outline-danger btn-sm icon-btn" type="button" :title="t('Delete category')" :aria-label="t('Delete category')" @click="$emit('delete-category', row)"><AppIcon name="trash" /></button>
+                  <button v-if="isAuthenticated && isDhcpSelected && row.categoryIp" class="btn btn-outline-info btn-sm icon-btn" type="button" :title="t('Rename category')" :aria-label="t('Rename category')" @click="$emit('rename-category', row)"><AppIcon name="pencil" /></button>
+                  <button v-if="isAuthenticated && isDhcpSelected && row.categoryIp" class="btn btn-outline-danger btn-sm icon-btn" type="button" :title="t('Delete category')" :aria-label="t('Delete category')" @click="$emit('delete-category', row)"><AppIcon name="trash" /></button>
                 </div>
               </td>
             </template>
@@ -56,8 +64,8 @@
               <td v-if="isAuthenticated" class="text-end action-cell">
                 <div class="inventory-actions">
                   <button v-if="row.host.ip" class="btn btn-sm inventory-action-btn inventory-scan-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><AppIcon :name="isScanRunning(row.host) ? 'loader-2' : 'search'" /><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
-                  <button v-if="isAuthenticated && row.host.id" class="btn btn-outline-warning btn-sm icon-btn" type="button" :title="t('Edit host')" :aria-label="t('Edit host')" @click="$emit('open-edit', row.host)"><AppIcon name="edit" /></button>
-                  <button v-else-if="isAuthenticated && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Create host')" :aria-label="t('Create host')" @click="$emit('open-create', row.host)"><AppIcon name="plus" /></button>
+                  <button v-if="isAuthenticated && isDhcpSelected && row.host.id" class="btn btn-outline-warning btn-sm icon-btn" type="button" :title="t('Edit host')" :aria-label="t('Edit host')" @click="$emit('open-edit', row.host)"><AppIcon name="edit" /></button>
+                  <button v-else-if="isAuthenticated && isDhcpSelected && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Create host')" :aria-label="t('Create host')" @click="$emit('open-create', row.host)"><AppIcon name="plus" /></button>
                 </div>
               </td>
             </template>
@@ -72,6 +80,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, normalizeInventoryFilters } from '../lib/inventoryFilters.js';
+import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkUrl } from '../lib/inventoryNetworks.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useNow } from '../composables/useNow.js';
@@ -85,8 +94,11 @@ const props = defineProps({
   refreshQueued: Boolean,
   scanningHosts: { type: Object, required: true }
 });
-const emit = defineEmits(['add-category', 'delete-category', 'host-detail', 'network', 'open-create', 'open-edit', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
+const emit = defineEmits(['add-category', 'delete-category', 'host-detail', 'network', 'selected-network', 'open-create', 'open-edit', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
 const hosts = ref([]);
+const networks = ref([]);
+const selectedCidr = ref(readStorage('fenping_selected_network', ''));
+const dhcpCidr = ref('');
 const loading = ref(false);
 const error = ref('');
 const request = useAbortableTask();
@@ -100,6 +112,7 @@ const filters = ref(normalizeInventoryFilters(readStorage('fenping_filters', inv
 writeStorage('fenping_filters', filters.value);
 const collapsed = ref(new Set(readStorage('fenping_collapsed_categories', [])));
 const hasActiveFilters = computed(() => inventoryFiltersActive(filters.value));
+const isDhcpSelected = computed(() => inventoryNetworkIsDhcp(selectedCidr.value, dhcpCidr.value));
 const categorizedHosts = computed(() => {
   const rows = []; let category = null;
   for (const host of hosts.value) {
@@ -156,12 +169,30 @@ onMounted(load);
 async function load() {
   const signal = request.nextSignal(); loading.value = true; error.value = '';
   try {
-    const data = await apiJson('/api/inventory', { signal });
+    const data = await apiJson(inventoryNetworkUrl(selectedCidr.value), { signal });
     if (!request.isCurrent(signal)) return;
-    emit('network', data.network || ''); hosts.value = data.hosts || [];
+    networks.value = data.networks || [];
+    dhcpCidr.value = data.dhcp_network || '';
+    selectedCidr.value = inventoryNetworkFallback(networks.value, data.selected_network || selectedCidr.value, dhcpCidr.value);
+    writeStorage('fenping_selected_network', selectedCidr.value);
+    emit('network', data.network || '');
+    emit('selected-network', selectedCidr.value);
+    hosts.value = data.hosts || [];
   } catch (loadError) {
+    if (!isAbortError(loadError) && request.isCurrent(signal) && selectedCidr.value) {
+      selectedCidr.value = '';
+      writeStorage('fenping_selected_network', '');
+      loading.value = false;
+      return load();
+    }
     if (!isAbortError(loadError) && request.isCurrent(signal)) error.value = loadError.message;
   } finally { if (request.isCurrent(signal)) loading.value = false; }
+}
+
+function selectNetwork() {
+  writeStorage('fenping_selected_network', selectedCidr.value);
+  emit('selected-network', selectedCidr.value);
+  load();
 }
 
 function readStorage(name, fallback) { try { const value = localStorage.getItem(name); return value ? JSON.parse(value) : fallback; } catch { return fallback; } }

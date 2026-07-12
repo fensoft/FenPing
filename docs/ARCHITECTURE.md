@@ -71,9 +71,9 @@ The typed API kernel, router, request, authorization policies, and JSON/XML/file
 
 ```bash
 docker exec fenping php /opt/fenping/cli.php database
-docker exec fenping php /opt/fenping/cli.php ping [1-254|DEBUG]
+docker exec fenping php /opt/fenping/cli.php ping [--network IPv4/24] [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts
-docker exec fenping php /opt/fenping/cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4]
+docker exec fenping php /opt/fenping/cli.php inventory [--network IPv4/24] [--profile lightweight|standard|deep] [1-254|IPv4]
 docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
@@ -128,7 +128,7 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 
 The inventory and scan services under `src/Inventory/` and `src/Scan/` perform discovery and queued nmap scans:
 
-- Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and applies the automatic scan schedule.
+- Default mode selects one configured, routed `/24` using the persistent inventory round-robin cursor, discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and applies the automatic scan schedule. Ping uses an independent cursor. FenPing only reads the kernel route table and never adds a route.
 - Managed hosts store `scan_profile` and `scan_interval_hours`. New managed hosts default to Standard every 24 hours, while existing settings remain unchanged. Automatic discovery queues only hosts whose latest successful scan for that profile is due; `0` disables scheduled scans. Explicit API and CLI scans ignore cadence. Unmanaged hosts use Lightweight every 24 hours, with their first scan distributed across deterministic UTC hour slots to avoid an initial queue spike.
 - A lock-protected coordinator claims queued jobs and runs no more than four nmap child processes concurrently.
 - Only one job runs per IP at a time. Profiles are ordered lightweight, standard, then deep. A stronger request upgrades weaker queued work or waits behind weaker running work, while weaker requests never downgrade an active stronger job.
@@ -161,6 +161,10 @@ The DHCP services under `src/Dhcp/` generate:
 
 `boot.sh` renders `/etc/dnsmasq.d/fenping.conf` from `dnsmasq.conf.template`.
 The required `IFACE` environment variable selects the host network interface that dnsmasq binds to for DHCP, DNS, and TFTP. Startup fails if it is unset.
+
+`DHCP_NETWORK` is a required canonical `/24`. `EXTRA_NETWORKS` optionally lists comma-separated scan-only `/24` networks. FenPing reports whether a connected or static non-default route covers each extra network, but the status is informational and does not disable scanning. Default and partial routes do not count as explicit routes. dnsmasq generation and all DHCP/IPAM/host/category/netboot mutations remain restricted to `DHCP_NETWORK`.
+
+`INVENTORY_DOWN_RETENTION_DAYS` defaults to 7. Inventory omits unreserved hosts whose current Down status began more than that many days ago. Reserved hosts remain visible, and filtering never deletes status or scan history.
 
 `php cli.php hosts` always validates candidate files with `dnsmasq --test`, atomically replaces the generated files, and reloads/starts local dnsmasq. If replacement or reload fails, it restores the previous files.
 

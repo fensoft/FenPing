@@ -6,9 +6,13 @@ namespace FenPing\Backend;
 
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
+use FenPing\Network\NetworkManager;
+use FenPing\Network\RouteDetector;
+use FenPing\Process\NativeProcessRunner;
 
 final class Backend
 {
+    public readonly NetworkManager $networks;
     use ApiBehavior;
     use AuthBehavior;
     use BackupArchiveServiceBehavior;
@@ -51,6 +55,8 @@ final class Backend
     public function __construct(
         public readonly AppConfig $config,
         public readonly DatabaseManager $database,
+        ?NetworkManager $networks = null,
     ) {
+        $this->networks = $networks ?? new NetworkManager($config, new RouteDetector(new NativeProcessRunner()));
     }
 }

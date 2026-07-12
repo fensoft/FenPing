@@ -34,7 +34,8 @@ final class DatabaseIntegrationTest extends IntegrationTestCase
         $dueTime = $day + $this->app()->inventory()->initialUnmanagedHour($unmanagedIp) * 3600;
         $due = $this->app()->inventory()->scheduledTargets([$unmanagedIp], $dueTime);
         self::assertSame(ProfileCatalog::UNMANAGED_DEFAULT, $due[0]['profile']);
-        self::assertSame([], $this->app()->inventory()->scheduledTargets([$unmanagedIp], $dueTime + 3600));
+        self::assertSame(ProfileCatalog::UNMANAGED_DEFAULT, $this->app()->inventory()->scheduledTargets([$unmanagedIp], $dueTime + 3600)[0]['profile']);
+        self::assertSame([], $this->app()->inventory()->scheduledTargets([$unmanagedIp], $dueTime + 7200));
 
         $first = $this->app()->scanJobs()->enqueue('192.0.2.20', 'lightweight');
         $upgraded = $this->app()->scanJobs()->enqueue('192.0.2.20', 'deep');
@@ -68,5 +69,35 @@ final class DatabaseIntegrationTest extends IntegrationTestCase
         self::assertSame(1, (int) $pdo->query("SELECT COUNT(*) FROM stats WHERE ip='192.0.2.10'")->fetchColumn());
         $this->app()->backend()->savePingHosts([['ip' => '192.0.2.10', 'mac' => '00:11:22:33:44:55', 'status' => 'Down']]);
         self::assertSame(2, (int) $pdo->query("SELECT COUNT(*) FROM stats WHERE ip='192.0.2.10'")->fetchColumn());
+    }
+
+    public function testExtraNetworkInventoryKeepsIpOnlyHostsAndDhcpRenderIgnoresThem(): void
+    {
+        $pdo = $this->app()->database()->connection();
+        $this->app()->backend()->savePingHosts([
+            ['ip' => '198.51.100.10', 'mac' => '', 'status' => 'Up'],
+            ['ip' => '198.51.100.11', 'mac' => '', 'status' => 'Down'],
+            ['ip' => '198.51.100.12', 'mac' => '', 'status' => 'Down'],
+        ]);
+        $pdo->exec("INSERT INTO scans (ip, mode, state, status, date_begin, date_end) VALUES ('198.51.100.11', 'deep', 'complete', 'up', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+        $pdo->exec("INSERT INTO scans (ip, mode, state, status, date_begin, date_end) VALUES ('198.51.100.12', 'deep', 'complete', 'up', datetime('now', '-8 days'), datetime('now', '-8 days'))");
+        $this->app()->hosts()->create('198.51.100.20', '02:00:00:00:00:20');
+        $this->app()->backend()->savePingHosts([['ip' => '198.51.100.20', 'mac' => '02:00:00:00:00:20', 'status' => 'Down']]);
+        $pdo->exec("UPDATE ping SET date=datetime('now', '-8 days') WHERE ip IN ('198.51.100.12', '198.51.100.20')");
+        $pdo->exec("INSERT INTO range (ip_begin, type) VALUES ('198.51.100.1', 'Remote &amp; devices')");
+
+        $inventory = $this->app()->backend()->getInventory('198.51.100.0/24');
+        self::assertContains('198.51.100.10', array_column($inventory, 'ip'));
+        self::assertContains('198.51.100.11', array_column($inventory, 'ip'));
+        self::assertNotContains('198.51.100.12', array_column($inventory, 'ip'));
+        self::assertContains('198.51.100.20', array_column($inventory, 'ip'));
+        $downHost = array_values(array_filter($inventory, static fn(array $host): bool => $host['ip'] === '198.51.100.11'))[0];
+        self::assertSame('Down', $downHost['status']);
+        self::assertSame('Remote & devices', $inventory[0]['category']);
+        self::assertSame('198.51.100.1', $inventory[0]['category_ip']);
+
+        $rendered = $this->app()->backend()->buildDnsmasqFiles();
+        self::assertStringNotContainsString('198.51.100.20', implode("\n", $rendered));
+        self::assertSame(1, (int) $pdo->query("SELECT COUNT(*) FROM ips WHERE ip='198.51.100.20'")->fetchColumn());
     }
 }

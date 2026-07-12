@@ -52,7 +52,31 @@ public function runDnsmasqLeasesCommand(array $args): int {
 }
 
 public function runPingCommand($args) {
-  $arg = $args[0] ?? '';
+  $networkCidr = getenv('SCAN_NETWORK') ?: null;
+  $remaining = array();
+  for ($index = 0; $index < count($args); $index++) {
+    if ($args[$index] === '--network') {
+      $networkCidr = (string)($args[++$index] ?? '');
+      continue;
+    }
+    if (str_starts_with((string)$args[$index], '--network=')) {
+      $networkCidr = substr((string)$args[$index], strlen('--network='));
+      continue;
+    }
+    $remaining[] = $args[$index];
+  }
+  try {
+    if ($networkCidr !== null)
+      $selectedNetwork = $this->networks->forCidr($networkCidr);
+    elseif ($remaining === array())
+      $selectedNetwork = $this->networks->nextScheduled('ping');
+    else
+      $selectedNetwork = $this->config->dhcpNetwork;
+  } catch (Throwable $error) {
+    fwrite(STDERR, $error->getMessage() . PHP_EOL);
+    return 1;
+  }
+  $arg = $remaining[0] ?? '';
   $debugEnv = getenv('DEBUG');
   $debug = $arg !== '' || ($debugEnv !== false && $debugEnv !== '');
   $from = 1;
@@ -69,7 +93,7 @@ public function runPingCommand($args) {
 
   $targets = array();
   for ($i = $from; $i <= $to; $i++)
-    $targets[$i] = $this->config->network . "." . $i;
+    $targets[$i] = $selectedNetwork->host($i);
 
   $notifyAfterId = $this->discordNotificationsEnabled() ? $this->statsMaxId() : null;
   $hosts = $this->pingHosts($targets, $this->config->interface ?? '', array_filter(array_unique(array(

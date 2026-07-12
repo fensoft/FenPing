@@ -73,7 +73,26 @@ public function normalizeInventoryRow($data, $ip = null) {
   return $row;
 }
 
-public function getInventory() {
+public function inventoryHostIsVisible(array $data, bool $reserved, ?DateTimeImmutable $now = null): bool {
+  if ($reserved || strcasecmp(trim((string)($data['status'] ?? '')), 'Down') !== 0)
+    return true;
+
+  $date = trim((string)($data['date'] ?? ''));
+  if ($date === '')
+    return true;
+  try {
+    $downSince = new DateTimeImmutable($date, new DateTimeZone('UTC'));
+  } catch (Throwable) {
+    return true;
+  }
+  $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
+  $cutoff = $now->modify('-' . $this->config->inventoryDownRetentionDays . ' days');
+  return $downSince >= $cutoff;
+}
+
+public function getInventory(?string $networkCidr = null) {
+  $selectedNetwork = $this->networks->forCidr($networkCidr, false);
+  $dhcpNetwork = $selectedNetwork->cidr === $this->config->dhcpNetwork->cidr;
   $db = $this->getDb();
   $latestScans = $this->getLatestScans();
   $approvedDevices = array();
@@ -134,7 +153,7 @@ public function getInventory() {
   }
   $stmt = $db->prepare("select NULL as id, `client-hostname` as name, ip, `hardware-ethernet` as mac, 'Down' as status, last_seen as date, 0 as important from leases where active=1 and ends > datetime('now', '-7 days')");
   $stmt->execute();
-  while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
+  while ($dhcpNetwork && ($data = $stmt->fetch(PDO::FETCH_ASSOC))) {
     $ip = $data["ip"] ?? "";
     if ($ip == "")
       continue;
@@ -152,6 +171,24 @@ public function getInventory() {
       $ips[$this->config->applianceIp] = array("ip" => $this->config->applianceIp);
     $ips[$this->config->applianceIp]["status"] = "Up";
   }
+  if (!$dhcpNetwork) {
+    $pingByIp = array();
+    $pingStmt = $db->query("SELECT ip, mac, status, date FROM ping WHERE ip IS NOT NULL AND ip<>''");
+    while ($pingRow = $pingStmt->fetch(PDO::FETCH_ASSOC))
+      $pingByIp[(string)$pingRow['ip']] = $pingRow;
+
+    foreach ($latestScans as $scanIp => $scan) {
+      if (!$selectedNetwork->contains($scanIp) || ($scan['status'] ?? '') !== 'up' || isset($ips[$scanIp]))
+        continue;
+      $pingRow = $pingByIp[$scanIp] ?? array();
+      $ips[$scanIp] = array(
+        'ip' => $scanIp,
+        'mac' => (string)($pingRow['mac'] ?? ''),
+        'status' => (string)($pingRow['status'] ?? ''),
+        'date' => $pingRow['date'] ?? null
+      );
+    }
+  }
   $sorted_ips = array();
   foreach ($ips as $key => $data) {
     $data = $this->normalizeInventoryRow($data, $key);
@@ -167,13 +204,18 @@ public function getInventory() {
   $stats = $this->get_stats();
   foreach ($sorted_ips as $key => $data) {
     $ip = $data["ip"];
+    if (!$selectedNetwork->contains($ip))
+      continue;
     $mac = trim((string)$data["mac"]);
-    if ($mac == "")
+    if ($mac == "" && $dhcpNetwork)
       continue;
     $normalizedMac = strtolower($mac);
     $managed = isset($data['id']) && $data['id'] !== null;
-    $data['approved'] = $managed || isset($approvedDevices[$normalizedMac]) ? 1 : 0;
-    $data['is_new'] = !$managed && !isset($approvedDevices[$normalizedMac]) ? 1 : 0;
+    if (!$this->inventoryHostIsVisible($data, $managed))
+      continue;
+    $data['dhcp_managed'] = $dhcpNetwork ? 1 : 0;
+    $data['approved'] = $mac !== '' && ($managed || isset($approvedDevices[$normalizedMac])) ? 1 : 0;
+    $data['is_new'] = $mac !== '' && !$managed && !isset($approvedDevices[$normalizedMac]) ? 1 : 0;
     $categoryNetwork = substr($ip, 0, strrpos($ip, '.'));
     if ($categoryNetwork !== $old_network) {
       $old_network = $categoryNetwork;
@@ -196,11 +238,11 @@ public function getInventory() {
     $data2 = $stmt2->fetch();
     if ($data2 != false) {
       $old_ip = $ip;
-      $data["category"] = $data2["type"];
+      $data["category"] = html_entity_decode((string)$data2["type"], ENT_QUOTES | ENT_HTML5, 'UTF-8');
       $data["category_ip"] = $data2["ip_begin"];
     }
     $data["vendor"] = "";
-    $data["vendor"] = $this->getVendor($mac);
+    $data["vendor"] = $mac === '' ? '' : $this->getVendor($mac);
     if ($ip != "" && isset($stats[$ip])) {
       $data["stability"] = $stats[$ip];
       $data["stats"] = $stats[$ip]["label"];

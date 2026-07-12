@@ -28,8 +28,17 @@ public function runInventoryCommand(array $args): int {
       return $this->runInventoryJobCommand(array_slice($args, 1));
 
     $options = $this->inventoryOptions($args);
-    $targets = $this->inventoryTargets($options['args']);
-    $automatic = count($options['args']) === 0 && !$options['profile_explicit'];
+    $automatic = count($options['args']) === 0 && !$options['profile_explicit'] && $options['network'] === null;
+    if ($options['network'] !== null) {
+      $selectedNetwork = $this->networks->forCidr($options['network']);
+    } elseif ($automatic) {
+      $selectedNetwork = $this->networks->nextScheduled('inventory');
+    } elseif (($options['args'][0] ?? '') !== '' && !ctype_digit((string)$options['args'][0])) {
+      $selectedNetwork = $this->networks->forIp((string)$options['args'][0]);
+    } else {
+      $selectedNetwork = $this->config->dhcpNetwork;
+    }
+    $targets = $this->inventoryTargets($options['args'], $selectedNetwork);
 
     if (count($targets) === 0) {
       echo "discovered 0 hosts" . PHP_EOL;
@@ -143,6 +152,8 @@ public function runInventoryJobCommand(array $args): int {
   if ($job['state'] !== 'running')
     throw new RuntimeException("scan job $scanId is not running");
 
+  $this->networks->forIp($job['ip']);
+
   $result = $this->inventoryScan($job['ip'], $job['mode'], $scanId);
   echo $job['ip'] . ($result['saved'] ? ' saved' : ' skipped') . PHP_EOL;
   return 0;
@@ -151,6 +162,7 @@ public function runInventoryJobCommand(array $args): int {
 public function inventoryOptions(array $args): array {
   $profile = 'deep';
   $profileExplicit = false;
+  $network = null;
   $remaining = array();
 
   for ($index = 0; $index < count($args); $index++) {
@@ -179,17 +191,30 @@ public function inventoryOptions(array $args): array {
       $profileExplicit = true;
       continue;
     }
+    if ($arg === '--network') {
+      $network = (string)($args[++$index] ?? '');
+      if ($network === '')
+        throw new InvalidArgumentException($this->inventoryUsage());
+      continue;
+    }
+    if (str_starts_with($arg, '--network=')) {
+      $network = substr($arg, strlen('--network='));
+      if ($network === '')
+        throw new InvalidArgumentException($this->inventoryUsage());
+      continue;
+    }
     $remaining[] = $arg;
   }
 
   return array(
     'profile' => $profile,
     'profile_explicit' => $profileExplicit,
+    'network' => $network,
     'args' => $remaining
   );
 }
 
-public function inventoryTargets(array $args): array {
+public function inventoryTargets(array $args, \FenPing\Network\Ipv4Network $network): array {
   if (count($args) > 1)
     throw new InvalidArgumentException($this->inventoryUsage());
 
@@ -199,16 +224,17 @@ public function inventoryTargets(array $args): array {
       $octet = intval($target);
       if ($octet < 1 || $octet > 254)
         throw new InvalidArgumentException($this->inventoryUsage());
-      return array($this->config->network . '.' . $octet);
+      return array($network->host($octet));
     }
 
     if (filter_var($target, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
       throw new InvalidArgumentException($this->inventoryUsage());
 
+    $this->networks->forIp($target);
     return array($target);
   }
 
-  return $this->inventoryExcludeAutomaticTargets($this->inventoryDiscover($this->config->network . '.1-254'));
+  return $this->inventoryExcludeAutomaticTargets($this->inventoryDiscover($network->discoveryRange()));
 }
 
 public function inventoryExcludeAutomaticTargets(array $hosts): array {
@@ -271,7 +297,10 @@ public function inventoryScheduledTargets(array $hosts, ?int $now = null): array
 }
 
 public function inventoryInitialUnmanagedScanDue(string $ip, int $now): bool {
-  return (int)gmdate('G', $now) === $this->inventoryInitialUnmanagedScanHour($ip);
+  $hour = (int)gmdate('G', $now);
+  $slot = $this->inventoryInitialUnmanagedScanHour($ip);
+  $window = min(24, max(1, count($this->networks->configured())));
+  return (($hour - $slot + 24) % 24) < $window;
 }
 
 public function inventoryInitialUnmanagedScanHour(string $ip): int {

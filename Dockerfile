@@ -95,11 +95,11 @@ RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
     && mkdir -p /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc \
     && touch /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts /var/lib/misc/dnsmasq.leases \
     && printf '%s\n' \
-      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts' \
-      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts --apply-pending' \
-      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts --sync-locked' \
-      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php ping' \
-      'permit nopass setenv { DATABASE_PATH NETWORK IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php inventory --work' \
+      'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts' \
+      'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts --apply-pending' \
+      'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts --sync-locked' \
+      'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php ping' \
+      'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php inventory --work' \
       > /etc/doas.conf \
     && chmod 0400 /etc/doas.conf \
     && doas -C /etc/doas.conf

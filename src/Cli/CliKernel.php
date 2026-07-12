@@ -98,10 +98,10 @@ final class CliKernel
 
     private function usage(): int
     {
-        fwrite(STDERR, "Usage: php cli.php ping [1-254|DEBUG]" . PHP_EOL);
+        fwrite(STDERR, "Usage: php cli.php ping [--network IPv4/24] [1-254|DEBUG]" . PHP_EOL);
         fwrite(STDERR, "       php cli.php database" . PHP_EOL);
         fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4] (queue scans)" . PHP_EOL);
+        fwrite(STDERR, "       php cli.php inventory [--network IPv4/24] [--profile lightweight|standard|deep] [1-254|IPv4] (queue scans)" . PHP_EOL);
         fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);
         fwrite(STDERR, "       php cli.php scan-port-backfill" . PHP_EOL);
         fwrite(STDERR, "       php cli.php oui-refresh" . PHP_EOL);

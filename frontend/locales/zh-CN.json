@@ -266,5 +266,8 @@
   "cancelled": "已取消",
   "open": "开放",
   "closed": "关闭",
-  "filtered": "已过滤"
+  "filtered": "已过滤",
+  "Network": "网络",
+  "DHCP": "DHCP",
+  "Not routed": "未路由"
 }

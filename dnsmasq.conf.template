@@ -9,7 +9,7 @@ bind-interfaces
 listen-address=ENV_IP
 
 dhcp-authoritative
-dhcp-range=ENV_NETWORK.ENV_DHCP_DYNAMIC_BEGIN,ENV_NETWORK.ENV_DHCP_DYNAMIC_END,255.255.255.0,2h
+dhcp-range=ENV_DHCP_PREFIX.ENV_DHCP_DYNAMIC_BEGIN,ENV_DHCP_PREFIX.ENV_DHCP_DYNAMIC_END,255.255.255.0,2h
 dhcp-option=option:router,ENV_DHCP_DEFAULT_ROUTER
 dhcp-option=option:dns-server,ENV_IP
 dhcp-option=option:domain-name,lan

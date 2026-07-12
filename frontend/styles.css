@@ -233,6 +233,11 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   min-width: 11rem;
 }
 
+.inventory-network-selector {
+  flex: 0 0 auto;
+  min-width: 13rem;
+}
+
 .filter-segment {
   border: 0;
   flex: 0 0 auto;

@@ -103,7 +103,9 @@ Important `.env` values:
 | `FENPING_IMAGE` | Docker Hub repository pulled by `restart.sh`. Defaults to `fensoft/fenping`. |
 | `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.6`. |
 | `DATABASE_PATH` | SQLite file inside the container. Defaults to `/var/lib/fenping/database/fenping.sqlite3`. |
-| `NETWORK` | `/24` prefix, for example `10.10.10`. |
+| `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. This is the only network used by dnsmasq, IPAM, reservations, categories, and netboot assignments. |
+| `EXTRA_NETWORKS` | Optional comma-separated canonical `/24` networks available for scanning, for example `192.168.0.0/24,172.16.20.0/24`. FenPing reports whether an explicit route exists but never adds routes. |
+| `INVENTORY_DOWN_RETENTION_DAYS` | Days to keep an unreserved host visible after it changes to Down. Defaults to `7`; reserved hosts remain visible. |
 | `DHCP_DEFAULT_ROUTER` | Router handed out by DHCP. |
 | `DHCP_DYNAMIC_BEGIN` | First dynamic DHCP address, last octet only. |
 | `DHCP_DYNAMIC_END` | Last dynamic DHCP address, last octet only. |
@@ -112,6 +114,8 @@ Important `.env` values:
 | `DISCORD_WEBHOOK_URL` | Optional Discord webhook for host status, service changes, and restart notifications. |
 
 Managed hosts require a valid IPv4 address and six-octet MAC address. Host names are optional; when set, they must contain one DNS label using letters, numbers, and internal hyphens. Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
+
+Scheduled ping and discovery jobs independently rotate through one configured network per invocation. Inventory exposes a browser-persisted network selector and labels networks without an explicit route as “Not routed” without disabling them. Existing category ranges are displayed on extra networks, while devices and categories there remain read-only.
 
 ## Publishing Images
 

@@ -77,15 +77,19 @@ public function ensureDnsmasqDirs(): void {
 }
 
 public function validateDhcpHostCreate($ip, $mac): array {
+  $normalizedIp = $this->normalizeDhcpIp($ip, true);
+  $this->networks->assertDhcpIp($normalizedIp);
   return array(
-    'ip' => $this->normalizeDhcpIp($ip, true),
+    'ip' => $normalizedIp,
     'mac' => $this->normalizeDhcpMac($mac, true)
   );
 }
 
 public function validateDhcpHostEdit($ip, $mac, $name, $router, $dns): array {
+  $normalizedIp = $this->normalizeDhcpIp($ip, true);
+  $this->networks->assertDhcpIp($normalizedIp);
   return array(
-    'ip' => $this->normalizeDhcpIp($ip, true),
+    'ip' => $normalizedIp,
     'mac' => $this->normalizeDhcpMac($mac, true),
     'name' => $this->normalizeDhcpHostname($name, false),
     'router' => $this->normalizeDhcpRouter($router),
@@ -199,6 +203,8 @@ public function buildDnsmasqFiles(): array {
     $name = $this->normalizeDhcpHostname($row['name'] ?? '', false);
     $mac = $this->normalizeDhcpMac($row['mac'] ?? '', false);
     $ip = $this->normalizeDhcpIp($row['ip'] ?? '', true);
+    if (!$this->config->dhcpNetwork->contains($ip))
+      continue;
     $router = $this->normalizeDhcpRouter($row['router'] ?? '');
     $dns = $this->normalizeDhcpDnsServers($row['dns'] ?? '');
     $netboot = $this->normalizeDhcpBootFilename($row['netboot_filename'] ?? '');

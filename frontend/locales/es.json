@@ -266,5 +266,8 @@
   "cancelled": "cancelado",
   "open": "abierto",
   "closed": "cerrado",
-  "filtered": "filtrado"
+  "filtered": "filtrado",
+  "Network": "Red",
+  "DHCP": "DHCP",
+  "Not routed": "Sin ruta"
 }

@@ -9,6 +9,7 @@ use OutOfBoundsException;
 use PDO;
 use PDOException;
 use RuntimeException;
+use FenPing\Network\NetworkPolicyException;
 
 trait RoutesScansBehavior
 {
@@ -103,6 +104,11 @@ public function handleScanQuick(array $params): void {
 }
 
 public function queueScanResponse(string $ip, string $profile): void {
+  try {
+    $this->networks->forIp($ip);
+  } catch (NetworkPolicyException $error) {
+    $this->jsonError($error->httpStatus, $error->getMessage());
+  }
   $queued = $this->scanMetadataEnqueue($ip, $profile);
   $this->startScanWorkerAsync();
 

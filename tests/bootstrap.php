@@ -14,7 +14,10 @@ foreach ([$databasePath, $databasePath . '-wal', $databasePath . '-shm'] as $pat
 }
 putenv('DATABASE_PATH=' . $databasePath);
 putenv('FENPING_DATA_DIR=' . sys_get_temp_dir() . '/fenping-phpunit-data');
-putenv('NETWORK=192.0.2');
+putenv('NETWORK');
+putenv('DHCP_NETWORK=192.0.2.0/24');
+putenv('EXTRA_NETWORKS=198.51.100.0/24');
+putenv('INVENTORY_DOWN_RETENTION_DAYS');
 putenv('IP=192.0.2.100');
 putenv('DISCORD_WEBHOOK_URL=');
 

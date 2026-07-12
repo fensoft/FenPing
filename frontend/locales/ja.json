@@ -266,5 +266,8 @@
   "cancelled": "キャンセル",
   "open": "開ける",
   "closed": "閉まっている",
-  "filtered": "フィルタリングされた"
+  "filtered": "フィルタリングされた",
+  "Network": "ネットワーク",
+  "DHCP": "DHCP",
+  "Not routed": "ルーティングなし"
 }

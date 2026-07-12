@@ -38,6 +38,7 @@
             :refresh-queued="refreshQueued"
             :scanning-hosts="scanningHosts"
             @network="network = $event"
+            @selected-network="selectedNetwork = $event"
             @login="openLogin"
             @notice="setNotice"
             @ping-refresh="refreshScan"
@@ -100,6 +101,7 @@ const router = useRouter();
 const route = useRoute();
 const pageController = providePageController();
 const network = ref('');
+const selectedNetwork = ref(readSelectedNetwork());
 const notice = ref('');
 const globalError = ref('');
 const auth = ref({ authenticated: false, configured: false });
@@ -127,8 +129,6 @@ const refreshDisabled = computed(() => Boolean(controllerValue('disabled', false
 onMounted(async () => {
   applyTheme();
   await loadSession();
-  if (isAuthenticated.value && route.name === routeNames.inventory)
-    refreshScan();
 });
 
 onUnmounted(() => {
@@ -221,7 +221,10 @@ async function refreshScan() {
   scanning.value = true;
   globalError.value = '';
   try {
-    await apiJson('/api/ping/refresh', { method: 'POST' });
+    await apiJson('/api/ping/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ network: selectedNetwork.value || undefined })
+    });
     await reloadCurrentPage();
   } catch (error) {
     globalError.value = error.message;
@@ -430,4 +433,5 @@ function toggleDarkMode() { darkMode.value = !darkMode.value; writeCookie('fenpi
 function applyTheme() { const theme = darkMode.value ? 'dark' : 'light'; document.documentElement.dataset.bsTheme = theme; document.documentElement.style.colorScheme = theme; }
 function readCookie(name) { const prefix = `${name}=`; const match = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix)); return match ? match.slice(prefix.length) : ''; }
 function writeCookie(name, value) { document.cookie = `${name}=${value}; Max-Age=${60 * 60 * 24 * 365}; Path=/; SameSite=Lax`; }
+function readSelectedNetwork() { try { return JSON.parse(localStorage.getItem('fenping_selected_network') || '""') || ''; } catch { return ''; } }
 </script>

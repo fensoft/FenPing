@@ -10,6 +10,8 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Added
 
+- Added configured multi-network ping and inventory scanning with informational explicit-route detection, independent persistent round-robin scheduling, scan-only remote hosts, and an Inventory network selector that labels unrouted networks without disabling them.
+- Added read-only category grouping for extra networks, including restored legacy category ranges and HTML-entity decoding for their labels.
 - Added a single-file SQLite database at `data/database/fenping.sqlite3`, with automatic schema initialization and integrity checking at boot.
 - Added SQLite concurrency safeguards: WAL journaling, `synchronous=NORMAL`, a 30-second busy timeout, foreign-key enforcement, memory-backed temporary storage, `BEGIN IMMEDIATE` writer coordination, and a deterministic `ipv4_num()` function.
 - Added ordered, transactional SQLite migrations with strict version sequencing, automatic rollback, immutable numbered files, and upgrade-path tests.
@@ -28,6 +30,8 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Changed
 
+- Inventory now hides unreserved hosts after they have remained Down longer than `INVENTORY_DOWN_RETENTION_DAYS` (7 days by default), without deleting their history.
+- Replaced the legacy `NETWORK` prefix with required canonical `DHCP_NETWORK` and optional comma-separated `EXTRA_NETWORKS`; dnsmasq, IPAM, host/category mutations, and netboot assignments remain confined to the DHCP `/24`.
 - Changed new managed-host scan defaults from Deep hourly to Standard daily while preserving every existing host's configured schedule.
 - Changed unmanaged-device automatic scans from Deep hourly to Lightweight daily and staggered their first scans across deterministic UTC hour slots.
 - Replaced the MariaDB Compose service with SQLite and returned the deployment to a single application container.
@@ -54,6 +58,7 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Fixed
 
+- Fixed retained successful scans incorrectly marking scan-only extra-network hosts online when their latest ping state is Down.
 - Fixed SQLite queue claims so concurrent coordinators cannot claim duplicate jobs or exceed four running scans.
 - Fixed transactional DHCP coordination under SQLite by acquiring the database writer before applying validated dnsmasq candidates.
 - Fixed database backup consistency without relying on MariaDB table locks.
@@ -74,6 +79,7 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Upgrade notes
 
+- Replace `NETWORK=x.y.z` with `DHCP_NETWORK=x.y.z.0/24`. Optionally configure `EXTRA_NETWORKS` with comma-separated `/24` CIDRs. Add host routes when needed for actual reachability; FenPing reports route status but does not create routes or disable unrouted selections.
 - The first SQLite startup intentionally does not import the old MariaDB directory. `data/db` is left untouched for rollback or offline recovery.
 - A version 1.6 JSON backup produced by the MariaDB-based application can be restored into SQLite.
 - FenPing 1.2 SQL and nmap archives must first be converted with `tools/convert-v1.2-backup.py`.

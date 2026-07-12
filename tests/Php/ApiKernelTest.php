@@ -8,6 +8,11 @@ use FenPing\Api\Request;
 
 final class ApiKernelTest extends IntegrationTestCase
 {
+    protected function setUp(): void
+    {
+        $this->resetDatabase();
+    }
+
     public function testProfilesEndpointKeepsDirectJsonShape(): void
     {
         $response = $this->app()->api()->handle($this->request('GET', '/api/scans/profiles'));
@@ -25,6 +30,20 @@ final class ApiKernelTest extends IntegrationTestCase
 
         $method = $this->app()->api()->handle($this->request('PATCH', '/api/scans/profiles'));
         self::assertSame(405, $method->status);
+    }
+
+    public function testInventoryReturnsNetworkMetadataAndRejectsUnknownNetworks(): void
+    {
+        $response = $this->app()->api()->handle($this->request('GET', '/api/inventory'));
+        self::assertSame(200, $response->status);
+        $body = json_decode($response->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('192.0.2.0/24', $body['selected_network']);
+        self::assertSame('192.0.2.0/24', $body['dhcp_network']);
+        self::assertTrue($body['networks'][0]['selectable']);
+
+        $request = new Request('GET', '/api/inventory?network=203.0.113.0%2F24', ['network' => '203.0.113.0/24'], [], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/api/inventory'], []);
+        $unknown = $this->app()->api()->handle($request);
+        self::assertSame(400, $unknown->status);
     }
 
     private function request(string $method, string $uri): Request

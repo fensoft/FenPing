@@ -266,5 +266,8 @@
   "cancelled": "dibatalkan",
   "open": "membuka",
   "closed": "tertutup",
-  "filtered": "tersaring"
+  "filtered": "tersaring",
+  "Network": "Jaringan",
+  "DHCP": "DHCP",
+  "Not routed": "Tidak dirutekan"
 }

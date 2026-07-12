@@ -9,6 +9,7 @@ use OutOfBoundsException;
 use PDO;
 use PDOException;
 use RuntimeException;
+use FenPing\Network\NetworkPolicyException;
 
 trait RoutesHostsBehavior
 {
@@ -48,8 +49,13 @@ public function handleHostDetail(array $params): array {
 
 public function handleHostDetailByIp(array $params): array {
   $ip = $params['ip'];
+  try {
+    $network = $this->networks->forIp($ip, false);
+  } catch (NetworkPolicyException $error) {
+    $this->jsonError($error->httpStatus, $error->getMessage());
+  }
   $inventoryHost = null;
-  foreach ($this->getInventory() as $candidate) {
+  foreach ($this->getInventory($network->cidr) as $candidate) {
     if (($candidate['ip'] ?? '') === $ip) {
       $inventoryHost = $candidate;
       break;
@@ -117,6 +123,11 @@ public function handleHostEdit(array $params): array {
   $existing = $this->getId($id);
   if ($existing === false)
     $this->jsonError(404, 'host not found');
+  try {
+    $this->networks->assertDhcpIp((string)($existing['ip'] ?? ''));
+  } catch (NetworkPolicyException $error) {
+    $this->jsonError($error->httpStatus, $error->getMessage());
+  }
   $ip = $this->normalizeHostIp($body['ip'] ?? null);
   $netbootImageId = $this->normalizeNetbootImageId($body['netboot_image_id'] ?? null);
 
@@ -170,6 +181,14 @@ public function handleHostEdit(array $params): array {
 
 public function handleHostDelete(array $params): array {
   $id = $params['id'];
+  $existing = $this->getId($id);
+  if ($existing === false)
+    $this->jsonError(404, 'host not found');
+  try {
+    $this->networks->assertDhcpIp((string)($existing['ip'] ?? ''));
+  } catch (NetworkPolicyException $error) {
+    $this->jsonError($error->httpStatus, $error->getMessage());
+  }
 
   try {
     $change = $this->commitDhcpMutation(function () use ($id) {
@@ -193,12 +212,14 @@ public function handleHostConstraintError(PDOException $error): void {
 
 public function handleCategoryCreate(array $params): array {
   $body = $this->requestBody();
+  $this->assertCategoryDhcpNetwork($body['ip'] ?? '');
   $this->addCategory($body['ip'] ?? '', $body['name'] ?? '');
   return array('created' => true);
 }
 
 public function handleCategoryRename(array $params): array {
   $body = $this->requestBody();
+  $this->assertCategoryDhcpNetwork($body['ip'] ?? '');
   try {
     $updated = $this->renameCategory($body['ip'] ?? '', $body['name'] ?? '');
   } catch (InvalidArgumentException $e) {
@@ -213,8 +234,20 @@ public function handleCategoryRename(array $params): array {
 
 public function handleCategoryDelete(array $params): array {
   $body = $this->requestBody();
+  $this->assertCategoryDhcpNetwork($body['ip'] ?? '');
   $this->delCategory($body['ip'] ?? '');
   return array('deleted' => true);
+}
+
+public function assertCategoryDhcpNetwork($value): void {
+  $ip = $this->normalizeCategoryIp($value);
+  if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false)
+    $this->jsonError(400, 'invalid category ip');
+  try {
+    $this->networks->assertDhcpIp($ip);
+  } catch (NetworkPolicyException $error) {
+    $this->jsonError($error->httpStatus, $error->getMessage());
+  }
 }
 
 public function normalizeHostDetail(array $host): array {
@@ -227,6 +260,7 @@ public function normalizeHostDetail(array $host): array {
   $host['scan_interval_hours'] = $this->normalizeScanIntervalHours($host['scan_interval_hours'] ?? self::SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
   $host['mac'] = strtolower((string)($host['mac'] ?? ''));
   $host['vendor'] = $this->hostVendorFromCache($host['mac']);
+  $host['dhcp_managed'] = $this->config->dhcpNetwork->contains((string)($host['ip'] ?? '')) ? 1 : 0;
   $ping = $this->hostPingState($host);
   $host['status'] = $ping['status'];
   $host['date'] = $ping['date'];
@@ -248,6 +282,7 @@ public function normalizeUnmanagedHostDetail(array $host): array {
   $host['scan_profile'] = null;
   $host['scan_interval_hours'] = 0;
   $host['netboot_image_id'] = null;
+  $host['dhcp_managed'] = $this->config->dhcpNetwork->contains((string)($host['ip'] ?? '')) ? 1 : 0;
   return $host;
 }
 

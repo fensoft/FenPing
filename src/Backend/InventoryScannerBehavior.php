@@ -124,7 +124,7 @@ public function inventoryTimeoutLabel(int $seconds): string {
 }
 
 public function inventoryUsage(): string {
-  return "Usage: php cli.php inventory [--profile lightweight|standard|deep] [1-254|IPv4]\n"
+  return "Usage: php cli.php inventory [--network IPv4/24] [--profile lightweight|standard|deep] [1-254|IPv4]\n"
     . "       php cli.php inventory --quick [1-254|IPv4] (legacy lightweight alias)\n"
     . "       php cli.php inventory --work";
 }

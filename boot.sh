@@ -25,7 +25,11 @@ install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock
 su www-data -s /bin/sh -c 'exec php /opt/fenping/cli.php database'
 IP=${IP:-$(ip -4 a show dev "$IFACE" | awk '/inet/ {print $2}' | head -n1 | sed 's#/.*##')}
 export IP
-export NETWORK
+DHCP_ADDRESS=${DHCP_NETWORK%/24}
+DHCP_PREFIX=${DHCP_ADDRESS%.*}
+export DHCP_NETWORK
+export EXTRA_NETWORKS
+export DHCP_PREFIX
 export IFACE
 export PASSWORD
 export SECRET

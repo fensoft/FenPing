@@ -28,6 +28,8 @@ public function getIpam(): array {
   $approved = array();
 
   foreach ($observations as $mac => $observation) {
+    if (!$this->config->dhcpNetwork->contains((string)($observation['ip'] ?? '')))
+      continue;
     if (isset($managed[$mac]) || isset($approvals[$mac]))
       continue;
     $seen = strtotime((string)($observation['last_seen'] ?? ''));
@@ -37,6 +39,8 @@ public function getIpam(): array {
 
   foreach ($approvals as $mac => $approvedAt) {
     if (isset($managed[$mac]))
+      continue;
+    if (isset($observations[$mac]) && !$this->config->dhcpNetwork->contains((string)($observations[$mac]['ip'] ?? '')))
       continue;
     $approved[] = $this->ipamDeviceRow($mac, $observations[$mac] ?? array(), $approvedAt);
   }
@@ -56,7 +60,7 @@ public function ipamPoolConfig(): array {
   $prefix = trim((string)($this->config->network ?? ''));
   if (filter_var($prefix . '.0', FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
     || substr_count($prefix, '.') !== 2)
-    throw new RuntimeException('invalid NETWORK for DHCP pool');
+    throw new RuntimeException('invalid DHCP_NETWORK for DHCP pool');
 
   $beginText = trim((string)($this->config->dhcpDynamicBegin ?? ''));
   $endText = trim((string)($this->config->dhcpDynamicEnd ?? ''));
@@ -219,9 +223,11 @@ public function ipamApprovals(): array {
 
 public function ipamManagedMacs(): array {
   $managed = array();
-  $stmt = $this->db()->query("SELECT mac FROM ips WHERE mac IS NOT NULL AND mac<>''");
-  while ($mac = $stmt->fetchColumn()) {
-    $mac = $this->ipamStoredMac($mac);
+  $stmt = $this->db()->query("SELECT mac, ip FROM ips WHERE mac IS NOT NULL AND mac<>''");
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    if (!$this->config->dhcpNetwork->contains((string)($row['ip'] ?? '')))
+      continue;
+    $mac = $this->ipamStoredMac($row['mac']);
     if ($mac !== '')
       $managed[$mac] = true;
   }

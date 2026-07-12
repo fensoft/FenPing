@@ -9,7 +9,7 @@
       <div class="page-actions">
         <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" :title="t('Scan history')" :aria-label="t('Scan history')" :disabled="!viewScan" @click="$emit('open-scan', host.ip, viewScan?.id)"><AppIcon name="history" class="me-1" />{{ t('History') }}</button>
         <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('scan-host', host)"><AppIcon :name="isScanning ? 'loader-2' : 'search'" class="me-1" :class="{ 'is-spinning': isScanning }" />{{ t('Scan') }}</button>
-        <button v-if="isAuthenticated && host.id" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><AppIcon name="edit" class="me-1" />{{ t('Edit') }}</button>
+        <button v-if="isAuthenticated && host.id && host.dhcp_managed" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><AppIcon name="edit" class="me-1" />{{ t('Edit') }}</button>
       </div>
     </div>
     <div v-if="loading" class="table-wrap detail-empty"><div class="text-secondary text-center py-4">{{ t('Loading') }}</div></div>
