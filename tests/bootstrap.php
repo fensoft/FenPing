@@ -6,6 +6,9 @@ use FenPing\Application;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+$sessionPath = sys_get_temp_dir() . '/fenping-phpunit-sessions';
+if (!is_dir($sessionPath)) mkdir($sessionPath, 0700, true);
+ini_set('session.save_path', $sessionPath);
 $databasePath = sys_get_temp_dir() . '/fenping-phpunit.sqlite3';
 foreach ([$databasePath, $databasePath . '-wal', $databasePath . '-shm'] as $path) {
     if (is_file($path)) {

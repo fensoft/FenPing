@@ -2,8 +2,8 @@
 set -e
 
 MODE=${1:-}
-if [ "$MODE" != "" ] && [ "$MODE" != "demo" ] && [ "$MODE" != "dev" ]; then
-  echo "Usage: $0 [demo|dev]" >&2
+if [ "$MODE" != "" ] && [ "$MODE" != "demo" ] && [ "$MODE" != "dev" ] && [ "$MODE" != "rollback" ]; then
+  echo "Usage: $0 [demo|dev|rollback]" >&2
   exit 2
 fi
 
@@ -54,49 +54,5 @@ wait_for_fenping() {
   return 1
 }
 
-if [ "$MODE" = "demo" ]; then
-  build_demo_backup
-fi
-
-if [ "$MODE" = "dev" ]; then
-  export FENPING_VERSION=dev
-fi
-
-docker compose config --quiet
-if [ "$MODE" = "dev" ]; then
-  DEV_IMAGE=$(docker compose config | awk '
-    /^  app:$/ { in_app = 1; next }
-    in_app && /^    image:/ { sub(/^    image:[[:space:]]*/, ""); print; exit }
-    in_app && /^  [^ ]/ { exit }
-  ')
-  if [ -z "$DEV_IMAGE" ]; then
-    echo "could not resolve the app image from docker-compose.yml" >&2
-    exit 1
-  fi
-  echo "building $DEV_IMAGE for the current platform"
-  docker build --pull --tag "$DEV_IMAGE" .
-else
-  docker compose pull app
-fi
-
-if docker inspect fenping >/dev/null 2>&1; then
-  docker stop --time 30 fenping >/dev/null 2>&1 || true
-  docker rm fenping >/dev/null 2>&1 || true
-fi
-
-if [ "$MODE" = "dev" ]; then
-  docker compose up -d --remove-orphans --pull never
-else
-  docker compose up -d --remove-orphans
-fi
-docker compose ps
-wait_for_fenping
-
-if [ "$MODE" = "demo" ]; then
-  docker exec fenping sh -c 'install -m 0600 /dev/null /etc/crontabs/root'
-  BEFORE_DEMO="fenping-before-demo-$(date +%Y%m%d-%H%M%S).tgz"
-  docker exec fenping php /opt/fenping/cli.php backup "/var/lib/fenping/backups/$BEFORE_DEMO"
-  docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-demo.tgz
-  wait_for_fenping
-  echo "demo restored; previous state saved to data/backups/$BEFORE_DEMO"
-fi
+source "$(dirname "$0")/tools/restart-recovery.sh"
+run_restart "$MODE"

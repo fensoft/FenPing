@@ -10,6 +10,8 @@ echo "host networking enabled on $IFACE; leaving host routes, addresses and ipta
 cd /opt/fenping
 mkdir -p /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
 chown www-data:www-data /var/lib/fenping/netboot
+chgrp www-data /var/lib/fenping/backups
+chmod 0750 /var/lib/fenping/backups
 umask 0007
 FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
 DATABASE_PATH=${DATABASE_PATH:-/var/lib/fenping/database/fenping.sqlite3}
@@ -59,6 +61,8 @@ cat > /etc/crontabs/root <<'EOF'
 17 3 1 * * php /opt/fenping/cli.php oui-refresh
 */15 * * * * php /opt/fenping/cli.php ping
 * * * * * php /opt/fenping/cli.php dnsmasq-leases
+23 2 * * * php /opt/fenping/cli.php backup-maintenance daily
+41 4 * * 0 php /opt/fenping/cli.php backup-maintenance verify
 EOF
 chmod 0600 /etc/crontabs/root
 php /opt/fenping/cli.php discord-restart || true

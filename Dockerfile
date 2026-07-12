@@ -75,6 +75,7 @@ COPY src ./src
 COPY tests ./tests
 COPY migrations ./migrations
 COPY demo ./demo
+COPY cli.php ./
 COPY db.sql ./
 RUN composer install --no-interaction --prefer-dist --classmap-authoritative \
     && composer test

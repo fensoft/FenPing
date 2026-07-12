@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import BackupsPage from './pages/BackupsPage.vue';
 import HostDetailPage from './pages/HostDetailPage.vue';
 import IpamPage from './pages/IpamPage.vue';
 import InventoryPage from './pages/InventoryPage.vue';
@@ -9,6 +10,7 @@ import ServicesPage from './pages/ServicesPage.vue';
 
 export const routeNames = Object.freeze({
   inventory: 'inventory',
+  backups: 'backups',
   ipam: 'ipam',
   notify: 'notify',
   scans: 'scans',
@@ -22,6 +24,7 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: routeNames.inventory, component: InventoryPage },
+    { path: '/backups', name: routeNames.backups, component: BackupsPage },
     { path: '/ipam', name: routeNames.ipam, component: IpamPage },
     { path: '/notify', name: routeNames.notify, component: NotificationsPage },
     { path: '/scans', name: routeNames.scans, component: ScansPage },

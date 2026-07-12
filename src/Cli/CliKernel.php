@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FenPing\Cli;
 
 use FenPing\Backend\Backend;
+use FenPing\Backup\BackupService;
 use FenPing\Database\DatabaseManager;
 use Throwable;
 
@@ -14,7 +15,11 @@ final class CliKernel
     /** @var array<string, Command> */
     private array $commands;
 
-    public function __construct(private readonly Backend $backend, private readonly DatabaseManager $database)
+    public function __construct(
+        private readonly Backend $backend,
+        private readonly DatabaseManager $database,
+        private readonly BackupService $backups,
+    )
     {
         $this->commands = [
             'database' => new CallableCommand(fn(array $args): int => $this->database($args)),
@@ -42,8 +47,11 @@ final class CliKernel
             'discord-restart' => new CallableCommand(fn(array $args): int => $args === []
                 ? $this->backend->runDiscordRestartCommand()
                 : $this->usage()),
-            'backup' => new CallableCommand(fn(array $args): int => $this->backend->runBackupCommand($args)),
-            'restore' => new CallableCommand(fn(array $args): int => $this->backend->runRestoreCommand($args)),
+            'backup' => new CallableCommand(fn(array $args): int => $this->backups->backup($args)),
+            'restore' => new CallableCommand(fn(array $args): int => $this->backups->restore($args)),
+            'backup-verify' => new CallableCommand(fn(array $args): int => $this->backups->verify($args)),
+            'backup-maintenance' => new CallableCommand(fn(array $args): int => $this->backups->maintenance($args)),
+            'backup-restore-stage' => new CallableCommand(fn(array $args): int => $this->backups->restoreStage($args)),
         ];
     }
 
@@ -109,6 +117,8 @@ final class CliKernel
         fwrite(STDERR, "       php cli.php dnsmasq-leases" . PHP_EOL);
         fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
         fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
+        fwrite(STDERR, "       php cli.php backup-verify <backup.tgz>" . PHP_EOL);
+        fwrite(STDERR, "       php cli.php backup-maintenance <daily|verify>" . PHP_EOL);
         fwrite(STDERR, "       php cli.php restore <backup.tgz>" . PHP_EOL);
         return 2;
     }

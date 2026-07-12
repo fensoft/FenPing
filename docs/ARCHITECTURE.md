@@ -7,7 +7,7 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 ## High-Level Flow
 
 1. `restart.sh` creates persistent directories under `data/`.
-2. `restart.sh` validates the Compose model and pulls the configured published FenPing image before stopping the current app.
+2. restart.sh records the running image digest, pulls or builds and pins the target image, then creates and restore-tests a pre-upgrade archive before stopping the current app. Upgrade outcomes are journaled for rollback.
 3. Compose starts `fenping` with host networking, reduced capabilities, and persistent mounts including `data/database`.
 4. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, downloads the IEEE vendor registries, and synchronizes changed assignments into SQLite.
 5. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
@@ -79,6 +79,8 @@ docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
+docker exec fenping php /opt/fenping/cli.php backup-verify <backup.tgz>
+docker exec fenping php /opt/fenping/cli.php backup-maintenance <daily|verify>
 docker exec fenping php /opt/fenping/cli.php restore <backup.tgz>
 docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
@@ -237,6 +239,8 @@ The 1.x JSON contract is forward-compatible with future FenPing backups: later 1
 - Queue worker every minute; its internal lock prevents duplicate coordinators.
 - IEEE vendor registry refresh on the first day of each month at 03:17.
 - dnsmasq lease import every minute.
+- Verified managed backup every day at 02:23 UTC.
+- Round-robin restore test every Sunday at 04:41 UTC.
 
 Locks use `flock` under `/tmp` to prevent overlapping jobs.
 

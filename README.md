@@ -177,6 +177,8 @@ docker exec fenping php /opt/fenping/cli.php scan-port-backfill
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup
+docker exec fenping php /opt/fenping/cli.php backup-verify /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
+docker exec fenping php /opt/fenping/cli.php backup-maintenance verify
 docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
@@ -188,6 +190,8 @@ Cron inside the container runs:
 - the inventory worker runs queued scans with a maximum concurrency of four.
 - the local IEEE OUI registry is refreshed monthly on the first day at 03:17.
 - dnsmasq lease import every minute.
+- a verified managed backup every day at 02:23 UTC.
+- a round-robin restore test of retained backups every Sunday at 04:41 UTC.
 
 The image does not embed a vendor registry. At startup, and again through a monthly background job, FenPing downloads and validates the complete public MA-L, MA-M, MA-S, and historical IAB CSV files from the [IEEE Registration Authority public listings](https://standards.ieee.org/products-programs/regauth/). A successful refresh atomically replaces `data/state/ieee-oui.json` and transactionally updates the SQL table only when assignments changed. Inventory requests query this local prefix index; individual LAN MAC addresses are never sent outside the appliance. If a later download or SQL import fails, FenPing retains the previous registry and SQL data.
 
@@ -214,6 +218,14 @@ The versioned `demo/` source contains a synthetic network with inventory, IPAM, 
 ```
 
 The generated archive is `data/backups/fenping-demo.tgz`. Before restoring it, the command creates a timestamped `data/backups/fenping-before-demo-*.tgz` containing the current database and netboot files. Demo timestamps shift to the restore time so recent activity remains suitable for screenshots.
+
+Normal, development, and demo restarts create a pre-upgrade archive while the old container is still running. The archive is checksum-validated and fully restored into temporary database and netboot paths with the exact target image before the old container is stopped. The previous image ID, repository digest, local rollback tag, archive checksum, and outcome are journaled under data/state/upgrades.
+
+If the replacement fails its health check, it remains available for inspection. Run ./restart.sh rollback to restore the newest checkpoint. Rollback first creates and verifies a rescue archive of the post-upgrade state, then restores the pre-upgrade archive with the recorded previous image. The configured image in .env is not changed.
+
+Managed backups retain seven daily recovery points, four ISO-week recovery points, and two pre-upgrade checkpoints. Manual, imported, demo, and rollback-rescue archives are never pruned. Verification status and authenticated downloads are available on the Backups page.
+
+By default data/backups and data/database are on the same filesystem, so FenPing shows a warning. Mount data/backups on separate storage or regularly download/copy archives to another device; FenPing cannot detect copies stored outside the appliance.
 
 Create a full backup archive before upgrades:
 

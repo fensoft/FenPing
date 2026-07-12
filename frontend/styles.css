@@ -1,3 +1,7 @@
+.backup-table { min-width: 980px; }
+.backup-checksum { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backup-table td { vertical-align: middle; }
+
 :root {
   color-scheme: light;
 }

@@ -6,6 +6,7 @@
 import { computed } from 'vue';
 import {
   IconAddressBook,
+  IconArchive,
   IconAlertTriangle,
   IconAntennaBars5,
   IconArrowBackUp,
@@ -20,6 +21,7 @@ import {
   IconClock,
   IconClockExclamation,
   IconDeviceFloppy,
+  IconDownload,
   IconEdit,
   IconExternalLink,
   IconFileSearch,
@@ -55,6 +57,7 @@ const props = defineProps({ name: { type: String, required: true } });
 
 const icons = Object.freeze({
   'address-book': IconAddressBook,
+  archive: IconArchive,
   'alert-triangle': IconAlertTriangle,
   'antenna-bars-5': IconAntennaBars5,
   'arrow-back-up': IconArrowBackUp,
@@ -69,6 +72,7 @@ const icons = Object.freeze({
   clock: IconClock,
   'clock-exclamation': IconClockExclamation,
   'device-floppy': IconDeviceFloppy,
+  download: IconDownload,
   edit: IconEdit,
   'external-link': IconExternalLink,
   'file-search': IconFileSearch,

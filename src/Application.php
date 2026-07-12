@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FenPing;
 
 use FenPing\Api\ApiKernel;
+use FenPing\Api\Controller\BackupController;
 use FenPing\Api\Controller\AuthController;
 use FenPing\Api\Controller\HostController;
 use FenPing\Api\Controller\IpamController;
@@ -14,6 +15,7 @@ use FenPing\Api\Controller\ScanController;
 use FenPing\Api\Controller\SystemController;
 use FenPing\Auth\AuthService;
 use FenPing\Backend\Backend;
+use FenPing\Backup\BackupService;
 use FenPing\Cli\CliKernel;
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
@@ -55,6 +57,7 @@ final class Application
     private readonly NotificationService $notifications;
     private readonly NetbootImageService $netboot;
     private readonly IpamService $ipam;
+    private readonly BackupService $backups;
 
     private function __construct(private readonly AppConfig $config)
     {
@@ -74,6 +77,7 @@ final class Application
         $this->notifications = new NotificationService($this->backend, $this->database, $this->vendors);
         $this->netboot = new NetbootImageService($this->backend, $config, $this->database);
         $this->ipam = new IpamService($this->backend, $config, $this->database, $this->vendors);
+        $this->backups = new BackupService($this->backend, $config, $this->database);
     }
 
     public static function fromEnvironment(string $projectDir): self
@@ -119,10 +123,11 @@ final class Application
             ),
             new IpamController($this->backend, $this->ipam, $validator, $adapter),
             new NetbootController($this->backend, $this->netboot, $mutations, $adapter),
+            new BackupController($this->backups),
             new ScanController($this->backend, $this->scanJobs, $this->profiles, $results, $this->vendors, $adapter),
         ]);
     }
-    public function cli(): CliKernel { return new CliKernel($this->backend, $this->database); }
+    public function cli(): CliKernel { return new CliKernel($this->backend, $this->database, $this->backups); }
     public function config(): AppConfig { return $this->config; }
     public function database(): DatabaseManager { return $this->database; }
     public function backend(): Backend { return $this->backend; }
@@ -142,4 +147,5 @@ final class Application
     public function notifications(): NotificationService { return $this->notifications; }
     public function netboot(): NetbootImageService { return $this->netboot; }
     public function ipam(): IpamService { return $this->ipam; }
+    public function backups(): BackupService { return $this->backups; }
 }
