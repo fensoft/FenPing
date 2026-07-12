@@ -24,6 +24,7 @@ Development after the `1.5` tag through 2026-07-12.
 - Added category bars with device and online counts.
 - Added responsive inventory metadata that combines vendor, MAC address, activity, and services on narrow screens.
 - Added persistent segmented tri-state Inventory filters for status, importance, and new-device state, including compatibility with saved checkbox-era preferences.
+- Added ten browser-interface languages—English, Simplified Chinese, Spanish, French, Arabic, Brazilian Portuguese, Indonesian, Japanese, Russian, and German—with an extensible Auto/manual sidebar selector, automatic browser-language detection, persisted preferences, Arabic RTL layout, and English fallback text.
 
 ### Changed
 

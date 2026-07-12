@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 export function formatMac(mac) {
   return String(mac || '').toLowerCase();
 }
@@ -64,7 +66,7 @@ export const formatNotifyDate = formatServerDate;
 export function formatRelativeAge(value, now = Date.now()) {
   const timestamp = Number(value || 0);
   if (!timestamp) return '';
-  return `${formatDuration(Math.max(0, Math.floor(now / 1000) - timestamp))} ago`;
+  return t('{duration} ago', { duration: formatDuration(Math.max(0, Math.floor(now / 1000) - timestamp)) });
 }
 
 export function formatPercent(value) {
@@ -91,12 +93,20 @@ export function statusIcon(status) {
   return 'question-mark';
 }
 
+export function statusLabel(status) {
+  if (status === 'Up') return t('Up');
+  if (status === 'Down') return t('Down');
+  if (status === 'arp') return 'ARP';
+  if (status === 'arp-down') return t('ARP down');
+  return status || t('Unknown');
+}
+
 export function statusTitle(status) {
-  if (status === 'Up') return 'host up';
-  if (status === 'Down') return 'host down';
-  if (status === 'arp') return 'arp up / ip down';
-  if (status === 'arp-down') return 'host down, in arp cache';
-  return status || 'unknown';
+  if (status === 'Up') return t('host up');
+  if (status === 'Down') return t('host down');
+  if (status === 'arp') return t('arp up / ip down');
+  if (status === 'arp-down') return t('host down, in arp cache');
+  return status || t('unknown status');
 }
 
 export function historyRowClass(item) {
@@ -121,11 +131,19 @@ export function scanRunStateIcon(state) {
   return 'point';
 }
 
+export function scanRunStateLabel(state) {
+  return state ? t(state) : '-';
+}
+
 export function scanStateClass(state) {
   if (state === 'open') return 'scan-state scan-state-open';
   if (state === 'closed') return 'scan-state scan-state-closed';
   if (state === 'filtered') return 'scan-state scan-state-filtered';
   return 'scan-state';
+}
+
+export function scanStateLabel(state) {
+  return state ? t(state) : '-';
 }
 
 export function activeScanDuration(scan, now = Date.now()) {

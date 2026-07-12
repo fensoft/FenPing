@@ -2,26 +2,26 @@
   <section>
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="page-refresh-header">
-      <div><h2>Services</h2><div class="text-secondary small">Open services from each host's latest effective scan</div></div>
-      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />Refresh</button>
+      <div><h2>{{ t('Services') }}</h2><div class="text-secondary small">{{ t("Open services from each host's latest effective scan") }}</div></div>
+      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />{{ t('Refresh') }}</button>
     </div>
 
     <div class="notify-summary">
-      <div class="notify-summary-item"><span>Computers</span><strong>{{ summary.hosts || 0 }}</strong></div>
-      <div class="notify-summary-item"><span>Services</span><strong>{{ summary.services || 0 }}</strong></div>
-      <div class="notify-summary-item"><span>Visible</span><strong>{{ visibleServices.length }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('Computers') }}</span><strong>{{ summary.hosts || 0 }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('Services') }}</span><strong>{{ summary.services || 0 }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('Visible') }}</span><strong>{{ visibleServices.length }}</strong></div>
     </div>
 
     <div class="table-wrap">
       <div class="table-toolbar">
-        <div class="input-icon filter-search"><span class="input-icon-addon"><AppIcon name="search" /></span><input v-model="search" class="form-control form-control-sm" type="search" placeholder="Search host, port, service, or version" /></div>
-        <button v-if="search" class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Clear search" @click="search = ''"><AppIcon name="x" /></button>
+        <div class="input-icon filter-search"><span class="input-icon-addon"><AppIcon name="search" /></span><input v-model="search" class="form-control form-control-sm" type="search" :placeholder="t('Search host, port, service, or version')" /></div>
+        <button v-if="search" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Clear search')" @click="search = ''"><AppIcon name="x" /></button>
       </div>
       <table class="table table-sm services-table">
-        <thead><tr><th>Computer</th><th>IP</th><th>Port</th><th>Service</th><th>Version</th><th>Source</th><th>Scanned</th><th class="text-end">Actions</th></tr></thead>
+        <thead><tr><th>{{ t('Computer') }}</th><th>IP</th><th>{{ t('Port') }}</th><th>{{ t('Service') }}</th><th>{{ t('Version') }}</th><th>{{ t('Source') }}</th><th>{{ t('Scanned') }}</th><th class="text-end">{{ t('Actions') }}</th></tr></thead>
         <tbody>
-          <tr v-if="loading && services.length === 0"><td class="text-secondary text-center py-4" colspan="8">Loading</td></tr>
-          <tr v-else-if="!loading && visibleServices.length === 0"><td class="text-secondary text-center py-4" colspan="8">{{ search ? 'No matching services' : 'No open services found' }}</td></tr>
+          <tr v-if="loading && services.length === 0"><td class="text-secondary text-center py-4" colspan="8">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && visibleServices.length === 0"><td class="text-secondary text-center py-4" colspan="8">{{ t(search ? 'No matching services' : 'No open services found') }}</td></tr>
           <tr v-for="row in visibleServices" :key="`${row.ip}-${row.protocol}-${row.port}`">
             <td class="services-host">
               <template v-if="row.first_for_host">
@@ -33,13 +33,13 @@
             </td>
             <td class="font-monospace text-nowrap">{{ row.first_for_host ? row.ip : '' }}</td>
             <td class="font-monospace text-nowrap"><strong>{{ row.port }}</strong>/{{ row.protocol }}</td>
-            <td><strong>{{ row.service || 'unknown' }}</strong></td>
+            <td><strong>{{ row.service || t('unknown') }}</strong></td>
             <td class="services-version" :title="row.version || ''">{{ row.version || '-' }}</td>
             <td><span class="badge" :class="scanProfileBadgeClass(row.source || row.scan_mode)">{{ scanProfileLabel(row.source || row.scan_mode) }}</span></td>
-            <td class="text-nowrap"><span>{{ formatScanDate(row.scan_date) }}</span><small v-if="row.merged">{{ scanProfileLabel(row.scan_mode) }} + Deep</small></td>
+            <td class="text-nowrap"><span>{{ formatScanDate(row.scan_date) }}</span><small v-if="row.merged">{{ scanProfileLabel(row.scan_mode) }} + {{ t('Deep') }}</small></td>
             <td class="text-end action-cell">
-              <a v-if="serviceUrl(row)" class="btn btn-outline-primary btn-sm icon-btn" :href="serviceUrl(row)" target="_blank" rel="noopener noreferrer" title="Open web service"><AppIcon name="external-link" /></a>
-              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" @click="$emit('open-scan', row.ip, row.scan_id)"><AppIcon name="file-search" /></button>
+              <a v-if="serviceUrl(row)" class="btn btn-outline-primary btn-sm icon-btn" :href="serviceUrl(row)" target="_blank" rel="noopener noreferrer" :title="t('Open web service')"><AppIcon name="external-link" /></a>
+              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('View scan')" @click="$emit('open-scan', row.ip, row.scan_id)"><AppIcon name="file-search" /></button>
             </td>
           </tr>
         </tbody>
@@ -51,6 +51,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
+import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatMac, formatScanDate } from '../lib/formatters.js';
@@ -74,7 +75,7 @@ const visibleServices = computed(() => {
   }));
 });
 
-usePageController({ loading, label: computed(() => loading.value ? 'Loading' : 'Services'), title: 'Refresh services', disabled: false, refresh: load });
+usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Services')), title: computed(() => t('Refresh services')), disabled: false, refresh: load });
 onMounted(load);
 
 async function load() {
@@ -95,7 +96,7 @@ async function load() {
 }
 
 function hostName(row) {
-  return row?.name || row?.ip || formatMac(row?.mac) || 'Unknown';
+  return row?.name || row?.ip || formatMac(row?.mac) || t('Unknown');
 }
 
 function serviceUrl(row) {

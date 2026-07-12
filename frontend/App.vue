@@ -6,21 +6,22 @@
           <img class="app-brand-icon" :src="'/icon.webp'" alt="FenPing" />
           <img class="app-brand-favicon" :src="'/favicon-32x32.png'" alt="FenPing" />
         </div>
-        <nav class="app-nav" aria-label="Primary navigation">
+        <nav class="app-nav" :aria-label="t('Primary navigation')">
           <div class="app-nav-group">
-            <button class="app-nav-link" :class="{ active: isInventoryRoute }" type="button" title="Inventory" :aria-current="isInventoryRoute ? 'page' : undefined" @click="go('/')"><AppIcon name="list-details" /><span>Inventory</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.services }" type="button" title="Services" :aria-current="route.name === routeNames.services ? 'page' : undefined" @click="go('/services')"><AppIcon name="world-www" /><span>Services</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.notify }" type="button" title="Notify" :aria-current="route.name === routeNames.notify ? 'page' : undefined" @click="go('/notify')"><AppIcon name="bell" /><span>Notify</span></button>
+            <button class="app-nav-link" :class="{ active: isInventoryRoute }" type="button" :title="t('Inventory')" :aria-current="isInventoryRoute ? 'page' : undefined" @click="go('/')"><AppIcon name="list-details" /><span>{{ t('Inventory') }}</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.services }" type="button" :title="t('Services')" :aria-current="route.name === routeNames.services ? 'page' : undefined" @click="go('/services')"><AppIcon name="world-www" /><span>{{ t('Services') }}</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.notify }" type="button" :title="t('Notify')" :aria-current="route.name === routeNames.notify ? 'page' : undefined" @click="go('/notify')"><AppIcon name="bell" /><span>{{ t('Notify') }}</span></button>
           </div>
           <div class="app-nav-group app-nav-bottom">
             <button class="app-nav-link" :class="{ active: route.name === routeNames.ipam }" type="button" title="IPAM" :aria-current="route.name === routeNames.ipam ? 'page' : undefined" @click="go('/ipam')"><AppIcon name="address-book" /><span>IPAM</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" :aria-current="route.name === routeNames.scans ? 'page' : undefined" @click="go('/scans')"><AppIcon name="radar" /><span>Scans</span></button>
-            <button class="app-nav-link" :class="{ active: route.name === routeNames.netboot }" type="button" title="Netboot images" :aria-current="route.name === routeNames.netboot ? 'page' : undefined" @click="go('/netboot-images')"><AppIcon name="server" /><span>Netboot</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.scans }" type="button" :title="t('Scans')" :aria-current="route.name === routeNames.scans ? 'page' : undefined" @click="go('/scans')"><AppIcon name="radar" /><span>{{ t('Scans') }}</span></button>
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.netboot }" type="button" :title="t('Netboot images')" :aria-current="route.name === routeNames.netboot ? 'page' : undefined" @click="go('/netboot-images')"><AppIcon name="server" /><span>{{ t('Netboot') }}</span></button>
           </div>
-          <div class="app-sidebar-tools" role="group" aria-label="Application controls">
-            <button class="app-nav-link app-sidebar-tool refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :aria-label="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><AppIcon name="refresh" /><span class="app-sidebar-tool-label">Refresh</span><small class="app-sidebar-refresh-state" aria-live="polite">{{ refreshLabel }}</small></button>
-            <button class="app-nav-link app-sidebar-tool" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" :aria-label="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><AppIcon :name="darkMode ? 'sun' : 'moon'" /><span class="app-sidebar-tool-label">{{ darkMode ? 'Light mode' : 'Dark mode' }}</span></button>
-            <button class="app-nav-link app-sidebar-tool" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" :aria-label="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><AppIcon :name="isAuthenticated ? 'logout' : 'login'" /><span class="app-sidebar-tool-label">{{ isAuthenticated ? 'Logout' : 'Login' }}</span><span class="badge app-sidebar-auth-state" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span></button>
+          <div class="app-sidebar-tools" role="group" :aria-label="t('Application controls')">
+            <button class="app-nav-link app-sidebar-tool refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :aria-label="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><AppIcon name="refresh" /><span class="app-sidebar-tool-label">{{ t('Refresh') }}</span><small class="app-sidebar-refresh-state" aria-live="polite">{{ refreshLabel }}</small></button>
+            <label class="app-nav-link app-sidebar-tool app-language-tool" :class="{ 'app-language-tool-red': ['ru', 'zh-CN'].includes(locale) }" :title="t('Change language')"><AppIcon name="language" /><select class="form-select form-select-sm app-language-select" :value="localePreference" :aria-label="t('Language')" @change="selectLocale"><option value="auto">{{ t('Auto') }} (auto)</option><option v-for="item in supportedLocales" :key="item.id" :value="item.id">{{ item.label }}</option></select></label>
+            <button class="app-nav-link app-sidebar-tool" type="button" :title="t(darkMode ? 'Light mode' : 'Dark mode')" :aria-label="t(darkMode ? 'Light mode' : 'Dark mode')" @click="toggleDarkMode"><AppIcon :name="darkMode ? 'sun' : 'moon'" /><span class="app-sidebar-tool-label">{{ t(darkMode ? 'Light mode' : 'Dark mode') }}</span></button>
+            <button class="app-nav-link app-sidebar-tool" type="button" :disabled="authLoading" :title="t(isAuthenticated ? 'Logout' : 'Login')" :aria-label="t(isAuthenticated ? 'Logout' : 'Login')" @click="isAuthenticated ? logout() : openLogin()"><AppIcon :name="isAuthenticated ? 'logout' : 'login'" /><span class="app-sidebar-tool-label">{{ t(isAuthenticated ? 'Logout' : 'Login') }}</span><span class="badge app-sidebar-auth-state" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ t(isAuthenticated ? 'Admin' : 'Guest') }}</span></button>
           </div>
         </nav>
       </aside>
@@ -91,6 +92,7 @@ import { apiJson, isAbortError } from './lib/api.js';
 import { useAbortableTask } from './composables/useAbortableTask.js';
 import { providePageController } from './composables/usePageController.js';
 import { formatMac, toFlag } from './lib/formatters.js';
+import { locale, localePreference, setLocale, supportedLocales, t } from './lib/i18n.js';
 import { scanProfileLabel } from './lib/scanProfiles.js';
 import { routeNames } from './router.js';
 
@@ -118,8 +120,8 @@ const pollingTimers = new Set();
 const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
 const isInventoryRoute = computed(() => [routeNames.inventory, routeNames.host, routeNames.hostByIp].includes(route.name));
 const pageLoading = computed(() => Boolean(controllerValue('loading', false)));
-const refreshLabel = computed(() => controllerValue('label', isAuthenticated.value ? 'Ready' : 'Read only'));
-const refreshTitle = computed(() => controllerValue('title', isAuthenticated.value ? 'Refresh' : 'Login to refresh'));
+const refreshLabel = computed(() => controllerValue('label', t(isAuthenticated.value ? 'Ready' : 'Read only')));
+const refreshTitle = computed(() => controllerValue('title', t(isAuthenticated.value ? 'Refresh' : 'Login to refresh')));
 const refreshDisabled = computed(() => Boolean(controllerValue('disabled', false)));
 
 onMounted(async () => {
@@ -145,6 +147,7 @@ function controllerValue(key, fallback) {
 }
 
 function go(path) { if (route.path !== path) router.push(path); }
+function selectLocale(event) { setLocale(event.target.value); }
 function openHostDetail(host) {
   if (!host) return;
   clearMessages();
@@ -191,7 +194,7 @@ function openLogin() {
 async function submitLogin() {
   await saveModal(async (signal) => {
     auth.value = await apiJson('/api/auth/login', { method: 'POST', body: JSON.stringify({ password: modal.value.password }), signal }) || { authenticated: true, configured: auth.value.configured };
-    setNotice('Logged in');
+    setNotice(t('Logged in'));
     closeModal();
     await reloadCurrentPage();
     if (route.name === routeNames.inventory) refreshScan();
@@ -203,7 +206,7 @@ async function logout() {
   authLoading.value = true;
   try {
     auth.value = await apiJson('/api/auth/logout', { method: 'POST' }) || { authenticated: false, configured: auth.value.configured };
-    setNotice('Logged out');
+    setNotice(t('Logged out'));
     await reloadCurrentPage();
   } catch (error) {
     globalError.value = error.message;
@@ -256,11 +259,11 @@ async function scanHost(host, profile) {
   try {
     const result = await apiJson(`/api/scans/${encodeURIComponent(host.ip)}`, { method: 'POST', body: JSON.stringify({ profile }) });
     const queuedProfile = scanProfileLabel(result?.metadata?.mode || profile);
-    setNotice(result?.created === false ? `${queuedProfile} scan already queued or running` : `${queuedProfile} scan queued`);
+    setNotice(t(result?.created === false ? '{profile} scan already queued or running' : '{profile} scan queued', { profile: queuedProfile }));
     await reloadCurrentPage();
     const metadata = await pollScanStatus(host, result?.metadata?.id);
-    if (metadata && ['failed', 'timeout', 'cancelled'].includes(metadata.state)) throw new Error(metadata.error || `Scan ${metadata.state}`);
-    setNotice(metadata?.result_changed ? `${queuedProfile} scan changes saved` : `${queuedProfile} scan complete, no changes`);
+    if (metadata && ['failed', 'timeout', 'cancelled'].includes(metadata.state)) throw new Error(metadata.error || t('Scan {state}', { state: t(metadata.state) }));
+    setNotice(t(metadata?.result_changed ? '{profile} scan changes saved' : '{profile} scan complete, no changes', { profile: queuedProfile }));
     await reloadCurrentPage();
   } catch (error) {
     globalError.value = error.message;
@@ -320,7 +323,7 @@ async function openEdit(host) {
       apiJson('/api/netboot/images', { signal })
     ]);
     if (!modalRequest.isCurrent(signal)) return;
-    if (!data) throw new Error('Host not found');
+    if (!data) throw new Error(t('Host not found'));
     netbootImages.value = images?.images || [];
     modal.value = { type: 'edit', form: hostForm({ ...host, ...data }) };
   } catch (error) {
@@ -382,7 +385,7 @@ async function submitCreate() {
     const purpose = modal.value.purpose;
     const form = modal.value.form;
     const result = await apiJson('/api/hosts', { method: 'POST', body: JSON.stringify({ mac: form.mac, ip: form.ip }), signal });
-    setNotice(purpose === 'reserve' ? 'Reservation created' : 'Created'); await reloadCurrentPage();
+    setNotice(t(purpose === 'reserve' ? 'Reservation created' : 'Created')); await reloadCurrentPage();
     if (result?.id) await openEdit({ id: result.id }); else closeModal();
   });
 }
@@ -390,24 +393,24 @@ async function submitEdit() {
   await saveModal(async (signal) => {
     const form = modal.value.form;
     await apiJson(`/api/hosts/${encodeURIComponent(form.id)}`, { method: 'PUT', signal, body: JSON.stringify({ ip: form.ip, router: form.router, mac: form.mac, name: form.name, important: form.important ? 1 : null, repeater: form.repeater ? 1 : null, dns: form.dns, web: form.web ? 1 : null, netboot_image_id: form.netboot_image_id || null, scan_profile: form.scan_profile, scan_interval_hours: form.scan_interval_hours }) });
-    setNotice('Saved'); closeModal(); await reloadCurrentPage();
+    setNotice(t('Saved')); closeModal(); await reloadCurrentPage();
   });
 }
 async function submitDeleteHost() {
   await saveModal(async (signal) => {
     await apiJson(`/api/hosts/${encodeURIComponent(modal.value.id)}`, { method: 'DELETE', signal });
-    setNotice('Deleted'); closeModal();
+    setNotice(t('Deleted')); closeModal();
     if ([routeNames.host, routeNames.hostByIp].includes(route.name)) await router.push('/'); else await reloadCurrentPage();
   });
 }
 async function submitCategory() {
-  await saveModal(async (signal) => { const form = modal.value.form; await apiJson('/api/categories', { method: 'POST', signal, body: JSON.stringify({ ip: form.ip, name: form.name }) }); setNotice('Category added'); closeModal(); await reloadCurrentPage(); });
+  await saveModal(async (signal) => { const form = modal.value.form; await apiJson('/api/categories', { method: 'POST', signal, body: JSON.stringify({ ip: form.ip, name: form.name }) }); setNotice(t('Category added')); closeModal(); await reloadCurrentPage(); });
 }
 async function submitRenameCategory() {
-  await saveModal(async (signal) => { await apiJson('/api/categories', { method: 'PUT', signal, body: JSON.stringify({ ip: modal.value.ip, name: modal.value.form.name }) }); setNotice('Category renamed'); closeModal(); await reloadCurrentPage(); });
+  await saveModal(async (signal) => { await apiJson('/api/categories', { method: 'PUT', signal, body: JSON.stringify({ ip: modal.value.ip, name: modal.value.form.name }) }); setNotice(t('Category renamed')); closeModal(); await reloadCurrentPage(); });
 }
 async function submitDeleteCategory() {
-  await saveModal(async (signal) => { await apiJson('/api/categories', { method: 'DELETE', signal, body: JSON.stringify({ ip: modal.value.ip }) }); setNotice('Category deleted'); closeModal(); await reloadCurrentPage(); });
+  await saveModal(async (signal) => { await apiJson('/api/categories', { method: 'DELETE', signal, body: JSON.stringify({ ip: modal.value.ip }) }); setNotice(t('Category deleted')); closeModal(); await reloadCurrentPage(); });
 }
 
 async function saveModal(action) {

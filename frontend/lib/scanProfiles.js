@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 export const scanProfiles = Object.freeze([
   Object.freeze({
     id: 'lightweight',
@@ -32,8 +34,9 @@ export const scanCadenceOptions = Object.freeze([
 ]);
 
 export function scanProfileLabel(profile) {
-  if (profile === 'quick') return 'Lightweight';
-  return scanProfiles.find((item) => item.id === profile)?.name || profile || '-';
+  if (profile === 'quick') return t('Lightweight');
+  const name = scanProfiles.find((item) => item.id === profile)?.name;
+  return name ? t(name) : profile || '-';
 }
 
 export function scanProfileBadgeClass(profile) {
@@ -45,6 +48,6 @@ export function scanProfileBadgeClass(profile) {
 export function scanCadenceLabel(hours) {
   const value = Number(hours || 0);
   const preset = scanCadenceOptions.find((item) => item.hours === value);
-  if (preset) return preset.name;
-  return `Every ${value} hours`;
+  if (preset) return t(preset.name);
+  return t('Every {count} hours', { count: value });
 }

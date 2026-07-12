@@ -23,6 +23,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 - Guest read-only mode and admin login.
 - Abortable route loading, live running durations, and keyboard-accessible modal dialogs.
 - Dark mode.
+- Ten browser-interface languages—English, Simplified Chinese, Spanish, French, Arabic, Brazilian Portuguese, Indonesian, Japanese, Russian, and German—with a locally persisted Auto/manual selector, browser-language detection, and RTL support.
 - `/api/health` appliance status endpoint.
 - Optional Discord webhook notifications.
 - Backup and restore CLI for upgrades.

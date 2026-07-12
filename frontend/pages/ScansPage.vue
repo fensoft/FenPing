@@ -2,9 +2,9 @@
   <section>
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="page-refresh-header">
-      <div><h2>Scans</h2><div class="text-secondary small">Queued, running, and recent inventory scans</div></div>
+      <div><h2>{{ t('Scans') }}</h2><div class="text-secondary small">{{ t('Queued, running, and recent inventory scans') }}</div></div>
       <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load">
-        <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />Refresh
+        <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />{{ t('Refresh') }}
       </button>
     </div>
     <div class="table-wrap">
@@ -14,26 +14,26 @@
           <col class="scan-col-status" /><col class="scan-col-ports" /><col class="scan-col-started" />
           <col class="scan-col-duration" /><col class="scan-col-error" /><col class="scan-col-actions" />
         </colgroup>
-        <thead><tr><th>State</th><th>Host</th><th>Profile</th><th>Status</th><th>Ports</th><th>Started</th><th>Duration</th><th>Error</th><th class="text-end">Actions</th></tr></thead>
+        <thead><tr><th>{{ t('State') }}</th><th>{{ t('Host') }}</th><th>{{ t('Profile') }}</th><th>{{ t('Status') }}</th><th>{{ t('Ports') }}</th><th>{{ t('Started') }}</th><th>{{ t('Duration') }}</th><th>{{ t('Error') }}</th><th class="text-end">{{ t('Actions') }}</th></tr></thead>
         <tbody>
-          <tr v-if="loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">Loading</td></tr>
-          <tr v-else-if="!loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">No scans</td></tr>
+          <tr v-if="loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && scans.length === 0"><td class="text-secondary text-center py-4" colspan="9">{{ t('No scans') }}</td></tr>
           <tr v-for="scan in scans" :key="scan.id" :class="rowClass(scan)">
-            <td><span :class="scanRunStateClass(scan.state)"><AppIcon :name="scan.state === 'running' ? 'loader-2' : scanRunStateIcon(scan.state)" :class="{ 'is-spinning': scan.state === 'running' }" />{{ scan.state || '-' }}</span></td>
+            <td><span :class="scanRunStateClass(scan.state)"><AppIcon :name="scan.state === 'running' ? 'loader-2' : scanRunStateIcon(scan.state)" :class="{ 'is-spinning': scan.state === 'running' }" />{{ scanRunStateLabel(scan.state) }}</span></td>
             <td class="scan-queue-host">
               <button v-if="scan.host_id" class="btn btn-link btn-sm p-0 scan-queue-host-name" type="button" @click="$emit('host-detail', scan.host_id)">{{ displayName(scan) }}</button>
               <strong v-else>{{ displayName(scan) }}</strong>
               <small class="font-monospace">{{ scan.ip }}</small>
             </td>
-            <td>{{ scanProfileLabel(scan.mode) }}</td><td>{{ scan.status || '-' }}</td><td>{{ Number(scan.ports_count || 0) }}</td>
+            <td><span class="badge" :class="scanProfileBadgeClass(scan.mode)">{{ scanProfileLabel(scan.mode) }}</span></td><td>{{ scan.status ? t(scan.status) : '-' }}</td><td>{{ Number(scan.ports_count || 0) }}</td>
             <td class="text-nowrap">{{ formatScanDate(scan.date_begin) }}</td>
             <td class="text-nowrap">{{ formatScanDuration(activeScanDuration(scan, now)) }}</td>
             <td class="text-truncate-cell" :title="scan.error || ''">{{ scan.error || '-' }}</td>
             <td class="text-end action-cell">
-              <button v-if="isAuthenticated && scan.ip" class="btn btn-outline-secondary btn-sm icon-btn" :class="{ 'is-spinning': isScanning(scan) || scan.state === 'running' }" type="button" :disabled="isScanning(scan) || scanIsActiveState(scan.state)" title="Scan host" @click="$emit('scan-host', scan)">
+              <button v-if="isAuthenticated && scan.ip" class="btn btn-outline-secondary btn-sm icon-btn" :class="{ 'is-spinning': isScanning(scan) || scan.state === 'running' }" type="button" :disabled="isScanning(scan) || scanIsActiveState(scan.state)" :title="t('Scan host')" @click="$emit('scan-host', scan)">
                 <AppIcon :name="isScanning(scan) || scan.state === 'running' ? 'loader-2' : 'search'" />
               </button>
-              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="View scan" :disabled="!(scan.result_available ?? scan.xml_usable)" @click="$emit('open-scan', scan.ip, scan.id)"><AppIcon name="file-search" /></button>
+              <button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('View scan')" :disabled="!(scan.result_available ?? scan.xml_usable)" @click="$emit('open-scan', scan.ip, scan.id)"><AppIcon name="file-search" /></button>
             </td>
           </tr>
         </tbody>
@@ -45,11 +45,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
+import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
-import { activeScanDuration, formatScanDate, formatScanDuration, scanIsActiveState, scanRunStateClass, scanRunStateIcon } from '../lib/formatters.js';
-import { scanProfileLabel } from '../lib/scanProfiles.js';
+import { activeScanDuration, formatScanDate, formatScanDuration, scanIsActiveState, scanRunStateClass, scanRunStateIcon, scanRunStateLabel } from '../lib/formatters.js';
+import { scanProfileBadgeClass, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({ isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
@@ -60,7 +61,7 @@ const error = ref('');
 const request = useAbortableTask();
 const now = useNow();
 
-usePageController({ loading, label: computed(() => loading.value ? 'Loading' : 'Scans'), title: 'Refresh scans', disabled: false, refresh: load });
+usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Scans')), title: computed(() => t('Refresh scans')), disabled: false, refresh: load });
 onMounted(load);
 
 async function load() {
@@ -79,7 +80,7 @@ async function load() {
 
 function scanKey(scan) { return String(scan?.ip || scan?.id || scan?.mac || ''); }
 function isScanning(scan) { const key = scanKey(scan); return key !== '' && props.scanningHosts.has(key); }
-function displayName(scan) { return scan?.name || scan?.ip || 'Unknown'; }
+function displayName(scan) { return scan?.name || scan?.ip || t('Unknown'); }
 function rowClass(scan) {
   if (scan?.state) return `scan-row-${scan.state}`;
   if (scan?.important == 1 && scan?.status !== 'up') return 'important-down';

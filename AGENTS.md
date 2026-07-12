@@ -50,6 +50,7 @@ Do not add a separate database service or split dnsmasq into another container u
 - `frontend/App.vue`: Vue application shell and cross-page orchestration.
 - `frontend/router.js`, `frontend/pages/`: Vue Router configuration and route-level inventory, IPAM, services, scans, notifications, host-detail, and netboot components.
 - `frontend/components/`, `frontend/composables/`, `frontend/lib/`: shared UI, lifecycle, API, and formatting modules.
+- `frontend/locales/*.json`: flat UTF-8 translation catalogs; `en.json` is canonical and every locale must retain identical keys and `{name}` placeholders.
 - `docs/ARCHITECTURE.md`: deeper project overview.
 
 ## Persistent Data
@@ -138,3 +139,4 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - dnsmasq generation happens through `php cli.php hosts`.
 - Cron is inside the container; do not look for Ofelia.
 - Avoid full `/24` inventory scans unless the user accepts LAN scan traffic.
+- Keep locale catalogs aligned with `frontend/locales/README.md`; `npm test` enforces key and placeholder parity.

@@ -14,6 +14,23 @@ body {
   background: #f5f7fb;
 }
 
+html[dir='rtl'] .font-monospace {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+
+html[dir='rtl'] .badge {
+  line-height: 1.35;
+}
+
+html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-name) {
+  direction: ltr;
+  line-height: 1.35;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+
 .app-shell {
   min-height: 100vh;
 }
@@ -78,20 +95,39 @@ body {
 }
 
 .app-sidebar-refresh-state {
+  grid-column: 2;
+  grid-row: 2;
   color: #7a8797;
-  flex: 0 0 auto;
   font-size: 0.65rem;
   font-weight: 600;
-  margin-left: auto;
+  justify-self: start;
+  margin-left: 0;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .app-sidebar-auth-state {
+  flex: 0 0 auto;
   font-size: 0.62rem;
   margin-left: auto;
   padding: 0.15rem 0.3rem;
+}
+
+.app-language-tool {
+  cursor: default;
+}
+
+.app-language-select {
+  flex: 1 1 auto;
+  font-size: 0.7rem;
+  height: 1.8rem;
+  min-width: 0;
+  padding-bottom: 0.2rem;
+  padding-left: 0.45rem;
+  padding-top: 0.2rem;
 }
 
 .app-nav-link {
@@ -117,6 +153,21 @@ body {
 .app-nav-link.active {
   background: #e6f0ff;
   color: #1d4ed8;
+}
+
+.app-language-tool-red {
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+.app-language-tool-red:hover {
+  background: #ffe4e6;
+  color: #991b1b;
+}
+
+.app-language-tool-red .app-language-select {
+  border-color: #dc2626;
+  color: #b91c1c;
 }
 
 .app-icon {
@@ -380,12 +431,12 @@ body {
 
 .scan-col-state { width: 8%; }
 .scan-col-host { width: 18%; }
-.scan-col-mode { width: 6%; }
+.scan-col-mode { width: 9%; }
 .scan-col-status { width: 6%; }
-.scan-col-ports { width: 5%; }
+.scan-col-ports { width: 6%; }
 .scan-col-started { width: 14%; }
 .scan-col-duration { width: 7%; }
-.scan-col-error { width: 27%; }
+.scan-col-error { width: 23%; }
 .scan-col-actions { width: 9%; }
 
 .scan-queue-table th,
@@ -1131,7 +1182,24 @@ body {
 }
 
 .refresh-btn .app-icon {
+  align-self: center;
+  grid-column: 1;
+  grid-row: 1 / 3;
   transform-origin: center;
+}
+
+.refresh-btn {
+  column-gap: 0.65rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  row-gap: 0.05rem;
+}
+
+.refresh-btn .app-sidebar-tool-label {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
 }
 
 .refresh-btn.is-spinning .app-icon {
@@ -1442,6 +1510,17 @@ html[data-bs-theme='dark'] .app-nav-link {
 html[data-bs-theme='dark'] .app-nav-link:hover {
   background: #202c3a;
   color: #ffffff;
+}
+
+html[data-bs-theme='dark'] .app-language-tool-red,
+html[data-bs-theme='dark'] .app-language-tool-red:hover {
+  background: #3f1d24;
+  color: #fca5a5;
+}
+
+html[data-bs-theme='dark'] .app-language-tool-red .app-language-select {
+  border-color: #ef4444;
+  color: #fca5a5;
 }
 
 html[data-bs-theme='dark'] .app-nav-link.active {
@@ -1837,6 +1916,24 @@ html[data-bs-theme='dark'] .scan-state-filtered {
 
   .app-sidebar-refresh-state {
     display: none;
+  }
+
+  .app-language-tool {
+    position: relative;
+  }
+
+  .app-language-select {
+    border: 0;
+    box-sizing: border-box;
+    cursor: pointer;
+    height: 100%;
+    inset: 0;
+    max-width: 100%;
+    min-width: 0;
+    opacity: 0;
+    padding: 0;
+    position: absolute;
+    width: 100%;
   }
 
   .app-sidebar-tools {
