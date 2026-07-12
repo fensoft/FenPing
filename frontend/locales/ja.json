@@ -269,5 +269,8 @@
   "filtered": "フィルタリングされた",
   "Network": "ネットワーク",
   "DHCP": "DHCP",
-  "Not routed": "ルーティングなし"
+  "Not routed": "ルーティングなし",
+  "History range": "履歴の期間",
+  "Last 24h": "過去24時間",
+  "Last 7d": "過去7日間"
 }

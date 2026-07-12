@@ -269,5 +269,8 @@
   "filtered": "已过滤",
   "Network": "网络",
   "DHCP": "DHCP",
-  "Not routed": "未路由"
+  "Not routed": "未路由",
+  "History range": "历史范围",
+  "Last 24h": "过去24小时",
+  "Last 7d": "过去7天"
 }

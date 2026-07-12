@@ -269,5 +269,8 @@
   "filtered": "filtrado",
   "Network": "Red",
   "DHCP": "DHCP",
-  "Not routed": "Sin ruta"
+  "Not routed": "Sin ruta",
+  "History range": "Intervalo del historial",
+  "Last 24h": "Últimas 24 h",
+  "Last 7d": "Últimos 7 días"
 }

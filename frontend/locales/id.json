@@ -269,5 +269,8 @@
   "filtered": "tersaring",
   "Network": "Jaringan",
   "DHCP": "DHCP",
-  "Not routed": "Tidak dirutekan"
+  "Not routed": "Tidak dirutekan",
+  "History range": "Rentang riwayat",
+  "Last 24h": "24 jam terakhir",
+  "Last 7d": "7 hari terakhir"
 }

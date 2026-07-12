@@ -269,5 +269,8 @@
   "filtered": "تمت تصفيته",
   "Network": "الشبكة",
   "DHCP": "DHCP",
-  "Not routed": "غير موجّه"
+  "Not routed": "غير موجّه",
+  "History range": "نطاق السجل",
+  "Last 24h": "آخر 24 ساعة",
+  "Last 7d": "آخر 7 أيام"
 }
