@@ -13,14 +13,14 @@
       <table class="table table-sm inventory-table">
         <colgroup><col class="col-status" /><col class="col-name" /><col class="col-mac" /><col class="col-vendor" /><col class="col-ip" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
         <thead><tr>
-          <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" title="Close all categories" @click="closeAllCategories"><AppIcon name="minus" /></button></th>
+          <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="allCategoriesCollapsed ? 'Open all categories' : 'Close all categories'" :aria-label="allCategoriesCollapsed ? 'Open all categories' : 'Close all categories'" :disabled="categoryKeys.length === 0" @click="toggleAllCategories"><AppIcon :name="allCategoriesCollapsed ? 'plus' : 'minus'" /></button></th>
           <th scope="col">Name</th><th scope="col">MAC</th><th scope="col">Vendor</th><th scope="col">IP</th>
           <th v-if="isAuthenticated" scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>Actions</span><button class="btn btn-outline-primary btn-sm icon-btn" type="button" title="Add category" aria-label="Add category" @click="$emit('add-category')"><AppIcon name="folder-plus" /></button></div></th>
         </tr></thead>
         <tbody>
           <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">Loading</td></tr>
           <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 6 : 5">No hosts</td></tr>
-          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), { 'inventory-host-row': row.type === 'host' }]" :tabindex="row.type === 'host' ? 0 : undefined" :aria-label="row.type === 'host' ? `Details for ${row.host.name || row.host.ip || row.host.mac}` : undefined" @click="openRowDetails(row, $event)" @keydown.enter="openRowDetails(row, $event)">
+          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
             <template v-if="row.type === 'category'">
               <td><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="row.collapsed ? 'Open category' : 'Close category'" @click="toggleCategory(row.categoryKey)"><AppIcon :name="row.collapsed ? 'plus' : 'minus'" /></button></td>
               <td class="category-name" colspan="4">{{ row.name }}</td>
@@ -88,6 +88,8 @@ const categorizedHosts = computed(() => {
   return rows;
 });
 const visibleHosts = computed(() => categorizedHosts.value.filter(matchesFilters));
+const categoryKeys = computed(() => Array.from(new Set(categorizedHosts.value.map((host) => host.categoryContext?.key).filter(Boolean))));
+const allCategoriesCollapsed = computed(() => categoryKeys.value.length > 0 && categoryKeys.value.every((key) => collapsed.value.has(key)));
 const tableRows = computed(() => {
   const rows = []; let current = '';
   for (const host of visibleHosts.value) {
@@ -96,7 +98,7 @@ const tableRows = computed(() => {
       current = category.key;
       rows.push({ type: 'category', key: current, categoryKey: current, name: category.name, categoryIp: category.ip, collapsed: collapsed.value.has(current) });
     }
-    if (!current || !collapsed.value.has(current)) rows.push({ type: 'host', key: `host-${host.id || host.ip || host.mac}`, host });
+    rows.push({ type: 'host', key: `host-${host.id || host.ip || host.mac}`, host, collapsed: current !== '' && collapsed.value.has(current) });
   }
   return rows;
 });
@@ -129,7 +131,7 @@ function writeStorage(name, value) { try { localStorage.setItem(name, JSON.strin
 function resetFilters() { filters.value = { ...defaults }; }
 function categoryKey(host) { return `category-${host.category_ip || host.category}`; }
 function toggleCategory(key) { const next = new Set(collapsed.value); next.has(key) ? next.delete(key) : next.add(key); collapsed.value = next; }
-function closeAllCategories() { collapsed.value = new Set(hosts.value.filter((host) => host.category).map(categoryKey)); }
+function toggleAllCategories() { collapsed.value = allCategoriesCollapsed.value ? new Set() : new Set(categoryKeys.value); }
 function matchesFilters(host) {
   if (filters.value.onlyDown && host.status === 'Up') return false;
   if (filters.value.onlyImportant && !toFlag(host.important)) return false;
@@ -159,9 +161,19 @@ function stabilityLabel(stability) { return stability?.label || formatPercent(st
 function stabilityClass(stability) { return `stability-badge stability-${stability?.level || 'warn'}`; }
 function stabilityTitle(stability) { return [`Uptime ${formatPercent(stability?.uptime_percent)}`, `${Number(stability?.transitions || 0)} changes`, `Longest down ${formatDuration(stability?.longest_down_seconds)}`, `Current ${stability?.current_status || '-'} ${formatDuration(stability?.current_seconds)}`].join(' | '); }
 function rowClass(row) { return row.type === 'category' ? 'category-row' : row.host.important == 1 && row.host.status !== 'Up' ? 'important-down' : ''; }
-function openRowDetails(row, event) {
-  if (row.type !== 'host' || (!row.host.id && !row.host.ip)) return;
+function rowAriaLabel(row) {
+  if (row.type === 'category') return `${row.collapsed ? 'Open' : 'Close'} category ${row.name}`;
+  return !row.collapsed && (row.host?.id || row.host?.ip) ? `Details for ${row.host.name || row.host.ip || row.host.mac}` : undefined;
+}
+function activateRow(row, event) {
   if (event.target !== event.currentTarget && event.target.closest('a, button, input, select, textarea, label')) return;
+  if (row.type === 'category') { toggleCategory(row.categoryKey); return; }
+  if (!row.host.id && !row.host.ip) return;
   emit('host-detail', row.host);
+}
+function activateCategoryRow(row, event) {
+  if (row.type !== 'category' || event.target !== event.currentTarget) return;
+  event.preventDefault();
+  activateRow(row, event);
 }
 </script>

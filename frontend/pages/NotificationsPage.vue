@@ -2,7 +2,7 @@
   <section>
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
 
-    <div class="notify-header">
+    <div class="page-refresh-header">
       <div>
         <h2>Notify</h2>
         <div class="text-secondary small">Last {{ notify.hours || 24 }}h of status and service changes</div>

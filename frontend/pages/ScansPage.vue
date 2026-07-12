@@ -1,7 +1,7 @@
 <template>
   <section>
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
-    <div class="page-header">
+    <div class="page-refresh-header">
       <div><h2>Scans</h2><div class="text-secondary small">Queued, running, and recent inventory scans</div></div>
       <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load">
         <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />Refresh
