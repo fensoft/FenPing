@@ -43,7 +43,7 @@ CREATE TABLE `range` (
   `ip_begin` varchar(50) DEFAULT NULL,
   `type` varchar(50) DEFAULT NULL
 );
-INSERT INTO `range` VALUES ('192.168.1.1','network'),('15','gates');
+INSERT INTO `range` VALUES ('192.168.1.1','r&eacute;seau &amp; serveurs'),('15','gates &#47; doors');
 CREATE TABLE `stats` (
   `id` int NOT NULL,
   `ip` varchar(50) DEFAULT NULL,
@@ -133,8 +133,8 @@ def main() -> None:
         assert database["tables"]["ips"]["rows"][0][5] == "207.246.121.77 8.8.8.8"
         assert database["tables"]["stats"]["rows"][0][0] == 9
         assert database["tables"]["range"]["rows"] == [
-            ["192.168.1.1", "network"],
-            ["192.168.1.15", "gates"],
+            ["192.168.1.1", "réseau & serveurs"],
+            ["192.168.1.15", "gates / doors"],
         ]
         assert database["tables"]["leases"]["rows"] == [[
             "192.168.1.20",

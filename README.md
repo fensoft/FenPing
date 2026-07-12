@@ -229,7 +229,7 @@ Legacy 1.2 SQL and nmap backups can be converted offline, without a MariaDB/MySQ
 python3 tools/convert-v1.2-backup.py legacy.sql.tgz legacy.nmap.tgz
 ```
 
-The converter parses mysqldump and nmap XML data directly, migrates legacy leases to the current shape, imports each XML file as the host's latest deep scan, and creates a restore-compatible archive with an empty netboot directory. The output defaults to the SQL filename without `.sql` (for example, `legacy.tgz`). Use `--target converted.tgz` to select another destination and `--force` to replace an existing target.
+The converter parses mysqldump and nmap XML data directly, migrates legacy leases to the current shape, decodes HTML entities used by 1.2 category names, imports each XML file as the host's latest deep scan, and creates a restore-compatible archive with an empty netboot directory. The output defaults to the SQL filename without `.sql` (for example, `legacy.tgz`). Use `--target converted.tgz` to select another destination and `--force` to replace an existing target.
 
 ## Admin Workflow
 

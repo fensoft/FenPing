@@ -13,7 +13,8 @@ Conversion limits and intentional transformations:
 * Legacy leases are normalized and rows sharing the same (MAC, IP) are merged.
   The removed ``tstp`` and ``vendor-class-identifier`` columns are not retained.
 * Category rows are retained, but short boundaries such as ``15`` are expanded
-  onto the source dump's dominant IPv4 /24.
+  onto the source dump's dominant IPv4 /24. Legacy HTML entities in category
+  names are decoded exactly once.
 * SQL schema definitions, indexes, engines, collations, triggers, and original
   AUTO_INCREMENT settings are not copied.  Restore applies the current db.sql;
   explicit row IDs are retained where the legacy table contains them.
@@ -33,6 +34,7 @@ import argparse
 import contextlib
 import gzip
 import hashlib
+import html
 import ipaddress
 import json
 import math
@@ -416,8 +418,11 @@ def normalize_legacy_ranges(
     if "ip_begin" not in columns:
         return rows
     index = columns.index("ip_begin")
+    type_index = columns.index("type") if "type" in columns else None
     category_networks: Counter[str] = Counter()
     for row in rows:
+        if type_index is not None and isinstance(row[type_index], str):
+            row[type_index] = html.unescape(row[type_index])
         network = ipv4_network(row[index])
         if network is not None:
             category_networks[network] += 1

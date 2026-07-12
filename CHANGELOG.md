@@ -57,6 +57,7 @@ Development after the `1.5` tag through 2026-07-12.
 - Fixed page header movement caused by collapsed Inventory contents.
 - Fixed compact scan/retry action sizing and empty guest action columns.
 - Fixed category carets overlapping category names.
+- Fixed legacy 1.2 category names retaining HTML entities after offline backup conversion.
 - Fixed nginx temporary-directory ownership so large scan-detail responses and buffered uploads remain accessible to the `www-data` worker after restart.
 
 ### Security and hardening
