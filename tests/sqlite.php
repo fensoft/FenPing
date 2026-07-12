@@ -3,6 +3,8 @@
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/database.php';
 require_once dirname(__DIR__) . '/scans.php';
+require_once dirname(__DIR__) . '/functions.php';
+require_once dirname(__DIR__) . '/inventory.php';
 require_once dirname(__DIR__) . '/ping.php';
 
 if (!str_contains(basename(DATABASE_PATH), 'test'))
@@ -20,6 +22,40 @@ assertSqlite((int)$database->query('PRAGMA user_version')->fetchColumn() === DAT
 assertSqlite(strtolower((string)$database->query('PRAGMA journal_mode')->fetchColumn()) === 'wal', 'WAL mode is disabled');
 assertSqlite((int)$database->query('PRAGMA foreign_keys')->fetchColumn() === 1, 'foreign keys are disabled');
 assertSqlite(databaseIntegrityErrors() === array(), 'fresh database failed integrity checks');
+
+$database->exec('DELETE FROM ips');
+$managedIp = '192.0.2.30';
+$managedId = (int)create($managedIp, '02:00:00:00:00:30');
+$managed = getId($managedId);
+assertSqlite($managed !== false, 'managed host was not created');
+assertSqlite($managed['scan_profile'] === SCAN_MANAGED_DEFAULT_PROFILE, 'new managed host profile is not the safe default');
+assertSqlite((int)$managed['scan_interval_hours'] === SCAN_MANAGED_DEFAULT_INTERVAL_HOURS, 'new managed host cadence is not the safe default');
+
+$legacyIp = '192.0.2.31';
+$legacy = $database->prepare("INSERT INTO ips (mac, ip, scan_profile, scan_interval_hours) VALUES (:mac, :ip, 'deep', 1)");
+$legacy->execute(array('mac' => '02:00:00:00:00:31', 'ip' => $legacyIp));
+$scheduleDay = gmmktime(0, 0, 0, 7, 12, 2026);
+$unmanagedIp = '192.0.2.32';
+$unmanagedDueTime = $scheduleDay + inventoryInitialUnmanagedScanHour($unmanagedIp) * 3600;
+$unmanagedDue = inventoryScheduledTargets(array($unmanagedIp), $unmanagedDueTime);
+assertSqlite(count($unmanagedDue) === 1 && $unmanagedDue[0]['profile'] === SCAN_UNMANAGED_DEFAULT_PROFILE, 'unmanaged host did not receive its staggered lightweight scan');
+assertSqlite(inventoryScheduledTargets(array($unmanagedIp), $unmanagedDueTime + 3600) === array(), 'unmanaged first scan was not staggered');
+
+$managedDue = inventoryScheduledTargets(array($managedIp), $scheduleDay);
+assertSqlite(count($managedDue) === 1 && $managedDue[0]['profile'] === SCAN_MANAGED_DEFAULT_PROFILE, 'new managed host did not receive its standard scan');
+$legacyDue = inventoryScheduledTargets(array($legacyIp), $scheduleDay);
+assertSqlite(count($legacyDue) === 1 && $legacyDue[0]['profile'] === 'deep', 'existing managed scan settings were not preserved');
+
+$recentScan = $database->prepare("
+  INSERT INTO scans (ip, mode, state, date_begin, date_end)
+  VALUES (:ip, :mode, 'complete', :scanned_at, :scanned_at)
+");
+$recentScan->execute(array(
+  'ip' => $managedIp,
+  'mode' => SCAN_MANAGED_DEFAULT_PROFILE,
+  'scanned_at' => gmdate('Y-m-d H:i:s', $scheduleDay)
+));
+assertSqlite(inventoryScheduledTargets(array($managedIp), $scheduleDay) === array(), 'managed scan cadence ignored a recent scan');
 
 $database->exec('DELETE FROM ping');
 $database->exec('DELETE FROM stats');

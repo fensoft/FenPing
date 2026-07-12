@@ -233,10 +233,14 @@ function inventoryScheduledTargets(array $hosts, ?int $now = null): array {
   $scheduled = array();
   foreach ($hosts as $ip) {
     $setting = $settings[$ip] ?? null;
-    $profile = $setting === null ? 'deep' : (string)($setting['scan_profile'] ?? 'deep');
+    $profile = $setting === null
+      ? SCAN_UNMANAGED_DEFAULT_PROFILE
+      : (string)($setting['scan_profile'] ?? SCAN_MANAGED_DEFAULT_PROFILE);
     if (!scanProfileIsValid($profile, false))
-      $profile = 'deep';
-    $hours = $setting === null ? 1 : (int)($setting['scan_interval_hours'] ?? 1);
+      $profile = SCAN_MANAGED_DEFAULT_PROFILE;
+    $hours = $setting === null
+      ? SCAN_UNMANAGED_DEFAULT_INTERVAL_HOURS
+      : (int)($setting['scan_interval_hours'] ?? SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
     if ($hours <= 0)
       continue;
 
@@ -246,12 +250,23 @@ function inventoryScheduledTargets(array $hosts, ?int $now = null): array {
       if ($legacy !== null && ($last === null || $legacy > $last))
         $last = $legacy;
     }
+    if ($setting === null && $last === null && !inventoryInitialUnmanagedScanDue($ip, $now))
+      continue;
     if ($last !== null && $last > $now - $hours * 3600)
       continue;
 
     $scheduled[] = array('ip' => $ip, 'profile' => $profile);
   }
   return $scheduled;
+}
+
+function inventoryInitialUnmanagedScanDue(string $ip, int $now): bool {
+  return (int)gmdate('G', $now) === inventoryInitialUnmanagedScanHour($ip);
+}
+
+function inventoryInitialUnmanagedScanHour(string $ip): int {
+  $digest = hash('sha256', $ip, true);
+  return ord($digest[0]) % 24;
 }
 
 function inventoryDiscover(string $range): array {

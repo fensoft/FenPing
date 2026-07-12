@@ -138,7 +138,7 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 `inventory.php` performs discovery and queued nmap scans:
 
 - Default mode discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and applies the automatic scan schedule.
-- Managed hosts store `scan_profile` and `scan_interval_hours`. Automatic discovery queues only hosts whose latest successful scan for that profile is due; `0` disables scheduled scans. Explicit API and CLI scans ignore cadence. Unmanaged hosts retain the default Deep hourly behavior.
+- Managed hosts store `scan_profile` and `scan_interval_hours`. New managed hosts default to Standard every 24 hours, while existing settings remain unchanged. Automatic discovery queues only hosts whose latest successful scan for that profile is due; `0` disables scheduled scans. Explicit API and CLI scans ignore cadence. Unmanaged hosts use Lightweight every 24 hours, with their first scan distributed across deterministic UTC hour slots to avoid an initial queue spike.
 - A lock-protected coordinator claims queued jobs and runs no more than four nmap child processes concurrently.
 - Only one job runs per IP at a time. Profiles are ordered lightweight, standard, then deep. A stronger request upgrades weaker queued work or waits behind weaker running work, while weaker requests never downgrade an active stronger job.
 - Lightweight uses `-F -sS -T4` and has a five-minute timeout.

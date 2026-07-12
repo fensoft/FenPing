@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS ips (
   router INTEGER,
   dns TEXT,
   netboot_image_id INTEGER,
-  scan_profile TEXT NOT NULL DEFAULT 'deep',
-  scan_interval_hours INTEGER NOT NULL DEFAULT 1
+  scan_profile TEXT NOT NULL DEFAULT 'standard',
+  scan_interval_hours INTEGER NOT NULL DEFAULT 24
 );
 
 CREATE TABLE IF NOT EXISTS leases (

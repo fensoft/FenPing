@@ -25,6 +25,8 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Changed
 
+- Changed new managed-host scan defaults from Deep hourly to Standard daily while preserving every existing host's configured schedule.
+- Changed unmanaged-device automatic scans from Deep hourly to Lightweight daily and staggered their first scans across deterministic UTC hour slots.
 - Replaced the MariaDB Compose service with SQLite and returned the deployment to a single application container.
 - Removed MariaDB credentials, socket sharing, client packages, server configuration, stored procedures, advisory locks, and MariaDB-specific SQL.
 - Reimplemented ping-status batching, lease imports, scan queue claims, DHCP transactions, backup/restore, schema inspection, and sequence handling using native SQLite transactions and upserts.

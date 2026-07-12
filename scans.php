@@ -4,6 +4,10 @@ const SCAN_XSL_FROM = 'file:///usr/bin/../share/nmap/';
 const SCAN_XSL_LEGACY = '../res/xsl/';
 const SCAN_XSL_TO = '/res/xsl/';
 const SCAN_HISTORY_DAYS = 7;
+const SCAN_MANAGED_DEFAULT_PROFILE = 'standard';
+const SCAN_MANAGED_DEFAULT_INTERVAL_HOURS = 24;
+const SCAN_UNMANAGED_DEFAULT_PROFILE = 'lightweight';
+const SCAN_UNMANAGED_DEFAULT_INTERVAL_HOURS = 24;
 
 function scanProfiles(): array {
   return array(

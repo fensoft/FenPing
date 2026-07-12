@@ -421,7 +421,7 @@ async function saveModal(action) {
 function closeModal() { modalRequest.abort(); modal.value = null; modalError.value = ''; saving.value = false; }
 function clearMessages() { modalError.value = ''; globalError.value = ''; notice.value = ''; }
 function toShortIp(ip) { const value = String(ip || ''); const prefix = `${network.value}.`; return value.startsWith(prefix) ? value.slice(prefix.length) : value; }
-function hostForm(data) { return { id: data.id, ip: toShortIp(data.ip || ''), router: data.router || '', mac: formatMac(data.mac), name: data.name || '', important: toFlag(data.important), repeater: toFlag(data.repeater), dns: data.dns || '', web: toFlag(data.web), netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : '', scan_profile: data.scan_profile || 'deep', scan_interval_hours: Number(data.scan_interval_hours ?? 1) }; }
+function hostForm(data) { return { id: data.id, ip: toShortIp(data.ip || ''), router: data.router || '', mac: formatMac(data.mac), name: data.name || '', important: toFlag(data.important), repeater: toFlag(data.repeater), dns: data.dns || '', web: toFlag(data.web), netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : '', scan_profile: data.scan_profile || 'standard', scan_interval_hours: Number(data.scan_interval_hours ?? 24) }; }
 
 function toggleDarkMode() { darkMode.value = !darkMode.value; writeCookie('fenping_theme', darkMode.value ? 'dark' : 'light'); applyTheme(); }
 function applyTheme() { const theme = darkMode.value ? 'dark' : 'light'; document.documentElement.dataset.bsTheme = theme; document.documentElement.style.colorScheme = theme; }

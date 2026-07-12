@@ -305,12 +305,17 @@ function getId($id) {
 }
 
 function create($ip, $mac) {
-  $stmt = getDb()->prepare("INSERT INTO ips (mac,ip) VALUES (:mac,:ip)");
-  $stmt->execute(array("mac" => $mac, "ip" => $ip));
+  $stmt = getDb()->prepare("INSERT INTO ips (mac, ip, scan_profile, scan_interval_hours) VALUES (:mac, :ip, :scan_profile, :scan_interval_hours)");
+  $stmt->execute(array(
+    "mac" => $mac,
+    "ip" => $ip,
+    "scan_profile" => SCAN_MANAGED_DEFAULT_PROFILE,
+    "scan_interval_hours" => SCAN_MANAGED_DEFAULT_INTERVAL_HOURS
+  ));
   return getDb()->lastInsertId();
 }
 
-function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId = null, $scanProfile = 'deep', $scanIntervalHours = 1) {
+function edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId = null, $scanProfile = SCAN_MANAGED_DEFAULT_PROFILE, $scanIntervalHours = SCAN_MANAGED_DEFAULT_INTERVAL_HOURS) {
   $stmt = getDb()->prepare("UPDATE ips SET name=:name, mac=:mac, ip=:ip, repeater=:repeater, important=:important, web=:web, router=:router, dns=:dns, netboot_image_id=:netboot_image_id, scan_profile=:scan_profile, scan_interval_hours=:scan_interval_hours WHERE id=:id");
   $stmt->execute(array("name" => $name, "mac" => $mac, "ip" => $ip, "repeater" => $repeater != "1" ? null : "1", "important" => $important != "1" ? null : "1", "web" => $web != "1" ? null : "1", "router" => $router == "" ? null : $router, "dns" => $dns == "" ? null : $dns, "netboot_image_id" => $netbootImageId, "scan_profile" => $scanProfile, "scan_interval_hours" => $scanIntervalHours, "id" => $id));
   return $stmt->rowCount();

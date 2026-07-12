@@ -116,8 +116,8 @@ function handleHostEdit(array $params): array {
       $body['router'] ?? null,
       $body['dns'] ?? null
     );
-    $scanProfile = normalizeScheduledScanProfile($body['scan_profile'] ?? $existing['scan_profile'] ?? 'deep');
-    $scanIntervalHours = normalizeScanIntervalHours($body['scan_interval_hours'] ?? $existing['scan_interval_hours'] ?? 1);
+    $scanProfile = normalizeScheduledScanProfile($body['scan_profile'] ?? $existing['scan_profile'] ?? SCAN_MANAGED_DEFAULT_PROFILE);
+    $scanIntervalHours = normalizeScanIntervalHours($body['scan_interval_hours'] ?? $existing['scan_interval_hours'] ?? SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
   } catch (InvalidArgumentException $e) {
     jsonError(400, $e->getMessage());
   }
@@ -211,8 +211,8 @@ function normalizeHostDetail(array $host): array {
   $host['repeater'] = (int)($host['repeater'] ?? 0);
   $host['web'] = (int)($host['web'] ?? 0);
   $host['netboot_image_id'] = $host['netboot_image_id'] === null ? null : (int)$host['netboot_image_id'];
-  $host['scan_profile'] = normalizeScheduledScanProfile($host['scan_profile'] ?? 'deep');
-  $host['scan_interval_hours'] = normalizeScanIntervalHours($host['scan_interval_hours'] ?? 1);
+  $host['scan_profile'] = normalizeScheduledScanProfile($host['scan_profile'] ?? SCAN_MANAGED_DEFAULT_PROFILE);
+  $host['scan_interval_hours'] = normalizeScanIntervalHours($host['scan_interval_hours'] ?? SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
   $host['mac'] = strtolower((string)($host['mac'] ?? ''));
   $host['vendor'] = hostVendorFromCache($host['mac']);
   $ping = hostPingState($host);
