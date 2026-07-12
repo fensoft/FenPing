@@ -17,22 +17,15 @@
             <button class="app-nav-link" :class="{ active: route.name === routeNames.scans }" type="button" title="Scans" :aria-current="route.name === routeNames.scans ? 'page' : undefined" @click="go('/scans')"><AppIcon name="radar" /><span>Scans</span></button>
             <button class="app-nav-link" :class="{ active: route.name === routeNames.netboot }" type="button" title="Netboot images" :aria-current="route.name === routeNames.netboot ? 'page' : undefined" @click="go('/netboot-images')"><AppIcon name="server" /><span>Netboot</span></button>
           </div>
+          <div class="app-sidebar-tools" role="group" aria-label="Application controls">
+            <button class="app-nav-link app-sidebar-tool refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :aria-label="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><AppIcon name="refresh" /><span class="app-sidebar-tool-label">Refresh</span><small class="app-sidebar-refresh-state" aria-live="polite">{{ refreshLabel }}</small></button>
+            <button class="app-nav-link app-sidebar-tool" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" :aria-label="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><AppIcon :name="darkMode ? 'sun' : 'moon'" /><span class="app-sidebar-tool-label">{{ darkMode ? 'Light mode' : 'Dark mode' }}</span></button>
+            <button class="app-nav-link app-sidebar-tool" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" :aria-label="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><AppIcon :name="isAuthenticated ? 'logout' : 'login'" /><span class="app-sidebar-tool-label">{{ isAuthenticated ? 'Logout' : 'Login' }}</span><span class="badge app-sidebar-auth-state" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span></button>
+          </div>
         </nav>
       </aside>
 
       <div class="app-main">
-        <header class="app-header py-2">
-          <div class="container-xl d-flex align-items-center justify-content-end gap-2">
-            <div class="toolbar">
-              <span class="badge auth-badge" :class="isAuthenticated ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'">{{ isAuthenticated ? 'Admin' : 'Guest' }}</span>
-              <button class="btn btn-outline-primary auth-button" type="button" :disabled="authLoading" :title="isAuthenticated ? 'Logout' : 'Login'" @click="isAuthenticated ? logout() : openLogin()"><AppIcon :name="isAuthenticated ? 'logout' : 'login'" /><span class="d-none d-sm-inline ms-1">{{ isAuthenticated ? 'Logout' : 'Login' }}</span></button>
-              <button class="btn btn-outline-secondary icon-btn" type="button" :title="darkMode ? 'Light mode' : 'Dark mode'" @click="toggleDarkMode"><AppIcon :name="darkMode ? 'sun' : 'moon'" /></button>
-              <button class="btn btn-outline-primary icon-btn refresh-btn" :class="{ 'is-spinning': pageLoading || scanning, 'is-pulsing': refreshPulsing }" type="button" :title="refreshTitle" :disabled="refreshDisabled" @click="requestRefresh"><AppIcon name="refresh" /></button>
-              <span class="text-secondary small">{{ refreshLabel }}</span>
-            </div>
-          </div>
-        </header>
-
         <main class="app-content container-xl py-3">
         <div v-if="globalError" class="alert alert-danger mb-3" role="alert">{{ globalError }}</div>
         <div v-if="notice" class="alert alert-success mb-3" role="status">{{ notice }}</div>
