@@ -82,6 +82,7 @@ cat > /etc/crontabs/root <<'EOF'
 * * * * * php /opt/fenping/cli.php dnsmasq-leases
 23 2 * * * php /opt/fenping/cli.php backup-maintenance daily
 41 4 * * 0 php /opt/fenping/cli.php backup-maintenance verify
+43 1 * * * php /opt/fenping/cli.php database-check
 EOF
 chmod 0600 /etc/crontabs/root
 php /opt/fenping/cli.php discord-restart || true

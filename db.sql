@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS scans (
   ip TEXT NOT NULL,
   mode TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'running',
+  queued_at DATETIME,
   status TEXT,
   date_begin DATETIME DEFAULT CURRENT_TIMESTAMP,
   date_end DATETIME,
@@ -126,6 +127,25 @@ CREATE TABLE IF NOT EXISTS scans (
   last_boot DATETIME,
   uptime_seconds INTEGER,
   distance INTEGER,
+  error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS operation_status (
+  operation TEXT PRIMARY KEY,
+  state TEXT NOT NULL,
+  last_started_at DATETIME,
+  last_finished_at DATETIME,
+  last_success_at DATETIME,
+  last_failure_at DATETIME,
+  last_error TEXT,
+  success_count INTEGER NOT NULL DEFAULT 0,
+  failure_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS operation_failures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation TEXT NOT NULL,
+  failed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   error TEXT
 );
 
@@ -321,6 +341,7 @@ CREATE INDEX IF NOT EXISTS scans_ip_id ON scans (ip, id);
 CREATE INDEX IF NOT EXISTS scans_snapshot_id ON scans (snapshot_id);
 CREATE INDEX IF NOT EXISTS scans_state ON scans (state);
 CREATE INDEX IF NOT EXISTS scans_queue ON scans (state, mode, id);
+CREATE INDEX IF NOT EXISTS scans_queued_at ON scans (state, queued_at);
 CREATE UNIQUE INDEX IF NOT EXISTS scans_one_running_per_ip ON scans (ip) WHERE state='running';
 CREATE UNIQUE INDEX IF NOT EXISTS scans_one_queued_per_ip ON scans (ip) WHERE state='queued';
 CREATE INDEX IF NOT EXISTS scan_port_changes_created ON scan_port_changes (created_at);
@@ -330,5 +351,6 @@ CREATE INDEX IF NOT EXISTS scan_snapshots_ip_mode_id ON scan_snapshots (ip, mode
 CREATE INDEX IF NOT EXISTS scan_snapshot_ports_service ON scan_snapshot_ports (service, port);
 CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scripts (snapshot_id, port_id);
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
+CREATE INDEX IF NOT EXISTS operation_failures_operation_time ON operation_failures (operation, failed_at);
 
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;

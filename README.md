@@ -24,7 +24,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 - Abortable route loading, live running durations, and keyboard-accessible modal dialogs.
 - Dark mode.
 - Ten browser-interface languages—English, Simplified Chinese, Spanish, French, Arabic, Brazilian Portuguese, Indonesian, Japanese, Russian, and German—with a locally persisted Auto/manual selector, browser-language detection, and RTL support.
-- `/api/health` appliance status endpoint.
+- Operations dashboard with exception-first health, capacity, queue, failure, readiness, and liveness reporting.
 - Optional Discord webhook notifications.
 - Backup and restore CLI for upgrades.
 
@@ -112,6 +112,9 @@ Important `.env` values:
 | `PASSWORD` | Admin login password. Empty means a blank login password. |
 | `SECRET` | Session signing secret. |
 | `DISCORD_WEBHOOK_URL` | Optional Discord webhook for host status, service changes, and restart notifications. |
+| `HEALTH_FAILURE_WINDOW_HOURS`, `HEALTH_SCAN_QUEUE_MAX_AGE_MINUTES` | Recent failure window and queued-scan warning age. Defaults to `24` hours and `15` minutes. |
+| `HEALTH_*_MAX_AGE_MINUTES`, `HEALTH_*_MAX_AGE_DAYS` | Freshness limits for ping, discovery, lease import, OUI data, and backups; see `env.template` for defaults. |
+| `HEALTH_DISK_*_PERCENT`, `HEALTH_DHCP_*_PERCENT` | Warning and critical utilization thresholds for disk and the DHCP pool. Defaults to `80` and `90` percent. |
 
 Managed hosts require a valid IPv4 address and six-octet MAC address. Host names are optional; when set, they must contain one DNS label using letters, numbers, and internal hyphens. Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
 
@@ -129,7 +132,7 @@ docker compose run --rm --no-deps app php /opt/fenping/cli.php doctor --json
 
 If `IP` is not set in `.env`, pass the interface address with `-e IP=<FenPing IPv4>` because the one-off command does not run boot's automatic address discovery.
 
-Authenticated administrators can open **Doctor** in the sidebar to run the equivalent live diagnostic, or use `GET /api/doctor` and `docker exec fenping php /opt/fenping/cli.php doctor --runtime --json`. Runtime mode correlates the required listeners with the active dnsmasq or nginx process and excludes only FenPing's own DHCP response; offers from every other server remain failures. The API can invoke only that exact root CLI command through `doas`.
+Authenticated administrators can open **Operations** in the sidebar. The page leads with new devices, important hosts down, failed or timed-out scans, and overdue backups, then shows queue, job freshness, SQLite/disk, DHCP capacity, service, dnsmasq-generation, and notification-delivery health. The existing privileged Doctor diagnostic and remediation report remains on the same page. It is also available through `GET /api/doctor` and `docker exec fenping php /opt/fenping/cli.php doctor --runtime --json`; the API can invoke only that exact root CLI command through `doas`.
 
 The DHCP probe uses Nmap's fixed discovery MAC and waits up to five seconds, so it does not request a lease or exhaust the pool.
 
@@ -286,6 +289,8 @@ Useful endpoints:
 | Method | Route | Description |
 | --- | --- | --- |
 | `GET` | `/api/health` | Appliance health. |
+| `GET` | `/api/health/live` | Process liveness; succeeds while the PHP application can answer. |
+| `GET` | `/api/health/ready` | Traffic readiness; returns HTTP `503` until SQLite, dnsmasq, cron, and integrity status are ready. |
 | `GET` | `/api/doctor` | Admin-only live network, storage, service-listener, and competing-DHCP diagnostics. |
 | `GET` | `/api/inventory` | Network inventory. |
 | `GET` | `/api/ipam` | DHCP pool utilization plus pending and approved dynamic devices. |

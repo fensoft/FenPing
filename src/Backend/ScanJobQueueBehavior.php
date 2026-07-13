@@ -55,8 +55,8 @@ public function scanMetadataEnqueue(string $ip, string $mode): array {
     }
 
     $insert = $database->prepare("
-      INSERT INTO scans (ip, mode, state, date_begin, ports_count)
-      VALUES (:ip, :mode, 'queued', NULL, 0)
+      INSERT INTO scans (ip, mode, state, queued_at, date_begin, ports_count)
+      VALUES (:ip, :mode, 'queued', CURRENT_TIMESTAMP, NULL, 0)
     ");
     $insert->execute(array('ip' => $ip, 'mode' => $mode));
     $metadata = $this->scanMetadataJobById((int)$database->lastInsertId());

@@ -21,6 +21,7 @@ public const INVENTORY_DISCOVERY_TIMEOUT_SECONDS = 300;
 public const INVENTORY_SCAN_CONCURRENCY = 4;
 
 public function runInventoryCommand(array $args): int {
+  $automatic = false;
   try {
     if (($args[0] ?? '') === '--work')
       return $this->runInventoryWorkerCommand(array_slice($args, 1));
@@ -29,6 +30,8 @@ public function runInventoryCommand(array $args): int {
 
     $options = $this->inventoryOptions($args);
     $automatic = count($options['args']) === 0 && !$options['profile_explicit'] && $options['network'] === null;
+    if ($automatic)
+      $this->operations->started('discovery');
     if ($options['network'] !== null) {
       $selectedNetwork = $this->networks->forCidr($options['network']);
     } elseif ($automatic) {
@@ -43,6 +46,8 @@ public function runInventoryCommand(array $args): int {
     if (count($targets) === 0) {
       echo "discovered 0 hosts" . PHP_EOL;
       echo "queued 0 scans" . PHP_EOL;
+      if ($automatic)
+        $this->operations->succeeded('discovery');
       return 0;
     }
 
@@ -68,8 +73,12 @@ public function runInventoryCommand(array $args): int {
     echo "queued $queued scans" . PHP_EOL;
     if ($active > 0)
       echo "$active scans already queued or running" . PHP_EOL;
+    if ($automatic)
+      $this->operations->succeeded('discovery');
     return 0;
   } catch (Throwable $e) {
+    if ($automatic)
+      $this->operations->failed('discovery', $e->getMessage());
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
     return 1;
   }

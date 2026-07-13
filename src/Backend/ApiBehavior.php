@@ -242,6 +242,7 @@ public function commitDhcpMutation(callable $mutation): array {
   $database = $this->db();
   $candidateDir = $this->dnsmasqPendingDir();
   $applied = false;
+  $configuring = false;
 
   try {
     if ($database->inTransaction())
@@ -250,10 +251,13 @@ public function commitDhcpMutation(callable $mutation): array {
     $this->clearDnsmasqCandidateDir($candidateDir);
     $this->dbBeginImmediate($database);
     $result = $mutation();
+    $configuring = true;
     $this->prepareDnsmasqCandidate($this->buildDnsmasqFiles(), $candidateDir);
     $log = $this->runDhcpHostsCli('--apply-pending');
     $applied = true;
     $this->dbCommit($database);
+    $this->operations->started('dnsmasq_generation');
+    $this->operations->succeeded('dnsmasq_generation');
 
     return array('result' => $result, 'log' => $log);
   } catch (Throwable $error) {
@@ -275,6 +279,10 @@ public function commitDhcpMutation(callable $mutation): array {
       }
     }
 
+    if ($configuring) {
+      $this->operations->started('dnsmasq_generation');
+      $this->operations->failed('dnsmasq_generation', $error->getMessage());
+    }
     if (count($recoveryErrors) !== 0) {
       throw new RuntimeException(
         'DHCP update failed: ' . $error->getMessage() . '; ' . implode('; ', $recoveryErrors),

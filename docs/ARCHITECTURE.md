@@ -169,7 +169,7 @@ The required `IFACE` environment variable selects the host network interface tha
 
 `FenPing\Doctor\DoctorService` runs on every startup before database initialization. It aggregates interface/address/routing, configured-router ARP reachability, pool endpoint overlap, TCP/UDP bind availability, persistent-write/SQLite-WAL, and active DHCP-discovery results. When `DHCP_DEFAULT_ROUTER` is absent, router reachability is reported as not configured and the rendered dnsmasq configuration explicitly suppresses DHCP option 3. DNS TCP/UDP 53, interface-bound DHCP UDP 67, TFTP UDP 69, and wildcard HTTP TCP 80 must all be available. Nmap's retained `broadcast-dhcp-discover` script is restricted to `IFACE` and uses its fixed client MAC with a five-second response timeout. Any offer or inability to complete the safety probe blocks all services; `restart.sh` stops the resulting restart loop and retains the failed replacement for logs or rollback.
 
-The authenticated `GET /api/doctor` route invokes the exact `doctor --runtime --json` CLI command as root through the constrained `doas` policy. Runtime mode uses `ss` to inspect DNS, DHCP, TFTP, and HTTP listeners. It accepts direct process metadata when available and, under the reduced capability set where dnsmasq file-descriptor ownership is intentionally hidden, requires the expected dnsmasq or nginx process to be live. DHCP discovery removes only a response whose server identifier is FenPing's configured appliance address. The admin-only Vue Doctor page displays the complete report and remediation text; PHP-FPM never receives a general-purpose privileged command capability.
+The authenticated `GET /api/doctor` route invokes the exact `doctor --runtime --json` CLI command as root through the constrained `doas` policy. Runtime mode uses `ss` to inspect DNS, DHCP, TFTP, and HTTP listeners. It accepts direct process metadata when available and, under the reduced capability set where dnsmasq file-descriptor ownership is intentionally hidden, requires the expected dnsmasq or nginx process to be live. DHCP discovery removes only a response whose server identifier is FenPing's configured appliance address. The admin-only Vue Operations page displays the exception-first health dashboard plus the complete Doctor report and remediation text; PHP-FPM never receives a general-purpose privileged command capability.
 
 `DHCP_NETWORK` is a required canonical `/24`. `EXTRA_NETWORKS` optionally lists comma-separated scan-only `/24` networks. FenPing reports whether a connected or static non-default route covers each extra network, but the status is informational and does not disable scanning. Default and partial routes do not count as explicit routes. dnsmasq generation and all DHCP/IPAM/host/category/netboot mutations remain restricted to `DHCP_NETWORK`.
 
@@ -248,19 +248,22 @@ The 1.x JSON contract is forward-compatible with future FenPing backups: later 1
 - dnsmasq lease import every minute.
 - Verified managed backup every day at 02:23 UTC.
 - Round-robin restore test every Sunday at 04:41 UTC.
+- SQLite integrity check every day at 01:43 UTC.
 
 Locks use `flock` under `/tmp` to prevent overlapping jobs.
 
 ## Health
 
-`GET /api/health` reports:
+`GET /api/health` is the operator-health document. It reports exception counts for new devices and important hosts down; queued, running, recently failed, and timed-out scans; oldest queue age; freshness for ping, discovery, lease import, OUI refresh, and backups; SQLite, WAL, disk, and integrity state; DHCP-pool utilization; dnsmasq-generation failures; and notification-delivery failures. Thresholds are environment-driven.
 
-- HTTP/PHP status.
-- SQLite connectivity and engine identity.
-- dnsmasq running.
-- BusyBox `crond` running.
-- last ping scan time.
-- last inventory scan time and metadata.
+Operation outcomes are stored in `operation_status`; recent failure events are retained in `operation_failures` for the configurable reporting window. Recording is best-effort and cannot change the outcome of the monitored operation.
+
+Health has two probe contracts:
+
+- `GET /api/health/live` reports whether PHP can answer and does not depend on downstream services.
+- `GET /api/health/ready` requires SQLite, dnsmasq, BusyBox `crond`, and a non-failed integrity status. It returns HTTP `503` when not ready.
+
+Docker Compose uses readiness for container health. The full health document may be `warning` for stale jobs or recent operational failures without making the container unavailable.
 
 ## Development And Testing
 

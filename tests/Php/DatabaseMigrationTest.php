@@ -22,13 +22,21 @@ final class DatabaseMigrationTest extends IntegrationTestCase
             scan_interval_hours INTEGER NOT NULL DEFAULT 1
           );
           CREATE INDEX ips_netboot_image_id ON ips (netboot_image_id);
+          CREATE TABLE scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'running',
+            date_begin DATETIME DEFAULT CURRENT_TIMESTAMP,
+            date_end DATETIME
+          );
           INSERT INTO ips (name, mac, ip, scan_profile, scan_interval_hours)
           VALUES ('Existing host', '02:00:00:00:00:40', '192.0.2.40', 'deep', 1);
           PRAGMA user_version=1;
         ");
 
         $this->app()->backend()->databaseApplyMigrations($database, \FenPing\Backend\Backend::DATABASE_SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
-        self::assertSame(3, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(4, $this->app()->backend()->databaseSchemaVersion($database));
         $existing = $database->query("SELECT scan_profile, scan_interval_hours FROM ips WHERE ip='192.0.2.40'")->fetch(PDO::FETCH_ASSOC);
         self::assertSame('deep', $existing['scan_profile']);
         self::assertSame(1, (int) $existing['scan_interval_hours']);
@@ -38,17 +46,23 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         self::assertSame('standard', $created['scan_profile']);
         self::assertSame(24, (int) $created['scan_interval_hours']);
 
-        foreach (['ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor'] as $table) {
+        foreach ([
+            'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',
+            'operation_status', 'operation_failures',
+        ] as $table) {
             $exists = $database->prepare(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:table",
             );
             $exists->execute(['table' => $table]);
             self::assertSame(1, (int) $exists->fetchColumn());
         }
+        $scanColumns = $database->query('PRAGMA table_info(scans)')->fetchAll(PDO::FETCH_ASSOC);
+        self::assertContains('queued_at', array_column($scanColumns, 'name'));
+
         $this->app()->backend()->databaseApplyMigrations(
-            $database, 3, $this->app()->config()->projectDir . '/migrations',
+            $database, 4, $this->app()->config()->projectDir . '/migrations',
         );
-        self::assertSame(3, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(4, $this->app()->backend()->databaseSchemaVersion($database));
         self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
     }
 

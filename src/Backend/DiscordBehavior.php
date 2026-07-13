@@ -351,9 +351,12 @@ public function discordPostPayload(array $payload): bool {
   if ($url === '')
     return false;
 
+  $this->operations->started('notification_delivery');
   $json = json_encode($payload);
-  if ($json === false)
+  if ($json === false) {
+    $this->operations->failed('notification_delivery', 'failed to encode notification payload');
     return false;
+  }
 
   try {
     $response = $this->fenpingHttpRequest($url, array(
@@ -367,15 +370,19 @@ public function discordPostPayload(array $payload): bool {
       'max_bytes' => 1024 * 1024
     ));
   } catch (Throwable $error) {
+    $this->operations->failed('notification_delivery', $error->getMessage());
     fwrite(STDERR, 'Discord notification failed: ' . $error->getMessage() . PHP_EOL);
     return false;
   }
 
   if ($response['status'] < 200 || $response['status'] >= 300) {
-    fwrite(STDERR, 'Discord notification failed: HTTP ' . $response['status'] . PHP_EOL);
+    $message = 'HTTP ' . $response['status'];
+    $this->operations->failed('notification_delivery', $message);
+    fwrite(STDERR, 'Discord notification failed: ' . $message . PHP_EOL);
     return false;
   }
 
+  $this->operations->succeeded('notification_delivery');
   return true;
 }
 }

@@ -25,10 +25,11 @@ final class CliKernel
         $this->commands = [
             'doctor' => $doctor,
             'database' => new CallableCommand(fn(array $args): int => $this->database($args)),
+            'database-check' => new CallableCommand(fn(array $args): int => $this->database($args)),
             'ping' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
                 '/tmp/ping.lck',
                 'ping scan',
-                fn(): int => $this->backend->runPingCommand($args),
+                fn(): int => $this->tracked('ping', fn(): int => $this->backend->runPingCommand($args)),
             )),
             'hosts' => new CallableCommand(fn(array $args): int => $this->backend->runHostsCommand($args)),
             'inventory' => new CallableCommand(fn(array $args): int => $this->inventory($args)),
@@ -38,13 +39,13 @@ final class CliKernel
             'oui-refresh' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
                 '/tmp/oui-refresh.lck',
                 'OUI refresh',
-                fn(): int => $this->backend->runIeeeOuiRefreshCommand($args),
+                fn(): int => $this->tracked('oui_update', fn(): int => $this->backend->runIeeeOuiRefreshCommand($args)),
             )),
             'oui-sync' => new CallableCommand(fn(array $args): int => $this->backend->runIeeeOuiSyncCommand($args)),
             'dnsmasq-leases' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
                 '/tmp/dnsmasq-leases.lck',
                 'dnsmasq lease import',
-                fn(): int => $this->backend->runDnsmasqLeasesCommand($args),
+                fn(): int => $this->tracked('lease_import', fn(): int => $this->backend->runDnsmasqLeasesCommand($args)),
             )),
             'discord-restart' => new CallableCommand(fn(array $args): int => $args === []
                 ? $this->backend->runDiscordRestartCommand()
@@ -72,6 +73,7 @@ final class CliKernel
         if ($arguments !== []) {
             return $this->usage();
         }
+        $this->backend->operations->started('database_integrity');
         try {
             $this->database->initialize();
             $errors = $this->database->integrityErrors();
@@ -80,8 +82,10 @@ final class CliKernel
             }
             echo 'SQLite database ready: ' . $this->database->connection()
                 ->query('PRAGMA database_list')->fetchColumn(2) . PHP_EOL;
+            $this->backend->operations->succeeded('database_integrity');
             return 0;
         } catch (Throwable $error) {
+            $this->backend->operations->failed('database_integrity', $error->getMessage());
             fwrite(STDERR, $error->getMessage() . PHP_EOL);
             return 1;
         }
@@ -105,12 +109,28 @@ final class CliKernel
             fn(): int => $this->backend->runInventoryCommand($arguments),
         );
     }
+    private function tracked(string $operation, callable $callback): int
+    {
+        $this->backend->operations->started($operation);
+        try {
+            $code = $callback();
+            if ($code === 0) {
+                $this->backend->operations->succeeded($operation);
+            } else {
+                $this->backend->operations->failed($operation, "command exited with code $code");
+            }
+            return $code;
+        } catch (Throwable $error) {
+            $this->backend->operations->failed($operation, $error->getMessage());
+            throw $error;
+        }
+    }
 
     private function usage(): int
     {
         fwrite(STDERR, "Usage: php cli.php doctor [--runtime] [--json]" . PHP_EOL);
         fwrite(STDERR, "Usage: php cli.php ping [--network IPv4/24] [1-254|DEBUG]" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php database" . PHP_EOL);
+        fwrite(STDERR, "       php cli.php database|database-check" . PHP_EOL);
         fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
         fwrite(STDERR, "       php cli.php inventory [--network IPv4/24] [--profile lightweight|standard|deep] [1-254|IPv4] (queue scans)" . PHP_EOL);
         fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);

@@ -28,6 +28,7 @@ use FenPing\Doctor\DoctorService;
 use FenPing\Doctor\NativeDoctorSystem;
 use FenPing\Doctor\ProcessDoctorReportProvider;
 use FenPing\Health\HealthService;
+use FenPing\Health\OperationTracker;
 use FenPing\Host\CategoryRepository;
 use FenPing\Host\HostRepository;
 use FenPing\Inventory\InventoryService;
@@ -53,6 +54,7 @@ use FenPing\Vendor\VendorLookup;
 final class Application
 {
     private readonly DatabaseManager $database;
+    private readonly OperationTracker $operations;
     private readonly Backend $backend;
     private readonly IpConflictRepository $ipConflicts;
     private readonly IpConflictDetector $ipConflictDetector;
@@ -81,7 +83,8 @@ final class Application
         $this->ipConflicts = new IpConflictRepository($this->database);
         $this->processes = new NativeProcessRunner();
         $this->ipConflictDetector = new IpConflictDetector($config, $this->processes, $this->ipConflicts, $clock);
-        $this->backend = new Backend($config, $this->database, $this->ipConflicts, $this->ipConflictDetector);
+        $this->operations = new OperationTracker($this->database, $clock);
+        $this->backend = new Backend($config, $this->database, $this->ipConflicts, $this->ipConflictDetector, $this->operations);
         $this->profiles = new ProfileCatalog();
         $this->scanJobs = new ScanJobRepository($this->backend, $this->database);
         $this->snapshots = new SnapshotRepository($this->backend, $this->database);
@@ -126,7 +129,7 @@ final class Application
             new AuthController($this->backend, $this->auth, $adapter),
             new SystemController(
                 $this->backend,
-                new HealthService($this->backend, $this->database, $clock),
+                new HealthService($this->backend, $this->database, $this->operations, $clock),
                 $this->inventory,
                 $this->notifications,
                 new PingScanner($this->backend, $this->config, $this->database),

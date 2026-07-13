@@ -26,7 +26,24 @@ final readonly class AppConfig
         public string $dataDir,
         public int $inventoryDownRetentionDays = 7,
         public string $dhcpDefaultRouter = '',
+        public int $healthFailureWindowHours = 24,
+        public int $healthPingMaxAgeMinutes = 30,
+        public int $healthDiscoveryMaxAgeMinutes = 120,
+        public int $healthLeaseImportMaxAgeMinutes = 5,
+        public int $healthOuiMaxAgeDays = 35,
+        public int $healthBackupMaxAgeDays = 7,
+        public int $healthScanQueueMaxAgeMinutes = 15,
+        public int $healthDiskWarningPercent = 80,
+        public int $healthDiskCriticalPercent = 90,
+        public int $healthDhcpWarningPercent = 80,
+        public int $healthDhcpCriticalPercent = 90,
     ) {
+        if ($healthDiskWarningPercent >= $healthDiskCriticalPercent) {
+            throw new InvalidArgumentException('disk warning threshold must be lower than critical threshold');
+        }
+        if ($healthDhcpWarningPercent >= $healthDhcpCriticalPercent) {
+            throw new InvalidArgumentException('DHCP warning threshold must be lower than critical threshold');
+        }
         $this->network = $dhcpNetwork->prefix();
     }
 
@@ -66,6 +83,17 @@ final readonly class AppConfig
             dataDir: $dataDir,
             inventoryDownRetentionDays: self::nonNegativeIntEnv('INVENTORY_DOWN_RETENTION_DAYS', 7),
             dhcpDefaultRouter: self::env('DHCP_DEFAULT_ROUTER'),
+            healthFailureWindowHours: self::positiveIntEnv('HEALTH_FAILURE_WINDOW_HOURS', 24),
+            healthPingMaxAgeMinutes: self::positiveIntEnv('HEALTH_PING_MAX_AGE_MINUTES', 30),
+            healthDiscoveryMaxAgeMinutes: self::positiveIntEnv('HEALTH_DISCOVERY_MAX_AGE_MINUTES', 120),
+            healthLeaseImportMaxAgeMinutes: self::positiveIntEnv('HEALTH_LEASE_IMPORT_MAX_AGE_MINUTES', 5),
+            healthOuiMaxAgeDays: self::positiveIntEnv('HEALTH_OUI_MAX_AGE_DAYS', 35),
+            healthBackupMaxAgeDays: self::positiveIntEnv('HEALTH_BACKUP_MAX_AGE_DAYS', 7),
+            healthScanQueueMaxAgeMinutes: self::positiveIntEnv('HEALTH_SCAN_QUEUE_MAX_AGE_MINUTES', 15),
+            healthDiskWarningPercent: self::percentEnv('HEALTH_DISK_WARNING_PERCENT', 80),
+            healthDiskCriticalPercent: self::percentEnv('HEALTH_DISK_CRITICAL_PERCENT', 90),
+            healthDhcpWarningPercent: self::percentEnv('HEALTH_DHCP_WARNING_PERCENT', 80),
+            healthDhcpCriticalPercent: self::percentEnv('HEALTH_DHCP_CRITICAL_PERCENT', 90),
         );
     }
 
@@ -116,5 +144,23 @@ final readonly class AppConfig
             throw new InvalidArgumentException("$name must be a non-negative integer");
         }
         return $parsed;
+    }
+
+    private static function positiveIntEnv(string $name, int $default): int
+    {
+        $value = self::nonNegativeIntEnv($name, $default);
+        if ($value < 1) {
+            throw new InvalidArgumentException("$name must be a positive integer");
+        }
+        return $value;
+    }
+
+    private static function percentEnv(string $name, int $default): int
+    {
+        $value = self::positiveIntEnv($name, $default);
+        if ($value > 100) {
+            throw new InvalidArgumentException("$name must be between 1 and 100");
+        }
+        return $value;
     }
 }

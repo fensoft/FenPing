@@ -6,6 +6,7 @@ namespace FenPing\Backend;
 
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
+use FenPing\Health\OperationTracker;
 use FenPing\Ipam\IpConflictDetector;
 use FenPing\Ipam\IpConflictRepository;
 use FenPing\Network\NetworkManager;
@@ -60,6 +61,7 @@ final class Backend
         public readonly DatabaseManager $database,
         public readonly IpConflictRepository $ipConflicts,
         public readonly IpConflictDetector $ipConflictDetector,
+        public readonly OperationTracker $operations,
         ?NetworkManager $networks = null,
     ) {
         $this->networks = $networks ?? new NetworkManager($config, new RouteDetector(new NativeProcessRunner()));

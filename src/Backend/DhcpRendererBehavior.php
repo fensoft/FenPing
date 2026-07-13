@@ -26,6 +26,9 @@ public const DNSMASQ_UPDATE_LOCK = '/tmp/fenping-dnsmasq-update.lock';
 
 public function runHostsCommand(array $args = array()): int {
   $lock = null;
+  $track = $args === array();
+  if ($track)
+    $this->operations->started('dnsmasq_generation');
 
   try {
     $this->ensureDnsmasqDirs();
@@ -48,8 +51,12 @@ public function runHostsCommand(array $args = array()): int {
 
     $lock = $this->acquireDnsmasqUpdateLock();
     $this->syncDnsmasqFromDatabase();
+    if ($track)
+      $this->operations->succeeded('dnsmasq_generation');
     return 0;
   } catch (Throwable $e) {
+    if ($track)
+      $this->operations->failed('dnsmasq_generation', $e->getMessage());
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
     return 1;
   } finally {
