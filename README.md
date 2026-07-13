@@ -107,6 +107,10 @@ Important `.env` values:
 | `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. dnsmasq, reservations, categories, and netboot assignments remain restricted to this network; IPAM displays it alongside every configured extra network. |
 | `EXTRA_NETWORKS` | Optional comma-separated canonical `/24` networks available for scanning, for example `192.168.0.0/24,172.16.20.0/24`. FenPing reports whether an explicit route exists but never adds routes. |
 | `INVENTORY_DOWN_RETENTION_DAYS` | Days to keep an unreserved host visible after it changes to Down. Defaults to `7`; reserved hosts remain visible. |
+| `SCAN_GLOBAL_CONCURRENCY` | Maximum scans running across all networks. Defaults to `4`. |
+| `SCAN_NETWORK_CONCURRENCY` | Default maximum scans running in one `/24`. Defaults to `2`. |
+| `SCAN_NETWORK_DAILY_BUDGET` | Default scheduled-scan starts allowed per `/24` in a rolling 24 hours. Defaults to `254`; manual API and explicit CLI scans bypass this budget. |
+| `SCAN_NETWORK_OVERRIDES` | Optional comma-separated `CIDR:concurrency:daily_budget` overrides, for example `192.168.1.0/24:1:64`. CIDRs must be canonical `/24` networks. |
 | `DHCP_DEFAULT_ROUTER` | Optional router handed out by DHCP. Leave unset to suppress the DHCP router option. |
 | `DHCP_DYNAMIC_BEGIN` | First dynamic DHCP address, last octet only. |
 | `DHCP_DYNAMIC_END` | Last dynamic DHCP address, last octet only. |
@@ -220,7 +224,7 @@ Cron inside the container runs:
 
 - `ping` every 15 minutes.
 - inventory discovery every hour; discovered hosts are queued only when their scan cadence is due.
-- the inventory worker runs queued scans with a maximum concurrency of four.
+- the inventory worker enforces global and per-network concurrency plus each network's rolling scheduled-scan budget.
 - the local IEEE OUI registry is refreshed monthly on the first day at 03:17.
 - dnsmasq lease import every minute.
 - a verified managed backup every day at 02:23 UTC.
@@ -229,6 +233,8 @@ Cron inside the container runs:
 The image does not embed a vendor registry. At startup, and again through a monthly background job, FenPing downloads and validates the complete public MA-L, MA-M, MA-S, and historical IAB CSV files from the [IEEE Registration Authority public listings](https://standards.ieee.org/products-programs/regauth/). A successful refresh atomically replaces `data/state/ieee-oui.json` and transactionally updates the SQL table only when assignments changed. Inventory requests query this local prefix index; individual LAN MAC addresses are never sent outside the appliance. If a later download or SQL import fails, FenPing retains the previous registry and SQL data.
 
 Completed nmap output is stored in SQLite. FenPing keeps one XML snapshot per distinct semantic result and scan profile, so unchanged scans reuse the existing snapshot. Lightweight checks Nmap's 100 most common TCP ports with a five-minute limit. Standard checks the top 1,000 TCP ports with service, OS, default-script, and traceroute detection with a 30-minute limit. Deep performs the same detection across all 65,535 TCP ports with a two-hour limit. The normal detail view prefers the latest deep result. Selecting a lightweight or standard result merges it over the preceding deep snapshot: partial observations replace matching ports while deep-only ports and OS data remain visible with source labels. Existing `quick` history remains readable as Lightweight. OS detection shows every 100% match, or only the highest-accuracy match when nmap has no 100% result.
+
+While nmap runs, FenPing parses `--stats-every 5s` timing output into monotonic approximate progress and stable phases. Scans, Inventory, and Host Detail expose progress, queue position or waiting reason, and authenticated cancellation. Queued cancellation is immediate; running cancellation requests TERM and escalates to KILL after ten seconds if necessary. Guests can see progress but cannot cancel work.
 
 Completed scans also build an effective open-port view. A deep scan observes the full TCP range; lightweight and standard scans change only the ports listed in their Nmap scan scope. Services in the first usable result are recorded as newly appeared, and later appearances, disappearances, and confirmed service/version changes are stored for seven days, displayed on Notify, and sent to Discord when a webhook is configured. Missing version data from a partial scan does not erase version details learned by a deeper scan.
 
@@ -313,9 +319,11 @@ Useful endpoints:
 | `POST` | `/api/ping/refresh` | Run ping scan and wait for completion. |
 | `GET` | `/api/history/{ip}` | Status history for a host. |
 | `GET` | `/api/hosts/by-ip/{ip}/detail` | Combined identity, status history, and scan details for an inventory device. |
+| `GET` | `/api/scans` | Recent and active scans plus global and per-network concurrency/budget usage. |
 | `GET` | `/api/scans/{ip}` | Preferred scan result as JSON, favoring the latest deep result. |
 | `GET` | `/api/scans/profiles` | List available scan profiles and timeout limits. |
 | `POST` | `/api/scans/{ip}` | Queue the requested `lightweight`, `standard`, or `deep` profile and return HTTP `202`. |
+| `POST` | `/api/scans/{ip}/{id}/cancel` | Admin-only queued or running cancellation. Running requests return HTTP `202` until termination is confirmed. |
 | `GET` | `/api/scans/{ip}/xml` | Compatibility XML generated from the normalized scan tables. |
 | `POST` | `/api/scans/{ip}/quick` | Legacy alias that queues a lightweight scan. |
 | `GET` | `/api/netboot/images` | List netboot images. |

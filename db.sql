@@ -110,7 +110,13 @@ CREATE TABLE IF NOT EXISTS scans (
   ip TEXT NOT NULL,
   mode TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'running',
+  network TEXT,
+  request_source TEXT NOT NULL DEFAULT 'legacy',
   queued_at DATETIME,
+  progress_percent INTEGER,
+  progress_phase TEXT,
+  progress_updated_at DATETIME,
+  cancel_requested_at DATETIME,
   status TEXT,
   date_begin DATETIME DEFAULT CURRENT_TIMESTAMP,
   date_end DATETIME,
@@ -373,6 +379,8 @@ CREATE INDEX IF NOT EXISTS scans_snapshot_id ON scans (snapshot_id);
 CREATE INDEX IF NOT EXISTS scans_state ON scans (state);
 CREATE INDEX IF NOT EXISTS scans_queue ON scans (state, mode, id);
 CREATE INDEX IF NOT EXISTS scans_queued_at ON scans (state, queued_at);
+CREATE INDEX IF NOT EXISTS scans_network_state ON scans (network, state);
+CREATE INDEX IF NOT EXISTS scans_network_source_started ON scans (network, request_source, date_begin);
 CREATE UNIQUE INDEX IF NOT EXISTS scans_one_running_per_ip ON scans (ip) WHERE state='running';
 CREATE UNIQUE INDEX IF NOT EXISTS scans_one_queued_per_ip ON scans (ip) WHERE state='queued';
 CREATE INDEX IF NOT EXISTS scan_port_changes_created ON scan_port_changes (created_at);
@@ -384,4 +392,4 @@ CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scrip
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
 CREATE INDEX IF NOT EXISTS operation_failures_operation_time ON operation_failures (operation, failed_at);
 
-PRAGMA user_version = 6;
+PRAGMA user_version = 7;

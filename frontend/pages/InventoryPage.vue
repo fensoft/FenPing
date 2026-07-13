@@ -64,6 +64,7 @@
               <td v-if="isAuthenticated" class="text-end action-cell">
                 <div class="inventory-actions">
                   <button v-if="row.host.ip" class="btn btn-sm inventory-action-btn inventory-scan-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><AppIcon :name="isScanRunning(row.host) ? 'loader-2' : 'search'" /><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
+                  <button v-if="scanIsActiveState(row.host?.scan?.state)" class="btn btn-outline-danger btn-sm icon-btn" type="button" :disabled="!scanCanCancel(row.host.scan) || isCancelling(row.host.scan)" :title="t(row.host.scan.cancel_requested ? 'Cancelling' : 'Cancel scan')" :aria-label="t(row.host.scan.cancel_requested ? 'Cancelling' : 'Cancel scan')" @click="$emit('cancel-scan', row.host.scan)"><AppIcon :name="row.host.scan.cancel_requested || isCancelling(row.host.scan) ? 'loader-2' : 'x'" :class="{ 'is-spinning': row.host.scan.cancel_requested || isCancelling(row.host.scan) }" /></button>
                   <button v-if="isAuthenticated && isDhcpSelected && row.host.id" class="btn btn-outline-warning btn-sm icon-btn" type="button" :title="t('Edit host')" :aria-label="t('Edit host')" @click="$emit('open-edit', row.host)"><AppIcon name="edit" /></button>
                   <button v-else-if="isAuthenticated && isDhcpSelected && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Create host')" :aria-label="t('Create host')" @click="$emit('open-create', row.host)"><AppIcon name="plus" /></button>
                 </div>
@@ -86,16 +87,17 @@ import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
-import { formatDuration, formatMac, formatServerDate, parseServerDate, scanIsActiveState, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
+import { formatDuration, formatMac, formatServerDate, parseServerDate, scanCanCancel, scanIsActiveState, scanProgressLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({
   isAuthenticated: Boolean,
   scanning: Boolean,
   refreshQueued: Boolean,
-  scanningHosts: { type: Object, required: true }
+  scanningHosts: { type: Object, required: true },
+  cancellingScans: { type: Object, required: true }
 });
-const emit = defineEmits(['add-category', 'delete-category', 'host-detail', 'network', 'selected-network', 'open-create', 'open-edit', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
+const emit = defineEmits(['add-category', 'cancel-scan', 'delete-category', 'host-detail', 'network', 'selected-network', 'open-create', 'open-edit', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
 const hosts = ref([]);
 const networks = ref([]);
 const selectedCidr = ref(readStorage('fenping_selected_network', ''));
@@ -207,15 +209,16 @@ function hostKey(host) { return String(host?.ip || host?.id || host?.mac || '');
 function isScanningHost(host) { const key = hostKey(host); return key !== '' && props.scanningHosts.has(key); }
 function isScanRunning(host) { return isScanningHost(host) || scanIsActiveState(host?.scan?.state); }
 function scanActionClass(host) { return { 'btn-outline-primary': !['failed', 'timeout'].includes(host?.scan?.state), 'btn-outline-danger': host?.scan?.state === 'failed', 'btn-outline-warning': host?.scan?.state === 'timeout', 'is-spinning': isScanRunning(host) }; }
+function isCancelling(scan) { return props.cancellingScans.has(Number(scan?.id || 0)); }
 function scanButtonLabel(host) {
-  if (host?.scan?.state === 'queued') return t('Queued');
-  if (isScanRunning(host)) return t('Scanning');
+  if (scanIsActiveState(host?.scan?.state)) return scanProgressLabel(host.scan);
+  if (isScanningHost(host)) return t('Scanning');
   if (['failed', 'timeout'].includes(host?.scan?.state)) return t('Retry');
   return t('Scan');
 }
 function scanButtonTitle(host) {
-  if (host?.scan?.state === 'queued') return t('Scan queued');
-  if (isScanRunning(host)) return t('Scanning');
+  if (scanIsActiveState(host?.scan?.state)) return scanProgressLabel(host.scan);
+  if (isScanningHost(host)) return t('Scanning');
   if (host?.scan?.state === 'failed') return `${t('Scan failed')}${host.scan.error ? `: ${host.scan.error}` : ''}`;
   if (host?.scan?.state === 'timeout') return `${t('Scan timed out')}${host.scan.error ? `: ${host.scan.error}` : ''}`;
   return host?.scan?.date_end ? t('Scan host, last {date}', { date: formatServerDate(host.scan.date_end) }) : t('Scan host');
@@ -239,7 +242,8 @@ function activityTitle(host) {
   return parts.join(' | ');
 }
 function serviceLabel(host) {
-  if (isScanRunning(host)) return t(host?.scan?.state === 'queued' ? 'Queued' : 'Scanning');
+  if (scanIsActiveState(host?.scan?.state)) return scanProgressLabel(host.scan);
+  if (isScanningHost(host)) return t('Scanning');
   if (host?.scan?.state === 'failed') return t('Scan failed');
   if (host?.scan?.state === 'timeout') return t('Scan timed out');
   if (!host?.scan?.result_available && !host?.scan?.snapshot_id) return '-';

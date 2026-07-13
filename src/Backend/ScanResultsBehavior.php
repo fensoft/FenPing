@@ -6,43 +6,14 @@ namespace FenPing\Backend;
 
 use InvalidArgumentException;
 use PDO;
-use RuntimeException;
-use Throwable;
-use FenPing\Realtime\LiveUpdateScope;
 
 trait ScanResultsBehavior
 {
-public function scanMetadataFailed(int $id, string $error): void {
-  $stmt = $this->db()->prepare("
-    UPDATE scans
-    SET state='failed',
-        date_end=CURRENT_TIMESTAMP,
-        duration=CASE WHEN date_begin IS NULL THEN NULL ELSE MAX(0, unixepoch(CURRENT_TIMESTAMP)-unixepoch(date_begin)) END,
-        error=:error
-    WHERE id=:id
-  ");
-  $stmt->execute(array('id' => $id, 'error' => $error));
-  if ($stmt->rowCount() > 0)
-    $this->liveUpdates->publish(LiveUpdateScope::Scans);
-}
-
-public function scanMetadataTimedOut(int $id, string $error): void {
-  $stmt = $this->db()->prepare("
-    UPDATE scans
-    SET state='timeout',
-        date_end=CURRENT_TIMESTAMP,
-        duration=CASE WHEN date_begin IS NULL THEN NULL ELSE MAX(0, unixepoch(CURRENT_TIMESTAMP)-unixepoch(date_begin)) END,
-        error=:error
-    WHERE id=:id
-  ");
-  $stmt->execute(array('id' => $id, 'error' => $error));
-  if ($stmt->rowCount() > 0)
-    $this->liveUpdates->publish(LiveUpdateScope::Scans);
-}
-
 public function scanMetadataLatest(string $ip): ?array {
   $stmt = $this->db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    SELECT id, ip, mode, state, network, request_source, queued_at, progress_percent, progress_phase,
+           progress_updated_at, cancel_requested_at, status, date_begin, date_end, duration, ports_count,
+           snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
     ORDER BY id DESC
@@ -62,7 +33,9 @@ public function scanMetadataBestResult(string $ip, ?string $mode = null): ?array
     ? "CASE mode WHEN 'deep' THEN 0 ELSE 1 END, id DESC"
     : 'id DESC';
   $stmt = $this->db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    SELECT id, ip, mode, state, network, request_source, queued_at, progress_percent, progress_phase,
+           progress_updated_at, cancel_requested_at, status, date_begin, date_end, duration, ports_count,
+           snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
       AND state='complete'
@@ -84,7 +57,9 @@ public function scanMetadataPreviousResult(string $ip, string $mode, int $before
     throw new InvalidArgumentException('invalid scan profile');
 
   $stmt = $this->db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    SELECT id, ip, mode, state, network, request_source, queued_at, progress_percent, progress_phase,
+           progress_updated_at, cancel_requested_at, status, date_begin, date_end, duration, ports_count,
+           snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
       AND mode=:mode
@@ -101,7 +76,9 @@ public function scanMetadataPreviousResult(string $ip, string $mode, int $before
 
 public function scanMetadataById(string $ip, int $id): ?array {
   $stmt = $this->db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    SELECT id, ip, mode, state, network, request_source, queued_at, progress_percent, progress_phase,
+           progress_updated_at, cancel_requested_at, status, date_begin, date_end, duration, ports_count,
+           snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip AND id=:id
     LIMIT 1
@@ -190,7 +167,9 @@ public function scanMetadataHistory(string $ip, int $limit = 30): array {
   $limit = max(1, min(100, $limit));
   $days = self::SCAN_HISTORY_DAYS;
   $stmt = $this->db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    SELECT id, ip, mode, state, network, request_source, queued_at, progress_percent, progress_phase,
+           progress_updated_at, cancel_requested_at, status, date_begin, date_end, duration, ports_count,
+           snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
       AND snapshot_id IS NOT NULL
@@ -225,7 +204,9 @@ public function scanMetadataForIp(string $ip, int $limit = 50): array {
   $limit = max(1, min(100, $limit));
   $days = self::SCAN_HISTORY_DAYS;
   $stmt = $this->db()->prepare("
-    SELECT id, ip, mode, state, status, date_begin, date_end, duration, ports_count, snapshot_id, result_changed, error
+    SELECT id, ip, mode, state, network, request_source, queued_at, progress_percent, progress_phase,
+           progress_updated_at, cancel_requested_at, status, date_begin, date_end, duration, ports_count,
+           snapshot_id, result_changed, error
     FROM scans
     WHERE ip=:ip
       AND (state<>'complete' OR result_changed=1)
@@ -264,6 +245,13 @@ public function scanMetadataQueue(int $limit = 100): array {
       s.ip,
       s.mode,
       s.state,
+      s.network,
+      s.request_source,
+      s.queued_at,
+      s.progress_percent,
+      s.progress_phase,
+      s.progress_updated_at,
+      s.cancel_requested_at,
       s.status,
       s.date_begin,
       s.date_end,
@@ -287,8 +275,9 @@ public function scanMetadataQueue(int $limit = 100): array {
   $stmt->execute();
 
   $queue = array();
+  $policyState = $this->scanQueuePolicyState();
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $metadata = $this->scanNormalizeMetadata($row);
+    $metadata = $this->scanNormalizeMetadata($row, $policyState['annotations']);
     $metadata['host_id'] = $row['host_id'] === null ? null : (int)$row['host_id'];
     $metadata['name'] = $row['name'] ?? '';
     $metadata['mac'] = strtolower((string)($row['mac'] ?? ''));
@@ -303,7 +292,9 @@ public function scanMetadataQueue(int $limit = 100): array {
 
 public function scanMetadataLatestByIp(): array {
   $stmt = $this->db()->prepare("
-    SELECT s.id, s.ip, s.mode, s.state, s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.snapshot_id, s.result_changed, s.error
+    SELECT s.id, s.ip, s.mode, s.state, s.network, s.request_source, s.queued_at,
+           s.progress_percent, s.progress_phase, s.progress_updated_at, s.cancel_requested_at,
+           s.status, s.date_begin, s.date_end, s.duration, s.ports_count, s.snapshot_id, s.result_changed, s.error
     FROM scans s
     INNER JOIN (
       SELECT ip, MAX(id) id
@@ -326,6 +317,13 @@ public function scanMetadataLatestUsableByIp(): array {
       s.ip,
       s.mode,
       s.state,
+      s.network,
+      s.request_source,
+      s.queued_at,
+      s.progress_percent,
+      s.progress_phase,
+      s.progress_updated_at,
+      s.cancel_requested_at,
       s.status,
       s.date_begin,
       s.date_end,
@@ -377,18 +375,4 @@ public function scanMetadataLatestUsableByIp(): array {
   return $results;
 }
 
-public function scanNormalizeMetadata(array $metadata): array {
-  $metadata['id'] = isset($metadata['id']) ? (int)$metadata['id'] : null;
-  $metadata['duration'] = isset($metadata['duration']) && $metadata['duration'] !== null ? (int)$metadata['duration'] : null;
-  $metadata['ports_count'] = isset($metadata['ports_count']) ? (int)$metadata['ports_count'] : 0;
-  $metadata['snapshot_id'] = isset($metadata['snapshot_id']) && $metadata['snapshot_id'] !== null ? (int)$metadata['snapshot_id'] : null;
-  $metadata['result_changed'] = (int)($metadata['result_changed'] ?? 0);
-  $metadata['result_available'] = (int)($metadata['snapshot_id'] ?? 0) > 0;
-  $metadata['xml_usable'] = $metadata['result_available'];
-  $metadata['xml_url'] = $metadata['xml_usable'] && isset($metadata['ip'], $metadata['id'])
-    ? $this->scanXmlUrl($metadata['ip'], $metadata['id'])
-    : null;
-  $metadata['xml'] = $metadata['xml_url'];
-  return $metadata;
-}
 }

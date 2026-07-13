@@ -14,6 +14,7 @@
       <div class="page-actions">
         <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" :title="t('Scan history')" :aria-label="t('Scan history')" :disabled="!viewScan" @click="$emit('open-scan', host.ip, viewScan?.id)"><AppIcon name="history" class="me-1" />{{ t('Scan history') }}</button>
         <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('scan-host', host)"><AppIcon :name="isScanning ? 'loader-2' : 'search'" class="me-1" :class="{ 'is-spinning': isScanning }" />{{ t('Scan') }}</button>
+        <button v-if="isAuthenticated && scanIsActiveState(latestScan?.state)" class="btn btn-outline-danger btn-sm" type="button" :disabled="!scanCanCancel(latestScan) || isCancelling" @click="$emit('cancel-scan', latestScan)"><AppIcon :name="latestScan.cancel_requested || isCancelling ? 'loader-2' : 'x'" class="me-1" :class="{ 'is-spinning': latestScan.cancel_requested || isCancelling }" />{{ t(latestScan.cancel_requested ? 'Cancelling' : 'Cancel scan') }}</button>
         <button v-if="isAuthenticated && host.id && host.dhcp_managed" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><AppIcon name="edit" class="me-1" />{{ t('Edit') }}</button>
       </div>
     </div>
@@ -50,6 +51,7 @@
           <h3>{{ t('Latest Scan') }}</h3>
           <dl class="detail-compact-list">
             <div><dt>{{ t('State') }}</dt><dd>{{ scanRunStateLabel(latestScan?.state) || '-' }}</dd></div>
+            <div><dt>{{ t('Progress') }}</dt><dd>{{ latestScan ? scanProgressLabel(latestScan) : '-' }}</dd></div>
             <div><dt>{{ t('Status') }}</dt><dd>{{ t(latestScan?.status || '-') }}</dd></div>
             <div><dt>{{ t('Profile') }}</dt><dd>{{ scanProfileLabel(latestScan?.mode) }}</dd></div>
             <div><dt>{{ t('Last') }}</dt><dd>{{ formatScanDate(latestScan?.date_end || latestScan?.date_begin) }}</dd></div>
@@ -95,13 +97,13 @@ import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 import { filterHistoryRows } from '../lib/historyFilters.js';
-import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanIsActiveState, scanRunStateLabel, scanStateClass, scanStateLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
+import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanCanCancel, scanIsActiveState, scanProgressLabel, scanRunStateLabel, scanStateClass, scanStateLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
 import { t } from '../lib/i18n.js';
 import { scanCadenceLabel, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
-const props = defineProps({ device: { type: Object, default: null }, embedded: Boolean, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
-defineEmits(['open-edit', 'open-scan', 'scan-host']);
+const props = defineProps({ device: { type: Object, default: null }, embedded: Boolean, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true }, cancellingScans: { type: Object, required: true } });
+defineEmits(['cancel-scan', 'open-edit', 'open-scan', 'scan-host']);
 const route = useRoute();
 const detail = ref(null);
 const loading = ref(false);
@@ -125,6 +127,7 @@ const netbootName = computed(() => detail.value?.netboot_image?.name || detail.v
 const managementLabel = computed(() => host.value.id ? t('Managed') : t('Not managed'));
 const scanSchedule = computed(() => host.value.id ? `${scanProfileLabel(host.value.scan_profile)} · ${scanCadenceLabel(host.value.scan_interval_hours)}` : t('Not managed'));
 const isScanning = computed(() => props.scanningHosts.has(String(host.value?.ip || host.value?.id || host.value?.mac || '')));
+const isCancelling = computed(() => props.cancellingScans.has(Number(latestScan.value?.id || 0)));
 const portScanMeta = computed(() => {
   const result = scanResult.value;
   if (!result) return '';

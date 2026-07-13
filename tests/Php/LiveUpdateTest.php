@@ -127,6 +127,33 @@ final class LiveUpdateTest extends IntegrationTestCase
         ], $publisher->events);
     }
 
+    public function testProgressEventsAreThrottledAndCancellationWins(): void
+    {
+        $publisher = new RecordingLiveUpdatePublisher();
+        $app = Application::forConfig($this->app()->config(), $publisher);
+        $id = $app->scanJobs()->start('192.0.2.30', 'standard');
+        $publisher->events = [];
+
+        $app->scanJobs()->updateProgress($id, 'port_scan', 30);
+        $app->scanJobs()->updateProgress($id, 'port_scan', 30);
+        $app->scanJobs()->updateProgress($id, 'port_scan', 20);
+        $app->scanJobs()->updateProgress($id, 'service_detection', 30);
+        self::assertCount(2, $publisher->events);
+
+        $app->scanJobs()->cancel('192.0.2.30', $id);
+        $app->scanJobs()->fail($id, 'late failure');
+        $app->scanJobs()->timeout($id, 'late timeout');
+        $app->scanJobs()->markCancelled($id);
+        self::assertCount(4, $publisher->events);
+        foreach ($publisher->events as $event) {
+            self::assertSame([LiveUpdateScope::Scans], $event);
+        }
+        $metadata = $app->scanJobs()->findJob($id);
+        self::assertSame('cancelled', $metadata['state']);
+        self::assertSame(30, $metadata['progress_percent']);
+        self::assertSame('cancelled', $metadata['progress_phase']);
+    }
+
     private function request(string $uri): Request
     {
         return new Request('POST', $uri, [], [], [], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => $uri], []);

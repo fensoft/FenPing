@@ -41,6 +41,10 @@ final readonly class AppConfig
         public int $healthDhcpWarningPercent = 80,
         public int $healthDhcpCriticalPercent = 90,
         public array $dockerNetworkNames = [],
+        public int $scanGlobalConcurrency = 4,
+        public int $scanNetworkConcurrency = 2,
+        public int $scanNetworkDailyBudget = 254,
+        public array $scanNetworkOverrides = [],
     ) {
         if ($healthDiskWarningPercent >= $healthDiskCriticalPercent) {
             throw new InvalidArgumentException('disk warning threshold must be lower than critical threshold');
@@ -50,6 +54,29 @@ final readonly class AppConfig
         }
         if ($discordMention !== '' && $discordMention !== '@everyone' && !ctype_digit($discordMention)) {
             throw new InvalidArgumentException('DISCORD_MENTION must be @everyone or a numeric Discord user ID');
+        }
+        if ($scanGlobalConcurrency < 1 || $scanGlobalConcurrency > 20) {
+            throw new InvalidArgumentException('SCAN_GLOBAL_CONCURRENCY must be between 1 and 20');
+        }
+        if ($scanNetworkConcurrency < 1 || $scanNetworkConcurrency > $scanGlobalConcurrency) {
+            throw new InvalidArgumentException('SCAN_NETWORK_CONCURRENCY must be between 1 and SCAN_GLOBAL_CONCURRENCY');
+        }
+        if ($scanNetworkDailyBudget < 1 || $scanNetworkDailyBudget > 65535) {
+            throw new InvalidArgumentException('SCAN_NETWORK_DAILY_BUDGET must be between 1 and 65535');
+        }
+        foreach ($scanNetworkOverrides as $cidr => $limits) {
+            $network = Ipv4Network::from24((string) $cidr, 'SCAN_NETWORK_OVERRIDES network');
+            if ($network->cidr !== $cidr || !is_array($limits)) {
+                throw new InvalidArgumentException('invalid SCAN_NETWORK_OVERRIDES entry');
+            }
+            $concurrency = (int) ($limits['concurrency'] ?? 0);
+            $budget = (int) ($limits['daily_budget'] ?? 0);
+            if ($concurrency < 1 || $concurrency > $scanGlobalConcurrency) {
+                throw new InvalidArgumentException("SCAN_NETWORK_OVERRIDES concurrency for $cidr must be between 1 and SCAN_GLOBAL_CONCURRENCY");
+            }
+            if ($budget < 1 || $budget > 65535) {
+                throw new InvalidArgumentException("SCAN_NETWORK_OVERRIDES daily budget for $cidr must be between 1 and 65535");
+            }
         }
         $this->network = $dhcpNetwork->prefix();
     }
@@ -125,7 +152,19 @@ final readonly class AppConfig
             healthDhcpWarningPercent: self::percentEnv('HEALTH_DHCP_WARNING_PERCENT', 80),
             healthDhcpCriticalPercent: self::percentEnv('HEALTH_DHCP_CRITICAL_PERCENT', 90),
             dockerNetworkNames: $dockerNetworkNames,
+            scanGlobalConcurrency: self::boundedPositiveIntEnv('SCAN_GLOBAL_CONCURRENCY', 4, 20),
+            scanNetworkConcurrency: self::boundedPositiveIntEnv('SCAN_NETWORK_CONCURRENCY', 2, 20),
+            scanNetworkDailyBudget: self::boundedPositiveIntEnv('SCAN_NETWORK_DAILY_BUDGET', 254, 65535),
+            scanNetworkOverrides: self::scanNetworkOverridesEnv(),
         );
+    }
+
+    public function scanLimitsForNetwork(string $cidr): array
+    {
+        return $this->scanNetworkOverrides[$cidr] ?? [
+            'concurrency' => $this->scanNetworkConcurrency,
+            'daily_budget' => $this->scanNetworkDailyBudget,
+        ];
     }
 
     public function netbootDir(): string
@@ -213,5 +252,43 @@ final readonly class AppConfig
             throw new InvalidArgumentException("$name must be between 1 and 100");
         }
         return $value;
+    }
+
+    private static function boundedPositiveIntEnv(string $name, int $default, int $maximum): int
+    {
+        $value = self::positiveIntEnv($name, $default);
+        if ($value > $maximum) {
+            throw new InvalidArgumentException("$name must be between 1 and $maximum");
+        }
+        return $value;
+    }
+
+    private static function scanNetworkOverridesEnv(): array
+    {
+        $raw = trim(self::env('SCAN_NETWORK_OVERRIDES'));
+        if ($raw === '') {
+            return [];
+        }
+
+        $overrides = [];
+        foreach (explode(',', $raw) as $entry) {
+            $parts = array_map('trim', explode(':', trim($entry)));
+            if (count($parts) !== 3) {
+                throw new InvalidArgumentException('SCAN_NETWORK_OVERRIDES must use CIDR:concurrency:daily_budget entries');
+            }
+            [$cidr, $concurrencyValue, $budgetValue] = $parts;
+            $network = Ipv4Network::from24($cidr, 'SCAN_NETWORK_OVERRIDES network');
+            if (isset($overrides[$network->cidr])) {
+                throw new InvalidArgumentException("duplicate SCAN_NETWORK_OVERRIDES network: {$network->cidr}");
+            }
+            if (!ctype_digit($concurrencyValue) || !ctype_digit($budgetValue)) {
+                throw new InvalidArgumentException('SCAN_NETWORK_OVERRIDES limits must be positive integers');
+            }
+            $overrides[$network->cidr] = [
+                'concurrency' => (int) $concurrencyValue,
+                'daily_budget' => (int) $budgetValue,
+            ];
+        }
+        return $overrides;
     }
 }

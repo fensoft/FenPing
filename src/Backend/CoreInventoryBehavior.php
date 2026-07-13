@@ -266,6 +266,13 @@ public function getLatestScans() {
       s.ip,
       s.mode,
       s.state,
+      s.network,
+      s.request_source,
+      s.queued_at,
+      s.progress_percent,
+      s.progress_phase,
+      s.progress_updated_at,
+      s.cancel_requested_at,
       s.status,
       s.date_begin,
       s.date_end,
@@ -290,16 +297,16 @@ public function getLatestScans() {
   ");
   $stmt->execute();
 
+  $queueAnnotations = $this->scanQueuePolicyState()['annotations'];
   $scans = array();
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $row["id"] = (int)$row["id"];
-    $row["duration"] = $row["duration"] === null ? null : (int)$row["duration"];
-    $row["ports_count"] = (int)$row["ports_count"];
-    $row["snapshot_id"] = $row["snapshot_id"] === null ? null : (int)$row["snapshot_id"];
-    $row["result_changed"] = (int)$row["result_changed"];
-    $row["result_available"] = (int)$row["result_available"];
-    $row["xml"] = $row["result_available"] ? $this->scanXmlUrl($row["ip"]) : null;
-    $scans[$row["ip"]] = $row;
+    $resultAvailable = (int)$row['result_available'] === 1;
+    $metadata = $this->scanNormalizeMetadata($row, $queueAnnotations);
+    $metadata['result_available'] = $resultAvailable;
+    $metadata['xml_usable'] = $resultAvailable;
+    $metadata['xml_url'] = $resultAvailable ? $this->scanXmlUrl($metadata['ip']) : null;
+    $metadata['xml'] = $metadata['xml_url'];
+    $scans[$metadata['ip']] = $metadata;
   }
   return $scans;
 }

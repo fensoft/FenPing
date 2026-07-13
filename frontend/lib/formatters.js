@@ -135,6 +135,43 @@ export function scanRunStateLabel(state) {
   return state ? t(state) : '-';
 }
 
+export function scanProgressPhaseLabel(phase) {
+  const labels = {
+    waiting_budget: 'Waiting for daily budget',
+    waiting_network: 'Waiting for network slot',
+    waiting_global: 'Waiting for global slot',
+    queued: 'Queued',
+    starting: 'Starting',
+    host_discovery: 'Host discovery',
+    port_scan: 'Port scan',
+    service_detection: 'Service detection',
+    script_scan: 'Script scan',
+    os_detection: 'OS detection',
+    traceroute: 'Traceroute',
+    finalizing: 'Finalizing',
+    cancelling: 'Cancelling',
+    complete: 'complete',
+    failed: 'failed',
+    timeout: 'timeout',
+    cancelled: 'cancelled'
+  };
+  return t(labels[phase] || phase || 'Queued');
+}
+
+export function scanProgressLabel(scan) {
+  if (!scan) return '-';
+  if (scan.state === 'queued' && scan.queue_position)
+    return `${scanProgressPhaseLabel(scan.progress_phase)} · ${t('Queue #{position}', { position: scan.queue_position })}`;
+  const phase = scanProgressPhaseLabel(scan.progress_phase || scan.state);
+  if (scan.state === 'running' && Number.isFinite(Number(scan.progress_percent)))
+    return `${phase} · ${Math.max(0, Math.min(100, Number(scan.progress_percent)))}%`;
+  return phase;
+}
+
+export function scanCanCancel(scan) {
+  return scanIsActiveState(scan?.state) && !scan?.cancel_requested;
+}
+
 export function scanStateClass(state) {
   if (state === 'open') return 'scan-state scan-state-open';
   if (state === 'closed') return 'scan-state scan-state-closed';

@@ -19,7 +19,6 @@ trait InventorySchedulerBehavior
 {
 public const INVENTORY_SCAN_TIMEOUT_SECONDS = 7200;
 public const INVENTORY_DISCOVERY_TIMEOUT_SECONDS = 300;
-public const INVENTORY_SCAN_CONCURRENCY = 4;
 
 public function runInventoryCommand(array $args): int {
   $automatic = false;
@@ -64,7 +63,7 @@ public function runInventoryCommand(array $args): int {
     $queued = 0;
     $active = 0;
     foreach ($queueTargets as $target) {
-      $result = $this->scanMetadataEnqueue($target['ip'], $target['profile']);
+      $result = $this->scanMetadataEnqueue($target['ip'], $target['profile'], $automatic ? 'scheduled' : 'manual');
       if ($result['created'])
         $queued++;
       else
@@ -99,10 +98,12 @@ public function inventoryWorkerLoop(): int {
   $processes = array();
 
   while (true) {
+    $claimedThisPass = false;
     $this->inventoryReapJobProcesses($processes);
 
-    if ($this->scanMetadataRunningCount() < self::INVENTORY_SCAN_CONCURRENCY) {
-      foreach ($this->scanMetadataClaimQueued(self::INVENTORY_SCAN_CONCURRENCY) as $job) {
+    if ($this->scanMetadataRunningCount() < $this->config->scanGlobalConcurrency) {
+      foreach ($this->scanMetadataClaimQueued($this->config->scanGlobalConcurrency) as $job) {
+        $claimedThisPass = true;
         $process = $this->inventoryStartJobProcess((int)$job['id']);
         if ($process === false) {
           $this->scanMetadataFailed((int)$job['id'], 'failed to start scan worker');
@@ -115,7 +116,7 @@ public function inventoryWorkerLoop(): int {
     if (count($processes) === 0) {
       $queued = $this->scanMetadataQueuedCount();
       $running = $this->scanMetadataRunningCount();
-      if ($queued === 0 || $running >= self::INVENTORY_SCAN_CONCURRENCY)
+      if ($queued === 0 || !$claimedThisPass || $running >= $this->config->scanGlobalConcurrency)
         return 0;
     }
 
@@ -145,6 +146,11 @@ public function inventoryReapJobProcesses(array &$processes): void {
 
     $metadata = $this->scanMetadataJobById((int)$scanId);
     if ($metadata !== null && $metadata['state'] === 'running') {
+      if ($metadata['cancel_requested']) {
+        $this->scanMetadataCancelled((int)$scanId);
+        continue;
+      }
+
       $message = $exitCode === 0
         ? 'scan worker exited without completing metadata'
         : "scan worker exited with code $exitCode";

@@ -7,6 +7,7 @@ namespace FenPing\Backend;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
+use FenPing\Scan\ProgressParser;
 
 trait InventoryScannerBehavior
 {
@@ -40,7 +41,7 @@ public function inventoryScan(string $ip, string $mode = 'deep', ?int $scanId = 
   try {
     $command = $this->inventoryScanCommand($ip, $mode, $tmp);
 
-    $this->inventoryExec($command, true, $this->scanProfileTimeout($mode));
+    $this->inventoryRunScanProcess($command, $this->scanProfileTimeout($mode), $scanId, $mode);
     $xml = file_get_contents($tmp);
     if ($xml === false)
       throw new RuntimeException("failed to read nmap result for $ip");
@@ -58,6 +59,10 @@ public function inventoryScan(string $ip, string $mode = 'deep', ?int $scanId = 
       'changed' => $changed,
       'status' => $status
     );
+  } catch (InventoryCancelledException $e) {
+    $this->scanMetadataCancelled($scanId);
+    $this->scanPruneHistory($ip);
+    throw $e;
   } catch (InventoryTimeoutException $e) {
     $this->scanMetadataTimedOut($scanId, $e->getMessage());
     $this->scanPruneHistory($ip);
@@ -73,12 +78,106 @@ public function inventoryScan(string $ip, string $mode = 'deep', ?int $scanId = 
 
 public function inventoryScanCommand(string $ip, string $profile, string $output): array {
   if ($profile === 'quick' || $profile === 'lightweight')
-    return array('nmap', $ip, '-T4', '-F', '-sS', '-v', '-oX', $output);
+    return array('nmap', $ip, '-T4', '-F', '-sS', '-v', '--stats-every', '5s', '-oX', $output);
   if ($profile === 'standard')
-    return array('nmap', $ip, '-T3', '-A', '--top-ports', '1000', '-sS', '-v', '-oX', $output);
+    return array('nmap', $ip, '-T3', '-A', '--top-ports', '1000', '-sS', '-v', '--stats-every', '5s', '-oX', $output);
   if ($profile === 'deep')
-    return array('nmap', $ip, '-T3', '-A', '-p-', '-sS', '-v', '-oX', $output);
+    return array('nmap', $ip, '-T3', '-A', '-p-', '-sS', '-v', '--stats-every', '5s', '-oX', $output);
   throw new InvalidArgumentException('invalid scan profile');
+}
+
+public function inventoryRunScanProcess(array $command, int $timeoutSeconds, int $scanId, string $profile): void {
+  if ($this->scanMetadataCancellationRequested($scanId))
+    throw new InventoryCancelledException('scan cancelled by operator');
+
+  $descriptors = array(
+    0 => array('file', '/dev/null', 'r'),
+    1 => array('pipe', 'w'),
+    2 => array('pipe', 'w')
+  );
+  $process = proc_open($command, $descriptors, $pipes);
+  if (!is_resource($process))
+    throw new RuntimeException('failed to start nmap');
+
+  stream_set_blocking($pipes[1], false);
+  stream_set_blocking($pipes[2], false);
+  $started = microtime(true);
+  $nextCancellationCheck = $started;
+  $terminationReason = null;
+  $termSentAt = null;
+  $buffers = array(1 => '', 2 => '');
+  $diagnostic = '';
+  $progress = 1;
+  $exitCode = -1;
+
+  try {
+    while (true) {
+      foreach (array(1, 2) as $descriptor) {
+        $chunk = stream_get_contents($pipes[$descriptor]);
+        if ($chunk === false || $chunk === '')
+          continue;
+        $diagnostic = substr($diagnostic . $chunk, -65536);
+        $buffers[$descriptor] .= $chunk;
+        while (($newline = strpos($buffers[$descriptor], "\n")) !== false) {
+          $line = rtrim(substr($buffers[$descriptor], 0, $newline), "\r");
+          $buffers[$descriptor] = substr($buffers[$descriptor], $newline + 1);
+          $parsed = ProgressParser::parse($line);
+          if ($parsed === null)
+            continue;
+          $progress = ProgressParser::overall($profile, $parsed['phase'], $parsed['phase_percent'], $progress);
+          $this->scanMetadataUpdateProgress($scanId, $parsed['phase'], $progress);
+        }
+      }
+
+      $status = proc_get_status($process);
+      $now = microtime(true);
+      if ($terminationReason === null && $now >= $nextCancellationCheck) {
+        $nextCancellationCheck = $now + 1.0;
+        if ($this->scanMetadataCancellationRequested($scanId))
+          $terminationReason = 'cancelled';
+      }
+      if ($terminationReason === null && $now - $started >= max(1, $timeoutSeconds))
+        $terminationReason = 'timeout';
+
+      if ($terminationReason !== null && $status['running'] && $termSentAt === null) {
+        proc_terminate($process, 15);
+        $termSentAt = $now;
+      } elseif ($terminationReason !== null && $status['running'] && $termSentAt !== null && $now - $termSentAt >= 10.0) {
+        proc_terminate($process, 9);
+      }
+
+      if (!$status['running']) {
+        $exitCode = (int)$status['exitcode'];
+        break;
+      }
+      usleep(100000);
+    }
+
+    $finalStatus = proc_get_status($process);
+    if ($finalStatus['running'])
+      proc_terminate($process, 9);
+  } finally {
+    foreach (array(1, 2) as $descriptor) {
+      $chunk = stream_get_contents($pipes[$descriptor]);
+      if ($chunk !== false && $chunk !== '')
+        $diagnostic = substr($diagnostic . $chunk, -65536);
+      fclose($pipes[$descriptor]);
+    }
+    $closedCode = proc_close($process);
+    if ($exitCode < 0)
+      $exitCode = $closedCode;
+  }
+
+  if ($terminationReason === 'cancelled' || $this->scanMetadataCancellationRequested($scanId))
+    throw new InventoryCancelledException('scan cancelled by operator');
+  if ($terminationReason === 'timeout') {
+    $duration = $this->inventoryTimeoutLabel($timeoutSeconds);
+    throw new InventoryTimeoutException("nmap timed out after $duration");
+  }
+  if ($exitCode !== 0)
+    throw new RuntimeException(trim($diagnostic) ?: 'nmap exited with status ' . $exitCode);
+
+  $this->scanMetadataUpdateProgress($scanId, 'finalizing', 99);
 }
 
 public function inventoryExec(array $command, bool $quiet = false, int $timeoutSeconds = self::INVENTORY_SCAN_TIMEOUT_SECONDS): array {

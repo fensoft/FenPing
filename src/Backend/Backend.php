@@ -53,8 +53,10 @@ final class Backend
     use RoutesNetbootBehavior;
     use RoutesScansBehavior;
     use RoutesSystemBehavior;
+    use ScanControlBehavior;
     use ScanJobQueueBehavior;
     use ScanPortChangesBehavior;
+    use ScanPolicyBehavior;
     use ScanProfileAndHashBehavior;
     use ScanResultsBehavior;
     use ScanRetentionBehavior;

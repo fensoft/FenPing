@@ -11,6 +11,16 @@ final class ApiKernelTest extends IntegrationTestCase
     protected function setUp(): void
     {
         $this->resetDatabase();
+        if ($this->app()->auth()->isAuthenticated()) {
+            $this->app()->auth()->logout();
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->app()->auth()->isAuthenticated()) {
+            $this->app()->auth()->logout();
+        }
     }
 
     public function testProfilesEndpointKeepsDirectJsonShape(): void
@@ -79,6 +89,59 @@ final class ApiKernelTest extends IntegrationTestCase
         self::assertArrayNotHasKey('02:00:00:00:02:10', $pending);
         self::assertSame('198.51.100.0/24', $body['conflicts'][0]['network']);
         self::assertCount(2, $body['conflict_monitor']['monitors']);
+    }
+
+    public function testScanCancellationRequiresLoginAndReturnsNormalizedPolicyPayloads(): void
+    {
+        $queued = $this->app()->scanJobs()->enqueue('192.0.2.80', 'standard');
+        $id = (int) $queued['metadata']['id'];
+        $uri = "/api/scans/192.0.2.80/$id/cancel";
+
+        $guest = $this->app()->api()->handle($this->request('POST', $uri));
+        self::assertSame(403, $guest->status);
+
+        self::assertTrue($this->app()->auth()->login(''));
+        $response = $this->app()->api()->handle($this->request('POST', $uri));
+        self::assertSame(200, $response->status);
+        $body = json_decode($response->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertTrue($body['cancellation_requested']);
+        self::assertTrue($body['cancelled']);
+        foreach ([
+            'network', 'request_source', 'progress_percent', 'progress_phase',
+            'progress_updated_at', 'queue_position', 'queue_reason',
+            'budget_eligible_at', 'cancel_requested',
+        ] as $field) {
+            self::assertArrayHasKey($field, $body['metadata']);
+        }
+
+        $queue = $this->app()->api()->handle($this->request('GET', '/api/scans'));
+        self::assertSame(200, $queue->status);
+        $queueBody = json_decode($queue->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame(4, $queueBody['policy']['global']['concurrency_limit']);
+        self::assertSame(
+            ['192.0.2.0/24', '198.51.100.0/24'],
+            array_column($queueBody['policy']['networks'], 'network'),
+        );
+
+        $running = $this->app()->scanJobs()->start('192.0.2.82', 'standard');
+        $accepted = $this->app()->api()->handle(
+            $this->request('POST', "/api/scans/192.0.2.82/$running/cancel"),
+        );
+        self::assertSame(202, $accepted->status);
+        $acceptedBody = json_decode($accepted->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertFalse($acceptedBody['cancelled']);
+        self::assertTrue($acceptedBody['metadata']['cancel_requested']);
+
+        $missing = $this->app()->api()->handle(
+            $this->request('POST', '/api/scans/192.0.2.80/999999/cancel'),
+        );
+        self::assertSame(404, $missing->status);
+        $complete = $this->app()->scanJobs()->start('192.0.2.81', 'lightweight');
+        $this->app()->scanJobs()->complete($complete, ['status' => 'down', 'duration' => 1, 'ports' => []]);
+        $conflict = $this->app()->api()->handle(
+            $this->request('POST', "/api/scans/192.0.2.81/$complete/cancel"),
+        );
+        self::assertSame(409, $conflict->status);
     }
 
     private function request(string $method, string $uri): Request

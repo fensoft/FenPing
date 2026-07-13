@@ -103,7 +103,7 @@ Prefer adding operational jobs here instead of creating new shell scripts.
 
 The application database is the SQLite file at `DATABASE_PATH`. `FenPing\Database\DatabaseManager` configures WAL, `synchronous=NORMAL`, a 30-second busy timeout, foreign keys, memory-backed temporary storage, and the deterministic `ipv4_num()` ordering helper. `db.sql` is the canonical idempotent schema for new databases. Existing databases advance through ordered files in `migrations/`, with `PRAGMA user_version` recording the applied version.
 
-SQLite permits concurrent readers and one writer. Mutation paths use immediate write transactions. Scan queue capacity is counted and claimed atomically, so concurrent coordinators cannot collectively exceed four running jobs. Ping detection completes before one batched transaction writes the latest state and status history.
+SQLite permits concurrent readers and one writer. Mutation paths use immediate write transactions. Scan queue capacity, per-network running counts, and rolling scheduled-start budgets are evaluated and claimed in one immediate transaction, so concurrent coordinators cannot exceed configured limits. Budget-deferred work on one network does not block eligible manual work or another network. Ping detection completes before one batched transaction writes the latest state and status history.
 
 Important tables:
 
@@ -144,14 +144,17 @@ The inventory and scan services under `src/Inventory/` and `src/Scan/` perform d
 
 - Default mode selects one configured, routed `/24` using the persistent inventory round-robin cursor, discovers live hosts with `nmap -n -sn`, excludes FenPing's own IP, and applies the automatic scan schedule. Ping uses an independent cursor. FenPing only reads the kernel route table and never adds a route.
 - Managed hosts store `scan_profile` and `scan_interval_hours`. New managed hosts default to Standard every 24 hours, while existing settings remain unchanged. Automatic discovery queues only hosts whose latest successful scan for that profile is due; `0` disables scheduled scans. Explicit API and CLI scans ignore cadence. Unmanaged hosts use Lightweight every 24 hours, with their first scan distributed across deterministic UTC hour slots to avoid an initial queue spike.
-- A lock-protected coordinator claims queued jobs and runs no more than four nmap child processes concurrently.
+- A lock-protected coordinator claims queued jobs up to `SCAN_GLOBAL_CONCURRENCY` (default four), `SCAN_NETWORK_CONCURRENCY` (default two per `/24`), and optional per-CIDR overrides.
+- Automatic jobs are marked `scheduled` and limited by `SCAN_NETWORK_DAILY_BUDGET` scheduled starts per rolling 24 hours. Manual API and explicit CLI jobs bypass and do not consume this budget; requesting a queued scheduled job manually promotes it.
 - Only one job runs per IP at a time. Profiles are ordered lightweight, standard, then deep. A stronger request upgrades weaker queued work or waits behind weaker running work, while weaker requests never downgrade an active stronger job.
+- Queue metadata exposes a one-based eligible position, `ready`, `global_concurrency`, `network_concurrency`, or `daily_budget` reason, and the exact next budget-eligible timestamp.
 - Lightweight uses `-F -sS -T4` and has a five-minute timeout.
 - Standard uses `-A --top-ports 1000 -sS -T3` and has a 30-minute timeout.
 - Deep uses `-A -p- -sS -T3` and has a two-hour timeout.
-- Alpine's BusyBox `timeout` sends `TERM` at the profile limit and `KILL` ten seconds later; GNU and BusyBox timeout exit codes are normalized into the same scan state.
+- The scan supervisor runs nmap directly with `--stats-every 5s`, parses timing output into monotonic persisted phase/percentage updates, polls cancellation at least once per second, and enforces profile timeouts in PHP. Cancellation and timeout send `TERM` and escalate to `KILL` after ten seconds.
 - Profile scan API requests return HTTP `202` after enqueueing and start the coordinator in the background.
-- Timed-out scans are recorded with the `timeout` state.
+- Authenticated queued cancellation completes immediately; running cancellation returns HTTP `202` until the worker records `cancelled`. Terminal writes are guarded so cancellation wins completion, failure, and timeout races.
+- Timed-out scans retain their last progress percentage and are recorded with the `timeout` phase and state.
 - Completed nmap XML is parsed once and discarded. Retained scan facts are stored in normalized `scan_snapshot_*` tables; no raw XML or binary scan column remains.
 - Exact retained content is deduplicated with `content_hash`, while `result_hash` controls user-visible inventory change detection so volatile NSE output does not create noisy service-change events.
 - Scan profiles are compared independently. Default scan details prefer the latest deep snapshot and fall back to the newest partial result only when no deep result exists.

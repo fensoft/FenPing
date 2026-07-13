@@ -47,16 +47,19 @@
             :scanning="scanning"
             :refresh-queued="refreshQueued"
             :scanning-hosts="scanningHosts"
+            :cancelling-scans="cancellingScans"
             @network="network = $event"
             @selected-network="selectedNetwork = $event"
             @login="openLogin"
             @notice="setNotice"
             @ping-refresh="refreshScan"
             @scan-host="openScanProfile"
+            @cancel-scan="cancelScan"
             @host-detail="openHostDetail"
             @open-history="openHistory"
             @open-scan="openScan"
             @open-edit="openEdit"
+            @open-scan-error="openScanError"
             @open-create="openCreate"
             @reserve-device="openReserve"
             @add-category="openAddCategory"
@@ -77,10 +80,12 @@
       :netboot-images="netbootImages"
       :is-authenticated="isAuthenticated"
       :scanning-hosts="scanningHosts"
+      :cancelling-scans="cancellingScans"
       @close="closeModal"
       @submit-login="submitLogin"
       @submit-edit="submitEdit"
       @delete-host="openDeleteHost(modal.form)"
+      @cancel-scan="cancelScan"
       @submit-create="submitCreate"
       @submit-category="submitCategory"
       @submit-rename-category="submitRenameCategory"
@@ -118,6 +123,8 @@ const notice = ref('');
 const globalError = ref('');
 const auth = ref({ authenticated: false, configured: false });
 const authLoading = ref(false);
+const cancellingScans = ref(new Set());
+const operatorCancelledScans = new Set();
 const darkMode = ref(readCookie('fenping_theme') === 'dark');
 const scanning = ref(false);
 const scanningHosts = ref(new Set());
@@ -313,13 +320,41 @@ async function scanHost(host, profile) {
     setNotice(t(result?.created === false ? '{profile} scan already queued or running' : '{profile} scan queued', { profile: queuedProfile }));
     await reloadCurrentPage();
     const metadata = await pollScanStatus(host, result?.metadata?.id);
-    if (metadata && ['failed', 'timeout', 'cancelled'].includes(metadata.state)) throw new Error(metadata.error || t('Scan {state}', { state: t(metadata.state) }));
+    if (metadata?.state === 'cancelled' && operatorCancelledScans.has(Number(metadata.id))) {
+      operatorCancelledScans.delete(Number(metadata.id));
+      setNotice(t('Scan cancelled'));
+      await reloadCurrentPage();
+      return;
+    }
+    if (metadata && ['failed', 'timeout', 'cancelled'].includes(metadata.state))
+      throw new Error(metadata.error || t('Scan {state}', { state: t(metadata.state) }));
     setNotice(t(metadata?.result_changed ? '{profile} scan changes saved' : '{profile} scan complete, no changes', { profile: queuedProfile }));
     await reloadCurrentPage();
   } catch (error) {
     globalError.value = error.message;
   } finally {
     setHostScanning(host, false);
+  }
+}
+
+async function cancelScan(scan) {
+  const id = Number(scan?.id || 0);
+  if (!scan?.ip || !id || cancellingScans.value.has(id)) return;
+  clearMessages();
+  cancellingScans.value = new Set(cancellingScans.value).add(id);
+  operatorCancelledScans.add(id);
+  try {
+    const result = await apiJson(`/api/scans/${encodeURIComponent(scan.ip)}/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+    setNotice(t(result?.cancelled ? 'Scan cancelled' : 'Scan cancellation requested'));
+    await reloadCurrentPage();
+    if (!isHostScanning(scan)) operatorCancelledScans.delete(id);
+  } catch (error) {
+    operatorCancelledScans.delete(id);
+    globalError.value = error.message;
+  } finally {
+    const next = new Set(cancellingScans.value);
+    next.delete(id);
+    cancellingScans.value = next;
   }
 }
 
@@ -401,6 +436,12 @@ async function loadHistoryModal(ip, request = modalRequest) {
 }
 
 function scanJsonUrl(ip, scanId = null) { return scanId ? `/api/scans/${encodeURIComponent(ip)}/history/${encodeURIComponent(scanId)}` : `/api/scans/${encodeURIComponent(ip)}`; }
+function openScanError(scan) {
+  if (!scan?.error) return;
+  clearMessages();
+  modal.value = { type: 'scanError', ip: scan.ip || '', error: String(scan.error) };
+}
+
 async function openScan(ip, scanId = null) {
   if (!ip) return;
   clearMessages(); modal.value = { type: 'scan', ip, loading: true, scan: null, history: null, selectedScanId: scanId };

@@ -84,6 +84,75 @@ final class NetworkPolicyTest extends TestCase
         }
     }
 
+    public function testScanGuardrailDefaultsAndOverrides(): void
+    {
+        $names = [
+            'SCAN_GLOBAL_CONCURRENCY',
+            'SCAN_NETWORK_CONCURRENCY',
+            'SCAN_NETWORK_DAILY_BUDGET',
+            'SCAN_NETWORK_OVERRIDES',
+        ];
+        $previous = array_combine($names, array_map('getenv', $names));
+        try {
+            foreach ($names as $name) putenv($name);
+            $defaults = AppConfig::fromEnvironment(dirname(__DIR__, 2));
+            self::assertSame(4, $defaults->scanGlobalConcurrency);
+            self::assertSame(
+                ['concurrency' => 2, 'daily_budget' => 254],
+                $defaults->scanLimitsForNetwork('192.0.2.0/24'),
+            );
+
+            putenv('SCAN_GLOBAL_CONCURRENCY=6');
+            putenv('SCAN_NETWORK_CONCURRENCY=3');
+            putenv('SCAN_NETWORK_DAILY_BUDGET=300');
+            putenv('SCAN_NETWORK_OVERRIDES=192.0.2.0/24:1:64,198.51.100.0/24:4:512');
+            $configured = AppConfig::fromEnvironment(dirname(__DIR__, 2));
+            self::assertSame(6, $configured->scanGlobalConcurrency);
+            self::assertSame(['concurrency' => 1, 'daily_budget' => 64], $configured->scanLimitsForNetwork('192.0.2.0/24'));
+            self::assertSame(['concurrency' => 4, 'daily_budget' => 512], $configured->scanLimitsForNetwork('198.51.100.0/24'));
+            self::assertSame(['concurrency' => 3, 'daily_budget' => 300], $configured->scanLimitsForNetwork('203.0.113.0/24'));
+        } finally {
+            foreach ($previous as $name => $value) $this->restoreEnv($name, $value);
+        }
+    }
+
+    public function testInvalidScanGuardrailsAreRejected(): void
+    {
+        $names = [
+            'SCAN_GLOBAL_CONCURRENCY',
+            'SCAN_NETWORK_CONCURRENCY',
+            'SCAN_NETWORK_DAILY_BUDGET',
+            'SCAN_NETWORK_OVERRIDES',
+        ];
+        $previous = array_combine($names, array_map('getenv', $names));
+        try {
+            $invalid = [
+                ['SCAN_GLOBAL_CONCURRENCY' => '0'],
+                ['SCAN_GLOBAL_CONCURRENCY' => '21'],
+                ['SCAN_GLOBAL_CONCURRENCY' => '2', 'SCAN_NETWORK_CONCURRENCY' => '3'],
+                ['SCAN_NETWORK_DAILY_BUDGET' => '0'],
+                ['SCAN_NETWORK_OVERRIDES' => '192.0.2.1/24:1:64'],
+                ['SCAN_NETWORK_OVERRIDES' => '192.0.2.0/24:1'],
+                ['SCAN_NETWORK_OVERRIDES' => '192.0.2.0/24:0:64'],
+                ['SCAN_NETWORK_OVERRIDES' => '192.0.2.0/24:5:64'],
+                ['SCAN_NETWORK_OVERRIDES' => '192.0.2.0/24:1:0'],
+                ['SCAN_NETWORK_OVERRIDES' => '192.0.2.0/24:1:64,192.0.2.0/24:2:128'],
+            ];
+            foreach ($invalid as $values) {
+                foreach ($names as $name) putenv($name);
+                foreach ($values as $name => $value) putenv($name . '=' . $value);
+                try {
+                    AppConfig::fromEnvironment(dirname(__DIR__, 2));
+                    self::fail('accepted invalid scan guardrail configuration: ' . json_encode($values));
+                } catch (InvalidArgumentException) {
+                    self::addToAssertionCount(1);
+                }
+            }
+        } finally {
+            foreach ($previous as $name => $value) $this->restoreEnv($name, $value);
+        }
+    }
+
     public function testRouteDetectionRequiresAnExplicitCoveringRoute(): void
     {
         $network = Ipv4Network::from24('192.168.20.0/24');

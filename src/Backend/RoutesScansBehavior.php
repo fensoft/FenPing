@@ -22,6 +22,7 @@ public function scansApiRoutes(): array {
     $this->apiRoute('POST', '/scans/{ip:ipv4}', 'handleScanCreate', 'session', array('live' => array(LiveUpdateScope::Scans))),
     $this->apiRoute('POST', '/scans/{ip:ipv4}/quick', 'handleScanQuick', 'session', array('live' => array(LiveUpdateScope::Scans))),
     $this->apiRoute('GET', '/scans/{ip:ipv4}/status', 'handleScanStatus'),
+    $this->apiRoute('POST', '/scans/{ip:ipv4}/{id:int}/cancel', 'handleScanCancel', 'session'),
     $this->apiRoute('GET', '/scans/{ip:ipv4}/history', 'handleScanHistory'),
     $this->apiRoute('GET', '/scans/{ip:ipv4}/history/{id:int}', 'handleScanHistoryJson'),
     $this->apiRoute('GET', '/scans/{ip:ipv4}/history/{id:int}/xml', 'handleScanHistoryXml'),
@@ -35,7 +36,10 @@ public function scansApiRoutes(): array {
 }
 
 public function handleScansQueue(array $params): array {
-  return array('scans' => $this->scanMetadataQueue());
+  return array(
+    'scans' => $this->scanMetadataQueue(),
+    'policy' => $this->scanPolicySummary()
+  );
 }
 
 public function handleScanProfiles(array $params): array {
@@ -122,6 +126,23 @@ public function queueScanResponse(string $ip, string $profile): void {
   ), 202);
 }
 
+public function handleScanCancel(array $params): void {
+  try {
+    $result = $this->scanMetadataRequestCancel($params['ip'], $params['id']);
+  } catch (OutOfBoundsException $error) {
+    $this->jsonError(404, $error->getMessage());
+  } catch (RuntimeException $error) {
+    $this->jsonError(409, $error->getMessage());
+  }
+
+  $metadata = $result['metadata'];
+  $this->jsonResponse(array(
+    'cancellation_requested' => true,
+    'cancelled' => $metadata['state'] === 'cancelled',
+    'metadata' => $metadata
+  ), $result['status']);
+}
+
 public function startScanWorkerAsync(): void {
   $cli = $this->config->projectDir . '/cli.php';
   $command = '/usr/bin/doas /usr/bin/php ' . escapeshellarg($cli) . ' inventory --work';
@@ -142,8 +163,17 @@ public function handleScanStatus(array $params): array {
 
   return $this->scanMetadataLatest($ip) ?: array(
     'ip' => $ip,
+    'network' => $this->scanNetworkCidrForIp($ip),
+    'request_source' => 'legacy',
     'state' => 'none',
-    'ports_count' => 0
+    'ports_count' => 0,
+    'progress_percent' => 0,
+    'progress_phase' => 'none',
+    'progress_updated_at' => null,
+    'queue_position' => null,
+    'queue_reason' => null,
+    'budget_eligible_at' => null,
+    'cancel_requested' => false
   );
 }
 

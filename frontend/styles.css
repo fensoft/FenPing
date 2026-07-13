@@ -562,14 +562,16 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
 }
 
 .scan-col-state { width: 8%; }
-.scan-col-host { width: 18%; }
-.scan-col-mode { width: 9%; }
+.scan-col-host { width: 12%; }
+.scan-col-mode { width: 8%; }
+.scan-col-network { width: 12%; }
 .scan-col-status { width: 6%; }
-.scan-col-ports { width: 6%; }
+.scan-col-progress { width: 14%; }
+.scan-col-ports { width: 5%; }
 .scan-col-started { width: 14%; }
 .scan-col-duration { width: 7%; }
-.scan-col-error { width: 23%; }
-.scan-col-actions { width: 9%; }
+.scan-col-error { width: 6%; }
+.scan-col-actions { width: 8%; }
 
 .scan-queue-table th,
 .scan-queue-table td,
@@ -589,10 +591,15 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   text-transform: uppercase;
 }
 
+.scan-queue-host {
+  overflow: hidden;
+}
+
 .scan-queue-host-name {
+  display: block;
   font-weight: 700;
   line-height: 1.1;
-  max-width: 15rem;
+  max-width: 100%;
   overflow: hidden;
   text-align: left;
   text-overflow: ellipsis;
@@ -604,6 +611,9 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   color: #667085;
   display: block;
   font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scan-run-state {
@@ -619,6 +629,59 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   line-height: 1;
   padding: 0 0.5rem;
   white-space: nowrap;
+}
+
+.scan-policy-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.scan-policy-card {
+  background: var(--tblr-bg-surface, #fff);
+  border: 1px solid var(--tblr-border-color, #dce1e7);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.scan-policy-card > span,
+.scan-policy-card > small {
+  color: var(--tblr-secondary-color, #667085);
+}
+
+.scan-progress-cell {
+  min-width: 150px;
+}
+
+.scan-progress-copy {
+  font-size: 0.75rem;
+  margin-bottom: 0.2rem;
+  white-space: nowrap;
+}
+
+.scan-progress-cell .progress {
+  height: 0.3rem;
+  min-width: 120px;
+}
+.scan-error-details {
+  background: var(--tblr-bg-surface-secondary, #f6f8fb);
+  border: 1px solid var(--tblr-border-color, #dce1e7);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 0.82rem;
+  margin: 0;
+  max-height: min(60vh, 32rem);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.scan-progress-cell .progress-bar {
+  background: #206bc4;
 }
 
 .scan-run-complete {

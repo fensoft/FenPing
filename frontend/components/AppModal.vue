@@ -76,6 +76,14 @@
           <div class="modal-footer"><button class="btn btn-link" type="button" @click="requestClose">{{ t('Cancel') }}</button></div>
         </div>
 
+        <div v-else-if="modal.type === 'scanError'">
+          <div class="modal-body">
+            <div v-if="modal.ip" class="font-monospace text-secondary small mb-2">{{ modal.ip }}</div>
+            <pre class="scan-error-details">{{ modal.error }}</pre>
+          </div>
+          <div class="modal-footer"><button class="btn btn-primary" type="button" @click="requestClose">{{ t('Close') }}</button></div>
+        </div>
+
         <div v-else-if="modal.type === 'history'">
           <div class="modal-body p-0">
             <div v-if="error" class="alert alert-danger m-3">{{ error }}</div>
@@ -100,6 +108,8 @@
               :device="modal.host"
               :is-authenticated="isAuthenticated"
               :scanning-hosts="scanningHosts"
+              :cancelling-scans="cancellingScans"
+              @cancel-scan="$emit('cancel-scan', $event)"
               @open-scan="forwardOpenScan"
               @scan-host="$emit('scan-host', $event)"
               @open-edit="$emit('open-edit', $event)"
@@ -143,12 +153,12 @@ import { formatDuration, formatMac, formatPercent, formatScanDate, formatScanDur
 import { t } from '../lib/i18n.js';
 import { scanCadenceOptions, scanProfileLabel, scanProfiles } from '../lib/scanProfiles.js';
 
-const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] }, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true } });
-const emit = defineEmits(['close', 'delete-host', 'open-edit', 'open-scan', 'scan-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'submit-scan-profile']);
+const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] }, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true }, cancellingScans: { type: Object, required: true } });
+const emit = defineEmits(['cancel-scan', 'close', 'delete-host', 'open-edit', 'open-scan', 'scan-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'submit-scan-profile']);
 const titleId = `fenping-modal-title-${Math.random().toString(36).slice(2)}`;
 const title = computed(() => props.modal.type === 'create' && props.modal.purpose === 'reserve'
   ? t('Reserve address')
-  : t(({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', history: 'History {ip}', hostDetail: 'Host details', scan: 'Scan {ip}', loading: 'Loading' })[props.modal.type] || 'Dialog', { ip: props.modal.ip || '' }));
+  : t(({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', scanError: 'Error', history: 'History {ip}', hostDetail: 'Host details', scan: 'Scan {ip}', loading: 'Loading' })[props.modal.type] || 'Dialog', { ip: props.modal.ip || '' }));
 const dialogClass = computed(() => props.modal.type === 'login' ? 'modal-sm' : ['scan', 'hostDetail'].includes(props.modal.type) ? 'modal-xl scan-modal-dialog' : 'modal-lg');
 const modalRoot = useAccessibleModal(() => props.modal.type, requestClose);
 

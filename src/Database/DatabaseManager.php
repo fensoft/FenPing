@@ -11,7 +11,7 @@ use Throwable;
 
 final class DatabaseManager
 {
-    public const SCHEMA_VERSION = 6;
+    public const SCHEMA_VERSION = 7;
     private const BUSY_TIMEOUT_MS = 30000;
 
     private ?PDO $connection = null;
@@ -52,13 +52,29 @@ final class DatabaseManager
             throw new RuntimeException("database schema version $version is newer than supported version " . self::SCHEMA_VERSION);
         }
         if ($version === 0) {
-            $this->applyBaseSchema();
-        } else {
+            $legacyVersion = $this->detectLegacySchemaVersion();
+            if ($legacyVersion === null) {
+                $this->applyBaseSchema();
+            } else {
+                $this->setSchemaVersion($legacyVersion);
+            }
+        } elseif ($version === self::SCHEMA_VERSION
+            && $this->detectLegacySchemaVersion() === self::SCHEMA_VERSION - 1
+            && count($this->missingScanControlColumns()) === count($this->scanControlColumns())) {
+            // Older unversioned databases were once stamped by the idempotent base
+            // schema even though CREATE TABLE IF NOT EXISTS could not add columns.
+            $this->setSchemaVersion(self::SCHEMA_VERSION - 1);
+        }
+        if ($this->schemaVersion() < self::SCHEMA_VERSION) {
             $this->applyMigrations(self::SCHEMA_VERSION);
         }
         $version = $this->schemaVersion();
         if ($version !== self::SCHEMA_VERSION) {
             throw new RuntimeException("database schema initialization stopped at version $version; expected " . self::SCHEMA_VERSION);
+        }
+        $missing = $this->missingScanControlColumns();
+        if ($missing !== []) {
+            throw new RuntimeException('database schema version 7 is missing scans columns: ' . implode(', ', $missing));
         }
     }
 
@@ -142,6 +158,81 @@ final class DatabaseManager
                 throw new RuntimeException('db.sql created an unexpected schema version');
             }
         });
+    }
+
+    private function detectLegacySchemaVersion(): ?int
+    {
+        if (!$this->tableExists('ips') || !$this->tableExists('scans')) {
+            return null;
+        }
+        if ($this->missingScanControlColumns() === []) {
+            return 7;
+        }
+
+        $notificationColumns = $this->tableColumns('notification_delivery_settings');
+        if ($this->tableExists('telegram_known_chats')
+            && isset($notificationColumns['telegram_chat_id'], $notificationColumns['telegram_bot_fingerprint'])) {
+            return 6;
+        }
+        if ($this->tableExists('notification_delivery_settings')) {
+            return 5;
+        }
+        if ($this->tableExists('operation_status') && isset($this->tableColumns('scans')['queued_at'])) {
+            return 4;
+        }
+        if ($this->tableExists('ip_conflicts')) {
+            return 3;
+        }
+
+        $ips = $this->tableColumns('ips');
+        $profileDefault = trim((string) ($ips['scan_profile']['dflt_value'] ?? ''), "'\"");
+        $intervalDefault = trim((string) ($ips['scan_interval_hours']['dflt_value'] ?? ''), "'\"");
+        return $profileDefault === 'standard' && $intervalDefault === '24' ? 2 : 1;
+    }
+
+    private function setSchemaVersion(int $version): void
+    {
+        $this->immediate(static function (PDO $database) use ($version): void {
+            $database->exec('PRAGMA user_version=' . $version);
+        });
+    }
+
+    private function tableExists(string $table): bool
+    {
+        $statement = $this->connection()->prepare(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:table",
+        );
+        $statement->execute(['table' => $table]);
+        return (int) $statement->fetchColumn() === 1;
+    }
+
+    private function tableColumns(string $table): array
+    {
+        if (!$this->tableExists($table)) {
+            return [];
+        }
+        $columns = [];
+        foreach ($this->connection()->query('PRAGMA table_info(' . $table . ')') as $column) {
+            $columns[(string) $column['name']] = $column;
+        }
+        return $columns;
+    }
+
+    private function scanControlColumns(): array
+    {
+        return [
+            'network', 'request_source', 'progress_percent', 'progress_phase',
+            'progress_updated_at', 'cancel_requested_at',
+        ];
+    }
+
+    private function missingScanControlColumns(): array
+    {
+        $columns = $this->tableColumns('scans');
+        return array_values(array_filter(
+            $this->scanControlColumns(),
+            static fn(string $column): bool => !isset($columns[$column]),
+        ));
     }
 
     private function applyMigrations(int $targetVersion): void
