@@ -13,6 +13,7 @@ RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-
     apk add --no-cache \
       arp-scan \
       ca-certificates \
+      curl \
       doas \
       dnsmasq \
       iproute2-minimal \
@@ -111,6 +112,7 @@ RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
       'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php ping' \
       'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php inventory --work' \
       'permit nopass setenv { DATABASE_PATH DHCP_NETWORK DHCP_DYNAMIC_BEGIN DHCP_DYNAMIC_END DHCP_DEFAULT_ROUTER EXTRA_NETWORKS INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php doctor --runtime --json' \
+      'permit nopass setenv { DOCKER_SOCKET DOCKER_NETWORK_CACHE DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php docker-networks-refresh --api' \
       > /etc/doas.conf \
     && chmod 0400 /etc/doas.conf \
     && doas -C /etc/doas.conf

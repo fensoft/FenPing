@@ -173,6 +173,8 @@ The authenticated `GET /api/doctor` route invokes the exact `doctor --runtime --
 
 `DHCP_NETWORK` is a required canonical `/24`. `EXTRA_NETWORKS` optionally lists comma-separated scan-only `/24` networks. FenPing reports whether a connected or static non-default route covers each extra network, but the status is informational and does not disable scanning. Default and partial routes do not count as explicit routes. dnsmasq generation and all DHCP/IPAM/host/category/netboot mutations remain restricted to `DHCP_NETWORK`.
 
+When `DOCKER_SOCKET` points to the optional read-only Compose bind, a root-only Docker client reads `/networks` and writes an atomic, PHP-readable runtime cache under `/run/fenping`. `AppConfig` merges that cache on each process construction. A self-reconnecting `/events` listener debounces network create/connect/disconnect/destroy/update/remove bursts and performs full refreshes; boot, hourly cron, and the parameterless guest `POST /api/networks/refresh` route reconcile missed events. The API can invoke only the exact `docker-networks-refresh --api` command through `doas`, and repeated guest calls are coalesced. The socket's read-only mount flag does not restrict Docker API privileges.
+
 `INVENTORY_DOWN_RETENTION_DAYS` defaults to 7. Inventory omits unreserved hosts whose current Down status began more than that many days ago. Reserved hosts remain visible, and filtering never deletes status or scan history.
 
 `php cli.php hosts` always validates candidate files with `dnsmasq --test`, atomically replaces the generated files, and reloads/starts local dnsmasq. If replacement or reload fails, it restores the previous files.

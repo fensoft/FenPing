@@ -12,6 +12,25 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+resolve_docker_socket() {
+  local configured candidate
+  configured=$(docker compose config --environment 2>/dev/null | sed -n 's/^DOCKER_SOCKET=//p' | tail -n1)
+  candidate="$configured"
+  if [ -z "$candidate" ] && [ -S /var/run/docker.sock ]; then
+    candidate=/var/run/docker.sock
+  fi
+  if [ -n "$candidate" ] && [ -S "$candidate" ]; then
+    export FENPING_DOCKER_SOCKET_SOURCE="$candidate"
+    echo "Docker network discovery enabled through $candidate"
+  else
+    export FENPING_DOCKER_SOCKET_SOURCE=/dev/null
+    if [ -n "$candidate" ]; then
+      echo "Docker network discovery disabled: $candidate is not a Unix socket" >&2
+    fi
+  fi
+}
+resolve_docker_socket
+
 for dir in database dnsmasq dnsmasq.d netboot backups state; do
   mkdir -p "$(pwd)/data/$dir"
 done

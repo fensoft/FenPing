@@ -20,10 +20,14 @@ final class CliKernel
         private readonly DatabaseManager $database,
         private readonly BackupService $backups,
         Command $doctor,
+        Command $dockerNetworksRefresh,
+        Command $dockerNetworksWatch,
     )
     {
         $this->commands = [
             'doctor' => $doctor,
+            'docker-networks-refresh' => $dockerNetworksRefresh,
+            'docker-networks-watch' => $dockerNetworksWatch,
             'database' => new CallableCommand(fn(array $args): int => $this->database($args)),
             'database-check' => new CallableCommand(fn(array $args): int => $this->database($args)),
             'ping' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
@@ -129,6 +133,8 @@ final class CliKernel
     private function usage(): int
     {
         fwrite(STDERR, "Usage: php cli.php doctor [--runtime] [--json]" . PHP_EOL);
+        fwrite(STDERR, "Usage: php cli.php docker-networks-refresh [--api]" . PHP_EOL);
+        fwrite(STDERR, "Usage: php cli.php docker-networks-watch" . PHP_EOL);
         fwrite(STDERR, "Usage: php cli.php ping [--network IPv4/24] [1-254|DEBUG]" . PHP_EOL);
         fwrite(STDERR, "       php cli.php database|database-check" . PHP_EOL);
         fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);

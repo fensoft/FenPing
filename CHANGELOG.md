@@ -10,6 +10,7 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Added
 
+- Added optional real-time Docker network discovery with occupied-/24 mapping, event-stream updates, hourly reconciliation, and guest-accessible UI refresh.
 - Added an every-startup network doctor that blocks all services until interface, subnet, on-link router, DHCP pool endpoints, required ports, persistent storage, SQLite WAL, and absence of competing DHCP servers are verified.
 - Added an admin-only Doctor page and authenticated API with privileged runtime checks for FenPing-owned listeners, storage, routing, and competing DHCP servers.
 - Added configured multi-network ping and inventory scanning with informational explicit-route detection, independent persistent round-robin scheduling, scan-only remote hosts, and an Inventory network selector that labels unrouted networks without disabling them.

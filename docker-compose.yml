@@ -9,6 +9,8 @@ services:
     network_mode: host
     env_file:
       - .env
+    environment:
+      DOCKER_SOCKET: /run/docker.sock
     cap_drop:
       - ALL
     cap_add:
@@ -32,6 +34,12 @@ services:
       - ./data/netboot:/var/lib/fenping/netboot
       - ./data/backups:/var/lib/fenping/backups
       - ./data/state:/var/lib/fenping/state
+      - type: bind
+        source: ${FENPING_DOCKER_SOCKET_SOURCE:-/dev/null}
+        target: /run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1/api/health/ready"]
       interval: 30s

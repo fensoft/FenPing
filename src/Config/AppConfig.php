@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FenPing\Config;
 
+use FenPing\Docker\DockerNetworkCache;
 use FenPing\Network\Ipv4Network;
 use InvalidArgumentException;
 
@@ -37,6 +38,7 @@ final readonly class AppConfig
         public int $healthDiskCriticalPercent = 90,
         public int $healthDhcpWarningPercent = 80,
         public int $healthDhcpCriticalPercent = 90,
+        public array $dockerNetworkNames = [],
     ) {
         if ($healthDiskWarningPercent >= $healthDiskCriticalPercent) {
             throw new InvalidArgumentException('disk warning threshold must be lower than critical threshold');
@@ -67,6 +69,25 @@ final readonly class AppConfig
             $seen[$network->cidr] = true;
             $extraNetworks[] = $network;
         }
+        $dockerCache = new DockerNetworkCache(DockerNetworkCache::pathFromEnvironment());
+        $cachedDockerNames = $dockerCache->networkNames();
+        $dockerNetworkNames = [];
+        foreach ($dockerCache->networks() as $value) {
+            try {
+                $network = Ipv4Network::from24($value, 'Docker network cache');
+            } catch (InvalidArgumentException) {
+                continue;
+            }
+            $names = $cachedDockerNames[$value] ?? [];
+            if ($names !== []) {
+                $dockerNetworkNames[$network->cidr] = $names;
+            }
+            if (isset($seen[$network->cidr])) {
+                continue;
+            }
+            $seen[$network->cidr] = true;
+            $extraNetworks[] = $network;
+        }
 
         return new self(
             projectDir: rtrim($projectDir, '/'),
@@ -94,6 +115,7 @@ final readonly class AppConfig
             healthDiskCriticalPercent: self::percentEnv('HEALTH_DISK_CRITICAL_PERCENT', 90),
             healthDhcpWarningPercent: self::percentEnv('HEALTH_DHCP_WARNING_PERCENT', 80),
             healthDhcpCriticalPercent: self::percentEnv('HEALTH_DHCP_CRITICAL_PERCENT', 90),
+            dockerNetworkNames: $dockerNetworkNames,
         );
     }
 

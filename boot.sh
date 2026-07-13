@@ -42,6 +42,17 @@ for file in /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /
   [ -e "$file" ] || install -m 0644 /dev/null "$file"
 done
 [ -e /var/lib/misc/dnsmasq.leases ] || install -m 0644 /dev/null /var/lib/misc/dnsmasq.leases
+if [ -n "${DOCKER_SOCKET:-}" ] && [ -S "$DOCKER_SOCKET" ]; then
+  if ! php /opt/fenping/cli.php docker-networks-refresh >/dev/null; then
+    echo "warning: initial Docker network refresh failed; continuing without new Docker network data" >&2
+  fi
+  (
+    while [ -S "$DOCKER_SOCKET" ]; do
+      php /opt/fenping/cli.php docker-networks-watch || true
+      sleep 5
+    done
+  ) &
+fi
 IP=${IP:-$(ip -4 a show dev "$IFACE" 2>/dev/null | awk '/inet/ {print $2}' | head -n1 | sed 's#/.*##')}
 export IP
 php /opt/fenping/cli.php doctor
@@ -75,6 +86,7 @@ done
 cmp -s "$DNSMASQ_RENDERED" /etc/dnsmasq.d/fenping.conf || install -m 0644 "$DNSMASQ_RENDERED" /etc/dnsmasq.d/fenping.conf
 rm -f /etc/dnsmasq.d/fenping.conf.bak
 cat > /etc/crontabs/root <<'EOF'
+59 * * * * php /opt/fenping/cli.php docker-networks-refresh
 0 * * * * php /opt/fenping/cli.php inventory
 * * * * * php /opt/fenping/cli.php inventory --work
 17 3 1 * * php /opt/fenping/cli.php oui-refresh

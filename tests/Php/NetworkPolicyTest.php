@@ -106,6 +106,7 @@ final class NetworkPolicyTest extends TestCase
             extraNetworks: [Ipv4Network::from24('198.51.100.0/24'), Ipv4Network::from24('203.0.113.0/24')],
             interface: 'eth0', applianceIp: '192.0.2.100', dhcpDynamicBegin: '200', dhcpDynamicEnd: '250',
             password: '', secret: 'test', discordWebhookUrl: '', dataDir: $dir,
+            dockerNetworkNames: ['203.0.113.0/24' => ['app_default']],
         );
         $routes = new RouteDetector(new FixedProcessRunner("198.51.100.0/24 via 192.0.2.1 dev eth0\n"));
         $manager = new NetworkManager($config, $routes);
@@ -115,6 +116,7 @@ final class NetworkPolicyTest extends TestCase
         self::assertSame('192.0.2.0/24', $manager->nextScheduled('ping')->cidr);
         self::assertFalse($manager->descriptors()[2]['routed']);
         self::assertTrue($manager->descriptors()[2]['selectable']);
+        self::assertSame(['app_default'], $manager->descriptors()[2]['docker_network_names']);
     }
 
     private function restoreEnv(string $name, string|false $value): void

@@ -121,6 +121,7 @@ const scanning = ref(false);
 const scanningHosts = ref(new Set());
 const refreshQueued = ref(false);
 const refreshPulsing = ref(false);
+const networkRefreshing = ref(false);
 const modal = ref(null);
 const modalError = ref('');
 const saving = ref(false);
@@ -132,10 +133,10 @@ const pollingTimers = new Set();
 
 const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
 const isInventoryRoute = computed(() => [routeNames.inventory, routeNames.host, routeNames.hostByIp].includes(route.name));
-const pageLoading = computed(() => Boolean(controllerValue('loading', false)));
+const pageLoading = computed(() => networkRefreshing.value || Boolean(controllerValue('loading', false)));
 const refreshLabel = computed(() => controllerValue('label', t(isAuthenticated.value ? 'Ready' : 'Read only')));
 const refreshTitle = computed(() => controllerValue('title', t(isAuthenticated.value ? 'Refresh' : 'Login to refresh')));
-const refreshDisabled = computed(() => Boolean(controllerValue('disabled', false)));
+const refreshDisabled = computed(() => networkRefreshing.value || Boolean(controllerValue('disabled', false)));
 const activeConflicts = computed(() => conflictState.value?.conflicts || []);
 let conflictTimer = null;
 
@@ -175,10 +176,26 @@ async function reloadCurrentPage() {
   if (typeof action === 'function') await action();
 }
 
-function requestRefresh() {
+async function requestRefresh() {
   pulseRefresh();
+  if (networkRefreshing.value) return;
+  networkRefreshing.value = true;
+  try {
+    await apiJson('/api/networks/refresh', { method: 'POST' });
+  } catch (error) {
+    globalError.value = error.message;
+  } finally {
+    networkRefreshing.value = false;
+  }
+
+  if (route.name === routeNames.inventory) {
+    const reload = pageController.value?.reload;
+    if (typeof reload === 'function') await reload();
+    if (!isAuthenticated.value) return;
+  }
+
   const action = pageController.value?.refresh;
-  if (typeof action === 'function') action();
+  if (typeof action === 'function') await action();
 }
 
 function pulseRefresh() {

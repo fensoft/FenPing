@@ -7,6 +7,7 @@ namespace FenPing;
 use FenPing\Api\ApiKernel;
 use FenPing\Api\Controller\BackupController;
 use FenPing\Api\Controller\DoctorController;
+use FenPing\Api\Controller\DockerNetworksController;
 use FenPing\Api\Controller\AuthController;
 use FenPing\Api\Controller\HostController;
 use FenPing\Api\Controller\IpamController;
@@ -19,6 +20,8 @@ use FenPing\Backend\Backend;
 use FenPing\Backup\BackupService;
 use FenPing\Cli\CliKernel;
 use FenPing\Cli\DoctorCommand;
+use FenPing\Cli\DockerNetworksRefreshCommand;
+use FenPing\Cli\DockerNetworksWatchCommand;
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
 use FenPing\Dhcp\ConfigManager;
@@ -27,6 +30,12 @@ use FenPing\Dhcp\MutationCoordinator;
 use FenPing\Doctor\DoctorService;
 use FenPing\Doctor\NativeDoctorSystem;
 use FenPing\Doctor\ProcessDoctorReportProvider;
+use FenPing\Docker\DockerEngineClient;
+use FenPing\Docker\DockerNetworkCache;
+use FenPing\Docker\DockerNetworkParser;
+use FenPing\Docker\DockerNetworkRefreshService;
+use FenPing\Docker\DockerNetworkWatcher;
+use FenPing\Docker\PrivilegedDockerNetworkRefreshGateway;
 use FenPing\Health\HealthService;
 use FenPing\Health\OperationTracker;
 use FenPing\Host\CategoryRepository;
@@ -73,6 +82,8 @@ final class Application
     private readonly BackupService $backups;
     private readonly DoctorService $doctor;
     private readonly ProcessRunner $processes;
+    private readonly DockerNetworkRefreshService $dockerNetworkRefresh;
+    private readonly DockerNetworkWatcher $dockerNetworkWatcher;
 
     private function __construct(private readonly AppConfig $config)
     {
@@ -82,6 +93,17 @@ final class Application
         $this->auth = new AuthService($config);
         $this->ipConflicts = new IpConflictRepository($this->database);
         $this->processes = new NativeProcessRunner();
+        $dockerSocket = getenv('DOCKER_SOCKET');
+        $dockerSource = new DockerEngineClient(
+            $this->processes,
+            new DockerNetworkParser(),
+            $dockerSocket === false ? '' : trim($dockerSocket),
+        );
+        $this->dockerNetworkRefresh = new DockerNetworkRefreshService(
+            $dockerSource,
+            new DockerNetworkCache(DockerNetworkCache::pathFromEnvironment()),
+        );
+        $this->dockerNetworkWatcher = new DockerNetworkWatcher($dockerSource, $this->dockerNetworkRefresh);
         $this->ipConflictDetector = new IpConflictDetector($config, $this->processes, $this->ipConflicts, $clock);
         $this->operations = new OperationTracker($this->database, $clock);
         $this->backend = new Backend($config, $this->database, $this->ipConflicts, $this->ipConflictDetector, $this->operations);
@@ -126,6 +148,7 @@ final class Application
 
         return new ApiKernel($this->auth, [
             new DoctorController(new ProcessDoctorReportProvider($this->config, $this->processes)),
+            new DockerNetworksController(new PrivilegedDockerNetworkRefreshGateway($this->processes, $this->config->projectDir)),
             new AuthController($this->backend, $this->auth, $adapter),
             new SystemController(
                 $this->backend,
@@ -155,7 +178,14 @@ final class Application
     }
     public function cli(): CliKernel
     {
-        return new CliKernel($this->backend, $this->database, $this->backups, new DoctorCommand($this->doctor));
+        return new CliKernel(
+            $this->backend,
+            $this->database,
+            $this->backups,
+            new DoctorCommand($this->doctor),
+            new DockerNetworksRefreshCommand($this->dockerNetworkRefresh),
+            new DockerNetworksWatchCommand($this->dockerNetworkWatcher),
+        );
     }
     public function config(): AppConfig { return $this->config; }
     public function database(): DatabaseManager { return $this->database; }

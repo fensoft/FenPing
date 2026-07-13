@@ -102,6 +102,7 @@ Important `.env` values:
 | `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
 | `FENPING_IMAGE` | Docker Hub repository pulled by `restart.sh`. Defaults to `fensoft/fenping`. |
 | `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.6`. |
+| `DOCKER_SOCKET` | Optional host Docker Unix socket. `restart.sh` auto-detects `/var/run/docker.sock` when this is empty; set another local socket path to override it. |
 | `DATABASE_PATH` | SQLite file inside the container. Defaults to `/var/lib/fenping/database/fenping.sqlite3`. |
 | `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. This is the only network used by dnsmasq, IPAM, reservations, categories, and netboot assignments. |
 | `EXTRA_NETWORKS` | Optional comma-separated canonical `/24` networks available for scanning, for example `192.168.0.0/24,172.16.20.0/24`. FenPing reports whether an explicit route exists but never adds routes. |
@@ -137,6 +138,10 @@ Authenticated administrators can open **Operations** in the sidebar. The page le
 The DHCP probe uses Nmap's fixed discovery MAC and waits up to five seconds, so it does not request a lease or exhaust the pool.
 
 Scheduled ping and discovery jobs independently rotate through one configured network per invocation. Inventory exposes a browser-persisted network selector and labels networks without an explicit route as “Not routed” without disabling them. Existing category ranges are displayed on extra networks, while devices and categories there remain read-only.
+
+When a local Docker socket is available, FenPing adds the occupied IPv4 `/24` slices from Docker networks to the manual `EXTRA_NETWORKS` list. Docker network events refresh this runtime-only cache within seconds; startup, hourly, and sidebar Refresh actions perform full reconciliation. Broader Docker subnets contribute only `/24` slices containing a gateway or attached container, while IPv6 and subnets narrower than `/24` are ignored. Guest Refresh reloads network data without running a ping scan; authenticated Inventory Refresh also runs the existing ping operation.
+
+The Compose bind is marked read-only, which prevents replacement through the mount but does **not** make the Docker API read-only. Access to `docker.sock` is effectively host-level Docker control. FenPing exposes only a parameterless refresh route backed by an exact `doas` command, but mount the socket only when this trust is acceptable.
 
 ## Publishing Images
 

@@ -7,7 +7,7 @@
           <span class="visually-hidden">{{ t('Network') }}</span>
           <select v-model="selectedCidr" class="form-select form-select-sm" :aria-label="t('Network')" @change="selectNetwork">
             <option v-for="item in networks" :key="item.cidr" :value="item.cidr">
-              {{ item.cidr }}{{ item.dhcp ? ` (${t('DHCP')})` : !item.routed ? ` (${t('Not routed')})` : '' }}
+              {{ inventoryNetworkLabel(item, t) }}
             </option>
           </select>
         </label>
@@ -80,7 +80,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, normalizeInventoryFilters } from '../lib/inventoryFilters.js';
-import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkUrl } from '../lib/inventoryNetworks.js';
+import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkLabel, inventoryNetworkUrl } from '../lib/inventoryNetworks.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useNow } from '../composables/useNow.js';
@@ -157,9 +157,9 @@ const tableRows = computed(() => {
 usePageController({
   loading,
   label: computed(() => t(loading.value ? 'Loading' : !props.isAuthenticated ? 'Read only' : props.scanning && props.refreshQueued ? 'Queued' : props.scanning ? 'Scanning' : 'Ready')),
-  title: computed(() => t(props.isAuthenticated ? 'Refresh' : 'Login to refresh')),
-  disabled: computed(() => !props.isAuthenticated),
-  refresh: () => emit('ping-refresh'),
+  title: computed(() => t('Refresh')),
+  disabled: false,
+  refresh: () => props.isAuthenticated ? emit('ping-refresh') : load(),
   reload: load
 });
 watch(filters, (value) => writeStorage('fenping_filters', value), { deep: true });

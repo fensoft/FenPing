@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkUrl } from '../frontend/lib/inventoryNetworks.js';
+import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkLabel, inventoryNetworkUrl } from '../frontend/lib/inventoryNetworks.js';
 
 const networks = [
   { cidr: '10.68.69.0/24', dhcp: true, selectable: true },
@@ -22,4 +22,11 @@ test('keeps routed and unrouted configured preferences selectable', () => {
 test('identifies when DHCP-only actions are available', () => {
   assert.equal(inventoryNetworkIsDhcp('10.68.69.0/24', '10.68.69.0/24'), true);
   assert.equal(inventoryNetworkIsDhcp('192.168.0.0/24', '10.68.69.0/24'), false);
+});
+
+test('shows Docker network names next to their CIDR', () => {
+  const translate = (value) => value;
+  assert.equal(inventoryNetworkLabel({ cidr: '172.17.0.0/24', routed: true, docker_network_names: ['bridge'] }, translate), '172.17.0.0/24 (bridge)');
+  assert.equal(inventoryNetworkLabel({ cidr: '172.18.0.0/24', routed: false, docker_network_names: ['app_default', 'shared'] }, translate), '172.18.0.0/24 (app_default · shared · Not routed)');
+  assert.equal(inventoryNetworkLabel({ cidr: '10.68.69.0/24', dhcp: true }, translate), '10.68.69.0/24 (DHCP)');
 });

@@ -48,7 +48,14 @@ final readonly class NetworkManager
         return array_map(function (Ipv4Network $network): array {
             $dhcp = $network->cidr === $this->config->dhcpNetwork->cidr;
             $routed = $dhcp || $this->routes->isRouted($network);
-            return ['cidr' => $network->cidr, 'prefix' => $network->prefix(), 'dhcp' => $dhcp, 'routed' => $routed, 'selectable' => true];
+            return [
+                'cidr' => $network->cidr,
+                'prefix' => $network->prefix(),
+                'dhcp' => $dhcp,
+                'routed' => $routed,
+                'selectable' => true,
+                'docker_network_names' => $this->config->dockerNetworkNames[$network->cidr] ?? [],
+            ];
         }, $this->configured());
     }
 

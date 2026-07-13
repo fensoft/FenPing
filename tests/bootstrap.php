@@ -15,6 +15,11 @@ foreach ([$databasePath, $databasePath . '-wal', $databasePath . '-shm'] as $pat
         unlink($path);
     }
 }
+$dockerNetworkCache = sys_get_temp_dir() . '/fenping-phpunit-docker-networks.json';
+if (is_file($dockerNetworkCache)) {
+    unlink($dockerNetworkCache);
+}
+putenv('DOCKER_NETWORK_CACHE=' . $dockerNetworkCache);
 putenv('DATABASE_PATH=' . $databasePath);
 putenv('FENPING_DATA_DIR=' . sys_get_temp_dir() . '/fenping-phpunit-data');
 putenv('NETWORK');
