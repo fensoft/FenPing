@@ -723,6 +723,31 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   white-space: nowrap;
 }
 
+.ipam-subnets {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.ipam-subnet {
+  border: 1px solid #dce1e7;
+  border-radius: 6px;
+  min-height: 3.25rem;
+  padding: 0.65rem;
+}
+
+.ipam-subnet-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ipam-subnet > small {
+  display: block;
+  margin-top: 0.25rem;
+}
+
 .ipam-pool {
   border: 1px solid #dce1e7;
   border-radius: 6px;
@@ -1600,6 +1625,10 @@ html[data-bs-theme='dark'] .services-table th {
 html[data-bs-theme='dark'] .services-host small,
 html[data-bs-theme='dark'] .services-table td > small {
   color: #9aa8ba;
+}
+
+html[data-bs-theme='dark'] .ipam-subnet {
+  border-color: #273444;
 }
 
 html[data-bs-theme='dark'] .ipam-pool {

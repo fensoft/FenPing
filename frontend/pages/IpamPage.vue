@@ -10,6 +10,15 @@
       <AppIcon name="alert-triangle" class="me-1" />{{ t('IP conflict detection is degraded. Active conflicts will not be cleared until a scan succeeds.') }}
     </div>
 
+    <div class="notification-section-heading"><h3>{{ t('Subnets') }}</h3><span class="text-secondary small">{{ networks.length }}</span></div>
+    <div class="ipam-subnets mb-3">
+      <article v-for="subnet in networks" :key="subnet.cidr" class="ipam-subnet">
+        <div class="ipam-subnet-heading"><strong class="font-monospace">{{ subnet.cidr }}</strong><span v-if="subnet.dhcp" class="badge bg-blue-lt text-blue">{{ t('DHCP') }}</span><span v-else-if="!subnet.routed" class="badge bg-yellow-lt text-yellow">{{ t('Not routed') }}</span></div>
+        <small v-if="subnet.docker_network_names?.length" class="text-secondary">{{ subnet.docker_network_names.join(' · ') }}</small>
+      </article>
+      <div v-if="loading && networks.length === 0" class="text-secondary text-center py-3">{{ t('Loading') }}</div>
+    </div>
+
     <div class="notification-section-heading"><h3>{{ t('Active IP conflicts') }}</h3><span class="text-secondary small">{{ t('{count} active IP conflicts', { count: conflicts.length }) }}</span></div>
     <div class="table-wrap mb-3">
       <table class="table table-sm ipam-table conflict-table">
@@ -53,19 +62,20 @@
     <div class="notification-section-heading"><h3>{{ t('Pending devices') }}</h3><span class="text-secondary small">{{ t('{count} seen within 7 days', { count: pending.length }) }}</span></div>
     <div class="table-wrap">
       <table class="table table-sm ipam-table">
-        <thead><tr><th>{{ t('Device') }}</th><th>IP</th><th>{{ t('Status') }}</th><th>{{ t('Last seen') }}</th><th>{{ t('Lease expires') }}</th><th class="text-end">{{ t('Actions') }}</th></tr></thead>
+        <thead><tr><th>{{ t('Device') }}</th><th>IP</th><th>{{ t('Subnet') }}</th><th>{{ t('Status') }}</th><th>{{ t('Last seen') }}</th><th>{{ t('Lease expires') }}</th><th class="text-end">{{ t('Actions') }}</th></tr></thead>
         <tbody>
-          <tr v-if="loading && pending.length === 0"><td class="text-secondary text-center py-4" colspan="6">{{ t('Loading') }}</td></tr>
-          <tr v-else-if="!loading && pending.length === 0"><td class="text-secondary text-center py-4" colspan="6">{{ t('No new devices') }}</td></tr>
+          <tr v-if="loading && pending.length === 0"><td class="text-secondary text-center py-4" colspan="7">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && pending.length === 0"><td class="text-secondary text-center py-4" colspan="7">{{ t('No new devices') }}</td></tr>
           <tr v-for="device in pending" :key="device.mac" class="ipam-device-new">
             <td><div class="ipam-device-name"><AppIcon name="alert-triangle" class="text-warning" /><strong>{{ deviceName(device) }}</strong></div><small class="font-monospace">{{ formatMac(device.mac) }}</small><small v-if="device.vendor" :title="device.vendor">{{ device.vendor }}</small></td>
             <td class="font-monospace">{{ device.ip || '-' }}</td>
+            <td class="font-monospace">{{ device.network || '-' }}</td>
             <td><span :class="statusClass(device.status)" :title="statusTitle(device.status)" class="status-pill"><AppIcon :name="statusIcon(device.status)" /></span>{{ statusLabel(device.status) }}</td>
             <td class="text-nowrap">{{ formatServerDate(device.last_seen) }}</td>
             <td class="text-nowrap"><span>{{ formatServerDate(device.lease_expires) }}</span><small v-if="device.lease_active" class="text-green">{{ t('active') }}</small></td>
             <td class="text-end action-cell">
               <button v-if="isAuthenticated" class="btn btn-outline-success btn-sm" type="button" :disabled="savingMac !== ''" @click="approve(device)"><AppIcon name="check" class="me-1" />{{ t('Approve') }}</button>
-              <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><AppIcon name="pin" class="me-1" />{{ t('Reserve') }}</button>
+              <button v-if="isAuthenticated && device.dhcp" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><AppIcon name="pin" class="me-1" />{{ t('Reserve') }}</button>
             </td>
           </tr>
         </tbody>
@@ -75,19 +85,20 @@
     <div class="notification-section-heading"><h3>{{ t('Approved dynamic devices') }}</h3><span class="text-secondary small">{{ t('{count} acknowledged', { count: approved.length }) }}</span></div>
     <div class="table-wrap">
       <table class="table table-sm ipam-table">
-        <thead><tr><th>{{ t('Device') }}</th><th>IP</th><th>{{ t('Status') }}</th><th>{{ t('Last seen') }}</th><th>{{ t('Approved') }}</th><th class="text-end">{{ t('Actions') }}</th></tr></thead>
+        <thead><tr><th>{{ t('Device') }}</th><th>IP</th><th>{{ t('Subnet') }}</th><th>{{ t('Status') }}</th><th>{{ t('Last seen') }}</th><th>{{ t('Approved') }}</th><th class="text-end">{{ t('Actions') }}</th></tr></thead>
         <tbody>
-          <tr v-if="loading && approved.length === 0"><td class="text-secondary text-center py-4" colspan="6">{{ t('Loading') }}</td></tr>
-          <tr v-else-if="!loading && approved.length === 0"><td class="text-secondary text-center py-4" colspan="6">{{ t('No approved dynamic devices') }}</td></tr>
+          <tr v-if="loading && approved.length === 0"><td class="text-secondary text-center py-4" colspan="7">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && approved.length === 0"><td class="text-secondary text-center py-4" colspan="7">{{ t('No approved dynamic devices') }}</td></tr>
           <tr v-for="device in approved" :key="device.mac">
             <td><strong>{{ deviceName(device) }}</strong><small class="font-monospace">{{ formatMac(device.mac) }}</small><small v-if="device.vendor" :title="device.vendor">{{ device.vendor }}</small></td>
             <td class="font-monospace">{{ device.ip || '-' }}</td>
+            <td class="font-monospace">{{ device.network || '-' }}</td>
             <td><span :class="statusClass(device.status)" :title="statusTitle(device.status)" class="status-pill"><AppIcon :name="statusIcon(device.status)" /></span>{{ statusLabel(device.status) }}</td>
             <td class="text-nowrap">{{ formatServerDate(device.last_seen) }}</td>
             <td class="text-nowrap">{{ formatServerDate(device.approved_at) }}</td>
             <td class="text-end action-cell">
               <button v-if="isAuthenticated" class="btn btn-outline-warning btn-sm" type="button" :disabled="savingMac !== ''" @click="unapprove(device)"><AppIcon name="arrow-back-up" class="me-1" />{{ t('Mark new') }}</button>
-              <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><AppIcon name="pin" class="me-1" />{{ t('Reserve') }}</button>
+              <button v-if="isAuthenticated && device.dhcp" class="btn btn-outline-primary btn-sm" type="button" :disabled="savingMac !== ''" @click="$emit('reserve-device', device)"><AppIcon name="pin" class="me-1" />{{ t('Reserve') }}</button>
             </td>
           </tr>
         </tbody>
@@ -109,6 +120,7 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps({ isAuthenticated: Boolean });
 const emit = defineEmits(['network', 'notice', 'reserve-device']);
 const pool = ref({});
+const networks = ref([]);
 const conflicts = ref([]);
 const conflictMonitor = ref({ status: 'pending', monitors: [] });
 const pending = ref([]);
@@ -133,6 +145,7 @@ async function load() {
     if (!loadRequest.isCurrent(signal)) return;
     emit('network', data.network || '');
     pool.value = data.pool || {};
+    networks.value = data.networks || [];
     conflicts.value = data.conflicts || [];
     conflictMonitor.value = data.conflict_monitor || { status: 'pending', monitors: [] };
     pending.value = data.pending || [];

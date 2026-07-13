@@ -323,6 +323,7 @@
   "Passed": "Passed",
   "Interface": "Interface",
   "Subnet": "Subnet",
+  "Subnets": "Subnets",
   "DHCP pool": "DHCP pool",
   "Storage": "Storage",
   "DHCP server": "DHCP server",

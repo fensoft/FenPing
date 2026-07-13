@@ -28,7 +28,7 @@ public function getIpam(): array {
   $approved = array();
 
   foreach ($observations as $mac => $observation) {
-    if (!$this->config->dhcpNetwork->contains((string)($observation['ip'] ?? '')))
+    if ($this->ipamNetworkCidr((string)($observation['ip'] ?? '')) === '')
       continue;
     if (isset($managed[$mac]) || isset($approvals[$mac]))
       continue;
@@ -40,17 +40,19 @@ public function getIpam(): array {
   foreach ($approvals as $mac => $approvedAt) {
     if (isset($managed[$mac]))
       continue;
-    if (isset($observations[$mac]) && !$this->config->dhcpNetwork->contains((string)($observations[$mac]['ip'] ?? '')))
+    if (isset($observations[$mac]) && $this->ipamNetworkCidr((string)($observations[$mac]['ip'] ?? '')) === '')
       continue;
     $approved[] = $this->ipamDeviceRow($mac, $observations[$mac] ?? array(), $approvedAt);
   }
 
   usort($pending, fn($left, $right) => strcmp((string)$right['last_seen'], (string)$left['last_seen']));
   usort($approved, fn($left, $right) => strcmp((string)$right['approved_at'], (string)$left['approved_at']));
-  $conflictStatus = $this->getIpConflictStatus($this->config->dhcpNetwork->cidr);
+  $conflictStatus = $this->getIpConflictStatus();
 
   return array(
     'network' => $this->config->network,
+    'dhcp_network' => $this->config->dhcpNetwork->cidr,
+    'networks' => $this->networks->descriptors(),
     'conflict_monitor' => $conflictStatus,
     'conflicts' => $conflictStatus['conflicts'],
     'pool' => $this->ipamPoolUtilization($pool),
@@ -228,7 +230,7 @@ public function ipamManagedMacs(): array {
   $managed = array();
   $stmt = $this->db()->query("SELECT mac, ip FROM ips WHERE mac IS NOT NULL AND mac<>''");
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    if (!$this->config->dhcpNetwork->contains((string)($row['ip'] ?? '')))
+    if ($this->ipamNetworkCidr((string)($row['ip'] ?? '')) === '')
       continue;
     $mac = $this->ipamStoredMac($row['mac']);
     if ($mac !== '')
@@ -238,9 +240,12 @@ public function ipamManagedMacs(): array {
 }
 
 public function ipamDeviceRow(string $mac, array $observation, ?string $approvedAt): array {
+  $network = $this->ipamNetworkCidr((string)($observation['ip'] ?? ''));
   return array(
     'mac' => $mac,
     'ip' => (string)($observation['ip'] ?? ''),
+    'network' => $network,
+    'dhcp' => $network === $this->config->dhcpNetwork->cidr,
     'name' => (string)($observation['name'] ?? ''),
     'vendor' => $this->getVendor($mac),
     'status' => (string)($observation['status'] ?? ''),
@@ -249,6 +254,14 @@ public function ipamDeviceRow(string $mac, array $observation, ?string $approved
     'lease_active' => (int)($observation['lease_active'] ?? 0),
     'approved_at' => $approvedAt
   );
+}
+
+public function ipamNetworkCidr(string $ip): string {
+  foreach ($this->networks->configured() as $network) {
+    if ($network->contains($ip))
+      return $network->cidr;
+  }
+  return '';
 }
 
 public function approveDevice(string $mac): array {

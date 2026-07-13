@@ -104,7 +104,7 @@ Important `.env` values:
 | `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.6`. |
 | `DOCKER_SOCKET` | Optional host Docker Unix socket. `restart.sh` auto-detects `/var/run/docker.sock` when this is empty; set another local socket path to override it. |
 | `DATABASE_PATH` | SQLite file inside the container. Defaults to `/var/lib/fenping/database/fenping.sqlite3`. |
-| `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. This is the only network used by dnsmasq, IPAM, reservations, categories, and netboot assignments. |
+| `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. dnsmasq, reservations, categories, and netboot assignments remain restricted to this network; IPAM displays it alongside every configured extra network. |
 | `EXTRA_NETWORKS` | Optional comma-separated canonical `/24` networks available for scanning, for example `192.168.0.0/24,172.16.20.0/24`. FenPing reports whether an explicit route exists but never adds routes. |
 | `INVENTORY_DOWN_RETENTION_DAYS` | Days to keep an unreserved host visible after it changes to Down. Defaults to `7`; reserved hosts remain visible. |
 | `DHCP_DEFAULT_ROUTER` | Optional router handed out by DHCP. Leave unset to suppress the DHCP router option. |
@@ -298,7 +298,7 @@ Useful endpoints:
 | `GET` | `/api/health/ready` | Traffic readiness; returns HTTP `503` until SQLite, dnsmasq, cron, and integrity status are ready. |
 | `GET` | `/api/doctor` | Admin-only live network, storage, service-listener, and competing-DHCP diagnostics. |
 | `GET` | `/api/inventory` | Network inventory. |
-| `GET` | `/api/ipam` | DHCP pool utilization plus pending and approved dynamic devices. |
+| `GET` | `/api/ipam` | All configured subnets, their pending and approved dynamic devices, active conflicts, and DHCP pool utilization. |
 | `PUT` | `/api/ipam/devices/{mac}/approval` | Acknowledge a new device without changing DHCP behavior. |
 | `DELETE` | `/api/ipam/devices/{mac}/approval` | Mark an acknowledged dynamic device as new again. |
 | `GET` | `/api/notify` | Last 24 hours of changes. |
