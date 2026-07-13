@@ -19,6 +19,7 @@ final class RouteAdapter
                 pattern: (string) $route['pattern'],
                 handler: Closure::fromCallable($route['handler']),
                 auth: AuthPolicy::fromLegacy($route['auth'] ?? false),
+                liveScopes: $route['live'] ?? [],
             ),
             $routes,
         );

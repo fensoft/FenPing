@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use PDO;
 use RuntimeException;
 use Throwable;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait ScanResultsBehavior
 {
@@ -21,6 +22,8 @@ public function scanMetadataFailed(int $id, string $error): void {
     WHERE id=:id
   ");
   $stmt->execute(array('id' => $id, 'error' => $error));
+  if ($stmt->rowCount() > 0)
+    $this->liveUpdates->publish(LiveUpdateScope::Scans);
 }
 
 public function scanMetadataTimedOut(int $id, string $error): void {
@@ -33,6 +36,8 @@ public function scanMetadataTimedOut(int $id, string $error): void {
     WHERE id=:id
   ");
   $stmt->execute(array('id' => $id, 'error' => $error));
+  if ($stmt->rowCount() > 0)
+    $this->liveUpdates->publish(LiveUpdateScope::Scans);
 }
 
 public function scanMetadataLatest(string $ip): ?array {

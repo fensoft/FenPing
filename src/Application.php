@@ -48,6 +48,8 @@ use FenPing\Netboot\NetbootImageService;
 use FenPing\Ping\PingScanner;
 use FenPing\Process\NativeProcessRunner;
 use FenPing\Process\ProcessRunner;
+use FenPing\Realtime\LiveUpdatePublisher;
+use FenPing\Realtime\NchanLiveUpdatePublisher;
 use FenPing\Scan\PortChangeService;
 use FenPing\Scan\ProfileCatalog;
 use FenPing\Scan\ResultService;
@@ -84,14 +86,16 @@ final class Application
     private readonly ProcessRunner $processes;
     private readonly DockerNetworkRefreshService $dockerNetworkRefresh;
     private readonly DockerNetworkWatcher $dockerNetworkWatcher;
+    private readonly LiveUpdatePublisher $liveUpdates;
 
-    private function __construct(private readonly AppConfig $config)
+    private function __construct(private readonly AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null)
     {
+        $this->liveUpdates = $liveUpdates ?? new NchanLiveUpdatePublisher();
         $this->database = new DatabaseManager($config);
 
         $clock = new SystemClock();
         $this->auth = new AuthService($config);
-        $this->ipConflicts = new IpConflictRepository($this->database);
+        $this->ipConflicts = new IpConflictRepository($this->database, $this->liveUpdates);
         $this->processes = new NativeProcessRunner();
         $dockerSocket = getenv('DOCKER_SOCKET');
         $dockerSource = new DockerEngineClient(
@@ -102,11 +106,19 @@ final class Application
         $this->dockerNetworkRefresh = new DockerNetworkRefreshService(
             $dockerSource,
             new DockerNetworkCache(DockerNetworkCache::pathFromEnvironment()),
+            liveUpdates: $this->liveUpdates,
         );
         $this->dockerNetworkWatcher = new DockerNetworkWatcher($dockerSource, $this->dockerNetworkRefresh);
         $this->ipConflictDetector = new IpConflictDetector($config, $this->processes, $this->ipConflicts, $clock);
-        $this->operations = new OperationTracker($this->database, $clock);
-        $this->backend = new Backend($config, $this->database, $this->ipConflicts, $this->ipConflictDetector, $this->operations);
+        $this->operations = new OperationTracker($this->database, $clock, $this->liveUpdates);
+        $this->backend = new Backend(
+            $config,
+            $this->database,
+            $this->ipConflicts,
+            $this->ipConflictDetector,
+            $this->operations,
+            liveUpdates: $this->liveUpdates,
+        );
         $this->profiles = new ProfileCatalog();
         $this->scanJobs = new ScanJobRepository($this->backend, $this->database);
         $this->snapshots = new SnapshotRepository($this->backend, $this->database);
@@ -118,7 +130,7 @@ final class Application
         $this->notifications = new NotificationService($this->backend, $this->database, $this->vendors);
         $this->netboot = new NetbootImageService($this->backend, $config, $this->database);
         $this->ipam = new IpamService($this->backend, $config, $this->database, $this->vendors);
-        $this->backups = new BackupService($this->backend, $config, $this->database);
+        $this->backups = new BackupService($this->backend, $config, $this->database, $this->liveUpdates);
         $this->doctor = new DoctorService(
             $config,
             $this->processes,
@@ -132,9 +144,9 @@ final class Application
         return new self(AppConfig::fromEnvironment($projectDir));
     }
 
-    public static function forConfig(AppConfig $config): self
+    public static function forConfig(AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null): self
     {
-        return new self($config);
+        return new self($config, $liveUpdates);
     }
 
     public function api(): ApiKernel
@@ -174,7 +186,7 @@ final class Application
             new NetbootController($this->backend, $this->netboot, $mutations, $adapter),
             new BackupController($this->backups),
             new ScanController($this->backend, $this->scanJobs, $this->profiles, $results, $this->vendors, $adapter),
-        ]);
+        ], $this->liveUpdates);
     }
     public function cli(): CliKernel
     {
@@ -185,6 +197,7 @@ final class Application
             new DoctorCommand($this->doctor),
             new DockerNetworksRefreshCommand($this->dockerNetworkRefresh),
             new DockerNetworksWatchCommand($this->dockerNetworkWatcher),
+            $this->liveUpdates,
         );
     }
     public function config(): AppConfig { return $this->config; }

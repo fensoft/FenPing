@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use FenPing\Application;
+use FenPing\Config\AppConfig;
+use FenPing\Realtime\NullLiveUpdatePublisher;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -30,4 +32,7 @@ putenv('IP=192.0.2.100');
 putenv('DHCP_DEFAULT_ROUTER=192.0.2.1');
 putenv('DISCORD_WEBHOOK_URL=');
 
-$GLOBALS['fenping_test_application'] = Application::fromEnvironment(dirname(__DIR__));
+$GLOBALS['fenping_test_application'] = Application::forConfig(
+    AppConfig::fromEnvironment(dirname(__DIR__)),
+    new NullLiveUpdatePublisher(),
+);

@@ -47,6 +47,7 @@ import { computed, onMounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
 import { activeScanDuration, formatScanDate, formatScanDuration, scanIsActiveState, scanRunStateClass, scanRunStateIcon, scanRunStateLabel } from '../lib/formatters.js';
@@ -62,6 +63,7 @@ const request = useAbortableTask();
 const now = useNow();
 
 usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Scans')), title: computed(() => t('Refresh scans')), disabled: false, refresh: load });
+useLiveRefresh(['hosts', 'status', 'scans', 'vendors'], load);
 onMounted(load);
 
 async function load() {

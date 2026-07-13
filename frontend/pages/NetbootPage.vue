@@ -35,6 +35,7 @@ import { computed, onMounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatBytes, formatServerDate } from '../lib/formatters.js';
 
@@ -51,6 +52,7 @@ const loadRequest = useAbortableTask();
 const mutationRequest = useAbortableTask();
 
 usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Netboot')), title: computed(() => t('Refresh netboot images')), disabled: false, refresh: load });
+useLiveRefresh(['netboot'], load);
 onMounted(load);
 
 async function load() {

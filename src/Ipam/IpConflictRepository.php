@@ -8,16 +8,24 @@ use DateTimeImmutable;
 use DateTimeZone;
 use FenPing\Database\DatabaseManager;
 use FenPing\Network\Ipv4Network;
+use FenPing\Realtime\LiveUpdatePublisher;
+use FenPing\Realtime\LiveUpdateScope;
+use FenPing\Realtime\NullLiveUpdatePublisher;
 use PDO;
 
 final readonly class IpConflictRepository
 {
-    public function __construct(private DatabaseManager $database) {}
+    private LiveUpdatePublisher $liveUpdates;
+
+    public function __construct(private DatabaseManager $database, ?LiveUpdatePublisher $liveUpdates = null)
+    {
+        $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
+    }
 
     public function reconcile(Ipv4Network $network, array $conflicts, DateTimeImmutable $observedAt): array
     {
         $timestamp = $this->timestamp($observedAt);
-        return $this->database->immediate(function (PDO $database) use ($network, $conflicts, $timestamp): array {
+        $transitions = $this->database->immediate(function (PDO $database) use ($network, $conflicts, $timestamp): array {
             $monitor = $database->prepare("
                 INSERT INTO ip_conflict_monitor (network, last_attempt_at, last_success_at, last_error_at, error)
                 VALUES (:network, :observed_at, :observed_at, NULL, NULL)
@@ -88,6 +96,8 @@ final readonly class IpConflictRepository
             }
             return $transitions;
         });
+        $this->liveUpdates->publish(LiveUpdateScope::Conflicts);
+        return $transitions;
     }
 
     public function recordFailure(Ipv4Network $network, DateTimeImmutable $attemptedAt, string $error): void
@@ -107,6 +117,7 @@ final readonly class IpConflictRepository
                 'error' => substr(trim($error), 0, 500),
             ]);
         });
+        $this->liveUpdates->publish(LiveUpdateScope::Conflicts);
     }
 
     public function active(?string $network = null): array

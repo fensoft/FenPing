@@ -21,6 +21,7 @@ RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-
       iputils-arping \
       iputils-ping \
       nginx \
+      nginx-mod-http-nchan \
       nmap \
       nmap-scripts \
       php84 \

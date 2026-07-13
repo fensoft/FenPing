@@ -10,6 +10,7 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Added
 
+- Added best-effort Nchan-backed live UI refresh with one scoped SSE stream per browser tab, post-commit API/CLI/cron/worker invalidations, reconnect reconciliation, and no Redis or extra container.
 - Added optional real-time Docker network discovery with occupied-/24 mapping, event-stream updates, hourly reconciliation, and guest-accessible UI refresh.
 - Added an every-startup network doctor that blocks all services until interface, subnet, on-link router, DHCP pool endpoints, required ports, persistent storage, SQLite WAL, and absence of competing DHCP servers are verified.
 - Added an admin-only Doctor page and authenticated API with privileged runtime checks for FenPing-owned listeners, storage, routing, and competing DHCP servers.

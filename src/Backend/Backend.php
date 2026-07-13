@@ -12,10 +12,13 @@ use FenPing\Ipam\IpConflictRepository;
 use FenPing\Network\NetworkManager;
 use FenPing\Network\RouteDetector;
 use FenPing\Process\NativeProcessRunner;
+use FenPing\Realtime\LiveUpdatePublisher;
+use FenPing\Realtime\NullLiveUpdatePublisher;
 
 final class Backend
 {
     public readonly NetworkManager $networks;
+    public readonly LiveUpdatePublisher $liveUpdates;
     use ApiBehavior;
     use AuthBehavior;
     use BackupArchiveServiceBehavior;
@@ -63,7 +66,9 @@ final class Backend
         public readonly IpConflictDetector $ipConflictDetector,
         public readonly OperationTracker $operations,
         ?NetworkManager $networks = null,
+        ?LiveUpdatePublisher $liveUpdates = null,
     ) {
         $this->networks = $networks ?? new NetworkManager($config, new RouteDetector(new NativeProcessRunner()));
+        $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
     }
 }

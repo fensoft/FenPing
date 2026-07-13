@@ -9,6 +9,7 @@ use OutOfBoundsException;
 use PDO;
 use PDOException;
 use RuntimeException;
+use FenPing\Realtime\LiveUpdateScope;
 use FenPing\Network\NetworkPolicyException;
 
 trait RoutesScansBehavior
@@ -18,8 +19,8 @@ public function scansApiRoutes(): array {
     $this->apiRoute('GET', '/scans', 'handleScansQueue'),
     $this->apiRoute('GET', '/scans/profiles', 'handleScanProfiles'),
     $this->apiRoute('GET', '/services', 'handleServices'),
-    $this->apiRoute('POST', '/scans/{ip:ipv4}', 'handleScanCreate', 'session'),
-    $this->apiRoute('POST', '/scans/{ip:ipv4}/quick', 'handleScanQuick', 'session'),
+    $this->apiRoute('POST', '/scans/{ip:ipv4}', 'handleScanCreate', 'session', array('live' => array(LiveUpdateScope::Scans))),
+    $this->apiRoute('POST', '/scans/{ip:ipv4}/quick', 'handleScanQuick', 'session', array('live' => array(LiveUpdateScope::Scans))),
     $this->apiRoute('GET', '/scans/{ip:ipv4}/status', 'handleScanStatus'),
     $this->apiRoute('GET', '/scans/{ip:ipv4}/history', 'handleScanHistory'),
     $this->apiRoute('GET', '/scans/{ip:ipv4}/history/{id:int}', 'handleScanHistoryJson'),

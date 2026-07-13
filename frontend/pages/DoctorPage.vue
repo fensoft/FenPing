@@ -98,6 +98,7 @@
 import { computed, ref, watch } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatBytes, formatDuration, formatServerDate } from '../lib/formatters.js';
 import { t } from '../lib/i18n.js';
@@ -136,6 +137,7 @@ const integrityLevel = computed(() => health.value?.integrity?.status === 'ok' ?
 const integrityLabel = computed(() => t(health.value?.integrity?.status === 'ok' ? 'Passed' : health.value?.integrity?.status === 'failed' ? 'Failed' : 'Unknown'));
 
 usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Operations')), title: computed(() => t('Refresh operations')), disabled: false, refresh: loadAll });
+useLiveRefresh(['all'], loadHealth);
 watch(() => props.isAuthenticated, (authenticated) => {
   loadHealth();
   if (authenticated) loadDoctor();

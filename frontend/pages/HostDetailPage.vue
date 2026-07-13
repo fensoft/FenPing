@@ -92,6 +92,7 @@ import '../host-detail.css';
 import { useRoute } from 'vue-router';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 import { filterHistoryRows } from '../lib/historyFilters.js';
 import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanIsActiveState, scanRunStateLabel, scanStateClass, scanStateLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
@@ -137,6 +138,7 @@ const portScanMeta = computed(() => {
 
 if (!props.embedded)
   usePageController({ loading, label: computed(() => loading.value ? t('Loading') : t('Device')), title: computed(() => t('Refresh host')), disabled: false, refresh: load });
+useLiveRefresh(['hosts', 'status', 'scans', 'netboot', 'vendors'], load);
 watch(() => props.embedded ? `${props.device?.id || ''}|${props.device?.ip || ''}` : route.fullPath, load, { immediate: true });
 
 async function load() {

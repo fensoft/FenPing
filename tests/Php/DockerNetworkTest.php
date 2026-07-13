@@ -21,6 +21,7 @@ use FenPing\Docker\DockerNetworkWatcher;
 use FenPing\Docker\PrivilegedDockerNetworkRefreshGateway;
 use FenPing\Process\ProcessResult;
 use FenPing\Process\ProcessRunner;
+use FenPing\Realtime\LiveUpdateScope;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -108,6 +109,29 @@ final class DockerNetworkTest extends TestCase
         } catch (RuntimeException) {
         }
         self::assertSame(['172.18.0.0/24'], $cache->networks());
+    }
+
+    public function testRefreshPublishesOnlyWhenEffectiveNetworksChange(): void
+    {
+        $directory = $this->temporaryDirectory();
+        $cache = new DockerNetworkCache($directory . '/networks.json');
+        $source = new DockerNetworkTestSource([['cidr' => '172.17.0.0/24', 'names' => ['bridge']]]);
+        $publisher = new RecordingLiveUpdatePublisher();
+        $refresh = new DockerNetworkRefreshService(
+            $source,
+            $cache,
+            $directory . '/refresh.lock',
+            60,
+            $publisher,
+        );
+
+        $refresh->refresh(true);
+        $refresh->refresh(true);
+        self::assertSame([[LiveUpdateScope::Networks]], $publisher->events);
+
+        $source->networks = [['cidr' => '172.17.0.0/24', 'names' => ['bridge', 'shared']]];
+        $refresh->refresh(true);
+        self::assertSame([[LiveUpdateScope::Networks], [LiveUpdateScope::Networks]], $publisher->events);
     }
 
     public function testAppConfigMergesValidCacheWithoutWeakeningManualValidation(): void

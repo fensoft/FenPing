@@ -101,6 +101,7 @@ import { computed, onMounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatMac, formatServerDate, statusClass, statusIcon, statusLabel, statusTitle } from '../lib/formatters.js';
 
@@ -120,6 +121,7 @@ const mutationRequest = useAbortableTask();
 const utilizationClass = computed(() => Number(pool.value.utilization_percent || 0) >= 90 ? 'bg-red' : Number(pool.value.utilization_percent || 0) >= 75 ? 'bg-yellow' : 'bg-blue');
 
 usePageController({ loading, label: computed(() => loading.value ? t('Loading') : 'IPAM'), title: computed(() => t('Refresh IPAM')), disabled: false, refresh: load, reload: load });
+useLiveRefresh(['hosts', 'status', 'conflicts', 'leases', 'vendors'], load);
 onMounted(load);
 
 async function load() {

@@ -7,6 +7,7 @@ namespace FenPing\Backend;
 use PDO;
 use RuntimeException;
 use Throwable;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait DhcpLeaseImporterBehavior
 {
@@ -91,6 +92,7 @@ try {
     )
   ");
   $this->dbCommit($db);
+  $this->liveUpdates->publish(LiveUpdateScope::Leases);
 } catch (Throwable $e) {
   $this->dbRollback($db);
   throw $e;

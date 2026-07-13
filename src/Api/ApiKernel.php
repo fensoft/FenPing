@@ -6,13 +6,18 @@ namespace FenPing\Api;
 
 use FenPing\Api\Controller\Controller;
 use FenPing\Auth\AuthService;
+use FenPing\Realtime\LiveUpdatePublisher;
+use FenPing\Realtime\NullLiveUpdatePublisher;
 use Throwable;
 
 final readonly class ApiKernel
 {
+    private LiveUpdatePublisher $liveUpdates;
+
     /** @param list<Controller> $controllers */
-    public function __construct(private AuthService $auth, private array $controllers)
+    public function __construct(private AuthService $auth, private array $controllers, ?LiveUpdatePublisher $liveUpdates = null)
     {
+        $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
     }
 
     public function handle(Request $request): Response
@@ -26,10 +31,16 @@ final readonly class ApiKernel
             $match = $router->match($request);
             $body = $match->route->auth === AuthPolicy::Guest ? [] : $request->body();
             $this->auth->authorize($match->route->auth, $body);
-            $result = ($match->route->handler)($match->params);
-            return $result instanceof Response ? $result : new JsonResponse($result);
-        } catch (ResponseException $response) {
-            return $response->response;
+            try {
+                $result = ($match->route->handler)($match->params);
+                $response = $result instanceof Response ? $result : new JsonResponse($result);
+            } catch (ResponseException $ready) {
+                $response = $ready->response;
+            }
+            if ($response->status >= 200 && $response->status < 300 && $match->route->liveScopes !== []) {
+                $this->liveUpdates->publish(...$match->route->liveScopes);
+            }
+            return $response;
         } catch (HttpException $error) {
             return new JsonResponse(['error' => $error->getMessage()], $error->status);
         } catch (Throwable) {

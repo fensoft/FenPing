@@ -13,6 +13,7 @@ use PDO;
 use PDOException;
 use RuntimeException;
 use Throwable;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait InventorySchedulerBehavior
 {
@@ -69,6 +70,8 @@ public function runInventoryCommand(array $args): int {
       else
         $active++;
     }
+    if ($queueTargets !== array())
+      $this->liveUpdates->publish(LiveUpdateScope::Scans);
 
     echo "queued $queued scans" . PHP_EOL;
     if ($active > 0)

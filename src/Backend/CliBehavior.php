@@ -7,6 +7,7 @@ namespace FenPing\Backend;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait CliBehavior
 {
@@ -32,6 +33,8 @@ public function runLockedCliCommand(string $path, string $label, callable $callb
 
 public function runScanPortBackfillCommand() {
   $inserted = $this->scanPortChangesBackfill();
+  if ($inserted > 0)
+    $this->liveUpdates->publish(LiveUpdateScope::Scans);
   echo "scan port changes backfill: $inserted inserted" . PHP_EOL;
   return 0;
 }

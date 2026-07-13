@@ -4,17 +4,24 @@ declare(strict_types=1);
 
 namespace FenPing\Docker;
 
+use FenPing\Realtime\LiveUpdatePublisher;
+use FenPing\Realtime\LiveUpdateScope;
+use FenPing\Realtime\NullLiveUpdatePublisher;
 use RuntimeException;
 use Throwable;
 
 final readonly class DockerNetworkRefreshService
 {
+    private LiveUpdatePublisher $liveUpdates;
+
     public function __construct(
         private DockerNetworkSource $source,
         private DockerNetworkCache $cache,
         private string $lockPath = '/run/fenping/docker-networks-refresh.lock',
         private int $apiFreshnessSeconds = 5,
+        ?LiveUpdatePublisher $liveUpdates = null,
     ) {
+        $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
     }
 
     /** @return array{status: string, networks: int, updated_at: ?int} */
@@ -38,6 +45,10 @@ final readonly class DockerNetworkRefreshService
         }
         try {
             $updatedAt = $this->cache->updatedAt();
+            $previousState = [
+                'networks' => $this->cache->networks(),
+                'names' => $this->cache->networkNames(),
+            ];
             if (!$force && $updatedAt !== null && $updatedAt >= time() - $this->apiFreshnessSeconds) {
                 return ['status' => 'unchanged', 'networks' => count($this->cache->networks()), 'updated_at' => $updatedAt];
             }
@@ -51,6 +62,13 @@ final readonly class DockerNetworkRefreshService
             }
             $now = time();
             $this->cache->replace($networks, $now);
+            $currentState = [
+                'networks' => $this->cache->networks(),
+                'names' => $this->cache->networkNames(),
+            ];
+            if ($previousState !== $currentState) {
+                $this->liveUpdates->publish(LiveUpdateScope::Networks);
+            }
             return ['status' => 'refreshed', 'networks' => count($networks), 'updated_at' => $now];
         } finally {
             flock($lock, LOCK_UN);

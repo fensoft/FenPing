@@ -12,14 +12,14 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 4. `boot.sh` runs the blocking startup doctor before opening SQLite or starting any daemon.
 5. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, downloads the IEEE vendor registries, and synchronizes changed assignments into SQLite.
 6. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
-7. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, and sends `/api/...` to PHP-FPM through a Unix socket. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
+7. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, sends JSON `/api/...` requests to PHP-FPM through a Unix socket, and serves the Nchan-backed `/api/events` SSE stream directly. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
 
 ## Docker Build
 
 `Dockerfile` has two stages:
 
 - `frontend`: uses `node:22-alpine` to run `npm ci` and `npm run build`.
-- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM and PDO SQLite, dnsmasq, nmap with default scripts plus `broadcast-dhcp-discover`, minimal IP/ping/arping tools, and doas. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
+- runtime: uses `alpine:3.23` and installs nginx with its Nchan dynamic module, PHP 8.4 with FPM and PDO SQLite, dnsmasq, nmap with default scripts plus `broadcast-dhcp-discover`, minimal IP/ping/arping tools, and doas. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
 
 The image contains no database server or SQL client process. SQLite is embedded through PDO and persists its database and WAL files on the application bind mount.
 
@@ -67,6 +67,14 @@ Stable ping records update their activity timestamp at most once per day; actual
 Class-owned implementation modules live under `src/Backend/` and are composed by the injected `FenPing\Backend\Backend` object. The former root modules, route directory, procedural compatibility functions, and `src/Legacy/` tree are absent; an architecture test enforces one primary type per production file, no free functions, and a 400-line ceiling.
 
 The typed API kernel, router, request, authorization policies, and JSON/XML/file responses live under `src/Api/`. Domain-facing behavior is exposed through injected services and repositories under `src/`.
+
+### Live Updates
+
+Nchan runs inside the existing nginx process and exposes guest-readable `GET /api/events` as an EventSource stream. Backend producers post only to a loopback-restricted publisher location. Messages are versioned invalidation hints containing scope names and a UTC timestamp, never LAN records, credentials, or authorization state. The in-memory channel retains at most 32 messages for five minutes and does not use Redis.
+
+`FenPing\Realtime\LiveUpdatePublisher` is injected only by the application composition root. API routes publish after successful 2xx responses, while CLI, cron, scan-worker, ping, lease, conflict, backup, operation, OUI, and Docker-network paths publish after their relevant commit or successful state change. The Nchan transport uses a short local timeout and never throws, so nginx startup order or live-update downtime cannot alter a domain operation's result.
+
+Each browser tab owns one EventSource through `frontend/lib/liveUpdates.js`. Mounted views subscribe to relevant scopes and refetch their existing JSON APIs after events received within 250 milliseconds are merged. Reconnects and returning a hidden tab to the foreground trigger an `all` reconciliation. Existing mutation refreshes and safety polling remain; active user-started scans wait for scan events with a 15-second fallback instead of polling every second.
 
 ### CLI
 
@@ -205,7 +213,7 @@ Important files:
 - `frontend/styles.css`: app styling and dark mode.
 - `package.json`: Vue, Vite, Tabler Core, Tabler Icons Webfont.
 
-Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock for running durations and relative times. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
+Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock only for running durations and relative times; data invalidation uses the application-level EventSource. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
 
 Inventory filters use persisted three-way status, importance, and new-device choices. Stored checkbox-era preferences are normalized into the current string-valued filter document on load, while search and all filter dimensions combine with AND semantics.
 

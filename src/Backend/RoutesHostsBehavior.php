@@ -9,6 +9,7 @@ use OutOfBoundsException;
 use PDO;
 use PDOException;
 use RuntimeException;
+use FenPing\Realtime\LiveUpdateScope;
 use FenPing\Network\NetworkPolicyException;
 
 trait RoutesHostsBehavior
@@ -19,12 +20,12 @@ public function hostsApiRoutes(): array {
     $this->apiRoute('GET', '/hosts/{id:int}/detail', 'handleHostDetail'),
     $this->apiRoute('GET', '/hosts/by-ip/{ip:ipv4}/detail', 'handleHostDetailByIp'),
     $this->apiRoute('GET', '/hosts/{id:int}', 'handleHostGet'),
-    $this->apiRoute('POST', '/hosts', 'handleHostCreate', 'body'),
-    $this->apiRoute('PUT', '/hosts/{id:int}', 'handleHostEdit', 'body'),
-    $this->apiRoute('DELETE', '/hosts/{id:int}', 'handleHostDelete', 'body'),
-    $this->apiRoute('POST', '/categories', 'handleCategoryCreate', 'body'),
-    $this->apiRoute('PUT', '/categories', 'handleCategoryRename', 'body'),
-    $this->apiRoute('DELETE', '/categories', 'handleCategoryDelete', 'body')
+    $this->apiRoute('POST', '/hosts', 'handleHostCreate', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('PUT', '/hosts/{id:int}', 'handleHostEdit', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('DELETE', '/hosts/{id:int}', 'handleHostDelete', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('POST', '/categories', 'handleCategoryCreate', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('PUT', '/categories', 'handleCategoryRename', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('DELETE', '/categories', 'handleCategoryDelete', 'body', array('live' => array(LiveUpdateScope::Hosts)))
   );
 }
 

@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use PDO;
 use RuntimeException;
 use Throwable;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait ScanJobQueueBehavior
 {
@@ -128,6 +129,8 @@ public function scanMetadataClaimQueued(int $concurrency): array {
         $jobs[] = $job;
     }
     $this->dbCommit($database);
+    if ($jobs !== array())
+      $this->liveUpdates->publish(LiveUpdateScope::Scans);
     return $jobs;
   } catch (Throwable $error) {
     $this->dbRollback($database);
@@ -155,7 +158,10 @@ public function scanMetadataExpireStaleRunning(int $maxSeconds): int {
       AND (date_begin IS NULL OR date_begin <= datetime('now', '-$maxSeconds seconds'))
   ");
   $stmt->execute();
-  return $stmt->rowCount();
+  $expired = $stmt->rowCount();
+  if ($expired > 0)
+    $this->liveUpdates->publish(LiveUpdateScope::Scans);
+  return $expired;
 }
 
 public function scanMetadataStart(string $ip, string $mode): int {
@@ -164,7 +170,9 @@ public function scanMetadataStart(string $ip, string $mode): int {
     VALUES (:ip, :mode, 'running', CURRENT_TIMESTAMP, 0)
   ");
   $stmt->execute(array('ip' => $ip, 'mode' => $mode));
-  return (int)$this->db()->lastInsertId();
+  $id = (int)$this->db()->lastInsertId();
+  $this->liveUpdates->publish(LiveUpdateScope::Scans);
+  return $id;
 }
 
 public function scanMetadataComplete(int $id, array $scan): bool {
@@ -223,6 +231,7 @@ public function scanMetadataComplete(int $id, array $scan): bool {
       'distance' => $scan['distance'] ?? null
     ));
     $this->dbCommit($database);
+    $this->liveUpdates->publish(LiveUpdateScope::Scans);
     return $changed === 1;
   } catch (Throwable $e) {
     $this->dbRollback($database);

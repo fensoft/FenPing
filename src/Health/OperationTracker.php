@@ -6,6 +6,9 @@ namespace FenPing\Health;
 
 use FenPing\Database\DatabaseManager;
 use FenPing\Support\Clock;
+use FenPing\Realtime\LiveUpdatePublisher;
+use FenPing\Realtime\LiveUpdateScope;
+use FenPing\Realtime\NullLiveUpdatePublisher;
 use PDO;
 use Throwable;
 
@@ -13,13 +16,16 @@ final readonly class OperationTracker
 {
     private const FAILURE_RETENTION_DAYS = 30;
 
-    public function __construct(private DatabaseManager $database, private Clock $clock)
+    private LiveUpdatePublisher $liveUpdates;
+
+    public function __construct(private DatabaseManager $database, private Clock $clock, ?LiveUpdatePublisher $liveUpdates = null)
     {
+        $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
     }
 
     public function started(string $operation): void
     {
-        $this->bestEffort(function (PDO $database) use ($operation): void {
+        if ($this->bestEffort(function (PDO $database) use ($operation): void {
             $statement = $database->prepare("
                 INSERT INTO operation_status (operation, state, last_started_at)
                 VALUES (:operation, 'running', :occurred_at)
@@ -28,12 +34,14 @@ final readonly class OperationTracker
                   last_started_at=excluded.last_started_at
             ");
             $statement->execute($this->parameters($operation));
-        });
+        })) {
+            $this->liveUpdates->publish(LiveUpdateScope::Operations);
+        }
     }
 
     public function succeeded(string $operation): void
     {
-        $this->bestEffort(function (PDO $database) use ($operation): void {
+        if ($this->bestEffort(function (PDO $database) use ($operation): void {
             $statement = $database->prepare("
                 INSERT INTO operation_status (
                   operation, state, last_started_at, last_finished_at,
@@ -48,13 +56,15 @@ final readonly class OperationTracker
                   success_count=operation_status.success_count+1
             ");
             $statement->execute($this->parameters($operation));
-        });
+        })) {
+            $this->liveUpdates->publish(LiveUpdateScope::Operations);
+        }
     }
 
     public function failed(string $operation, string $error): void
     {
         $error = $this->sanitize($error);
-        $this->bestEffort(function (PDO $database) use ($operation, $error): void {
+        if ($this->bestEffort(function (PDO $database) use ($operation, $error): void {
             $parameters = $this->parameters($operation) + ['error' => $error];
             $statement = $database->prepare("
                 INSERT INTO operation_status (
@@ -82,7 +92,9 @@ final readonly class OperationTracker
                 "DELETE FROM operation_failures WHERE failed_at<datetime('now', '-"
                 . self::FAILURE_RETENTION_DAYS . " days')",
             );
-        });
+        })) {
+            $this->liveUpdates->publish(LiveUpdateScope::Operations);
+        }
     }
 
     public function statuses(): array
@@ -142,12 +154,14 @@ final readonly class OperationTracker
         ];
     }
 
-    private function bestEffort(callable $callback): void
+    private function bestEffort(callable $callback): bool
     {
         try {
             $callback($this->database->connection());
+            return true;
         } catch (Throwable) {
             // Health recording must never change the outcome of the operation.
+            return false;
         }
     }
 

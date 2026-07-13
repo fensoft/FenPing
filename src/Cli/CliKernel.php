@@ -7,6 +7,9 @@ namespace FenPing\Cli;
 use FenPing\Backend\Backend;
 use FenPing\Backup\BackupService;
 use FenPing\Database\DatabaseManager;
+use FenPing\Realtime\LiveUpdatePublisher;
+use FenPing\Realtime\LiveUpdateScope;
+use FenPing\Realtime\NullLiveUpdatePublisher;
 use Throwable;
 
 
@@ -14,6 +17,7 @@ final class CliKernel
 {
     /** @var array<string, Command> */
     private array $commands;
+    private readonly LiveUpdatePublisher $liveUpdates;
 
     public function __construct(
         private readonly Backend $backend,
@@ -22,8 +26,10 @@ final class CliKernel
         Command $doctor,
         Command $dockerNetworksRefresh,
         Command $dockerNetworksWatch,
+        ?LiveUpdatePublisher $liveUpdates = null,
     )
     {
+        $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
         $this->commands = [
             'doctor' => $doctor,
             'docker-networks-refresh' => $dockerNetworksRefresh,
@@ -40,12 +46,18 @@ final class CliKernel
             'scan-port-backfill' => new CallableCommand(fn(array $args): int => $args === []
                 ? $this->backend->runScanPortBackfillCommand()
                 : $this->usage()),
-            'oui-refresh' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
-                '/tmp/oui-refresh.lck',
-                'OUI refresh',
-                fn(): int => $this->tracked('oui_update', fn(): int => $this->backend->runIeeeOuiRefreshCommand($args)),
+            'oui-refresh' => new CallableCommand(fn(array $args): int => $this->publishOnSuccess(
+                [LiveUpdateScope::Vendors],
+                fn(): int => $this->backend->runLockedCliCommand(
+                    '/tmp/oui-refresh.lck',
+                    'OUI refresh',
+                    fn(): int => $this->tracked('oui_update', fn(): int => $this->backend->runIeeeOuiRefreshCommand($args)),
+                ),
             )),
-            'oui-sync' => new CallableCommand(fn(array $args): int => $this->backend->runIeeeOuiSyncCommand($args)),
+            'oui-sync' => new CallableCommand(fn(array $args): int => $this->publishOnSuccess(
+                [LiveUpdateScope::Vendors],
+                fn(): int => $this->backend->runIeeeOuiSyncCommand($args),
+            )),
             'dnsmasq-leases' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
                 '/tmp/dnsmasq-leases.lck',
                 'dnsmasq lease import',
@@ -128,6 +140,16 @@ final class CliKernel
             $this->backend->operations->failed($operation, $error->getMessage());
             throw $error;
         }
+    }
+
+    /** @param list<LiveUpdateScope> $scopes */
+    private function publishOnSuccess(array $scopes, callable $callback): int
+    {
+        $code = $callback();
+        if ($code === 0) {
+            $this->liveUpdates->publish(...$scopes);
+        }
+        return $code;
     }
 
     private function usage(): int

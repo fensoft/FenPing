@@ -55,6 +55,7 @@ import { computed, onMounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatMac, formatScanDate } from '../lib/formatters.js';
 import { scanProfileBadgeClass, scanProfileLabel } from '../lib/scanProfiles.js';
@@ -78,6 +79,7 @@ const visibleServices = computed(() => {
 });
 
 usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Services')), title: computed(() => t('Refresh services')), disabled: false, refresh: load });
+useLiveRefresh(['hosts', 'status', 'scans', 'vendors'], load);
 onMounted(load);
 
 async function load() {

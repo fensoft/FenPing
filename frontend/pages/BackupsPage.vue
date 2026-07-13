@@ -37,6 +37,7 @@ import { apiJson, isAbortError } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { formatBytes, formatServerDate } from '../lib/formatters.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 
 defineOptions({ inheritAttrs: false });
@@ -49,6 +50,7 @@ const error = ref('');
 const request = useAbortableTask();
 
 usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Backups')), title: computed(() => t('Refresh backups')), disabled: computed(() => !props.isAuthenticated), refresh: load });
+useLiveRefresh(['backups'], load);
 watch(() => props.isAuthenticated, (authenticated) => { if (authenticated) load(); else backups.value = []; }, { immediate: true });
 
 async function load() {

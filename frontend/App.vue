@@ -101,6 +101,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppModal from './components/AppModal.vue';
 import { apiJson, isAbortError } from './lib/api.js';
 import { useAbortableTask } from './composables/useAbortableTask.js';
+import { provideLiveUpdates } from './composables/useLiveUpdates.js';
 import { providePageController } from './composables/usePageController.js';
 import { formatMac, toFlag } from './lib/formatters.js';
 import { locale, localePreference, setLocale, supportedLocales, t } from './lib/i18n.js';
@@ -110,6 +111,7 @@ import { routeNames } from './router.js';
 const router = useRouter();
 const route = useRoute();
 const pageController = providePageController();
+const liveUpdates = provideLiveUpdates();
 const network = ref('');
 const selectedNetwork = ref(readSelectedNetwork());
 const notice = ref('');
@@ -129,7 +131,7 @@ const netbootImages = ref([]);
 const conflictState = ref({ status: 'pending', conflicts: [] });
 const appRequest = useAbortableTask();
 const modalRequest = useAbortableTask();
-const pollingTimers = new Set();
+const liveModalRequest = useAbortableTask();
 
 const isAuthenticated = computed(() => Boolean(auth.value?.authenticated));
 const isInventoryRoute = computed(() => [routeNames.inventory, routeNames.host, routeNames.hostByIp].includes(route.name));
@@ -139,17 +141,21 @@ const refreshTitle = computed(() => controllerValue('title', t(isAuthenticated.v
 const refreshDisabled = computed(() => networkRefreshing.value || Boolean(controllerValue('disabled', false)));
 const activeConflicts = computed(() => conflictState.value?.conflicts || []);
 let conflictTimer = null;
+let unsubscribeConflictLive = null;
+let unsubscribeModalLive = null;
 
 onMounted(async () => {
   applyTheme();
+  unsubscribeConflictLive = liveUpdates.subscribe(['hosts', 'status', 'conflicts', 'leases', 'vendors'], loadIpConflicts);
+  unsubscribeModalLive = liveUpdates.subscribe(['hosts', 'status', 'scans', 'netboot'], refreshLiveModal);
   await Promise.all([loadSession(), loadIpConflicts()]);
   conflictTimer = window.setInterval(loadIpConflicts, 60000);
 });
 
 onUnmounted(() => {
   if (conflictTimer !== null) window.clearInterval(conflictTimer);
-  for (const timer of pollingTimers) window.clearTimeout(timer);
-  pollingTimers.clear();
+  unsubscribeConflictLive?.();
+  unsubscribeModalLive?.();
 });
 
 watch(() => route.fullPath, () => {
@@ -319,9 +325,7 @@ async function scanHost(host, profile) {
 
 async function pollScanStatus(host, scanId = null) {
   const key = hostScanKey(host);
-  let delay = 300;
   while (scanningHosts.value.has(key)) {
-    await wait(delay); delay = 1000;
     try {
       const suffix = scanId ? `?id=${encodeURIComponent(scanId)}` : '';
       const metadata = await apiJson(`/api/scans/${encodeURIComponent(host.ip)}/status${suffix}`);
@@ -329,15 +333,9 @@ async function pollScanStatus(host, scanId = null) {
     } catch {
       // A transient status failure should not lose the running job.
     }
+    if (await liveUpdates.waitFor(['scans'], 15000) === 'stopped') return null;
   }
   return null;
-}
-
-function wait(delay) {
-  return new Promise((resolve) => {
-    const timer = window.setTimeout(() => { pollingTimers.delete(timer); resolve(); }, delay);
-    pollingTimers.add(timer);
-  });
 }
 
 function openAddCategory() {
@@ -388,10 +386,14 @@ function openDeleteCategory(row) {
 async function openHistory(ip) {
   if (!ip) return;
   clearMessages(); modal.value = { type: 'history', ip, rows: null, summary: null };
-  const signal = modalRequest.nextSignal();
+  await loadHistoryModal(ip);
+}
+
+async function loadHistoryModal(ip, request = modalRequest) {
+  const signal = request.nextSignal();
   try {
     const payload = await apiJson(`/api/history/${encodeURIComponent(ip)}`, { signal });
-    if (modalRequest.isCurrent(signal) && modal.value?.type === 'history') {
+    if (request.isCurrent(signal) && modal.value?.type === 'history' && modal.value.ip === ip) {
       modal.value.rows = Array.isArray(payload) ? payload : payload?.rows || [];
       modal.value.summary = Array.isArray(payload) ? null : payload?.summary || null;
     }
@@ -402,10 +404,19 @@ function scanJsonUrl(ip, scanId = null) { return scanId ? `/api/scans/${encodeUR
 async function openScan(ip, scanId = null) {
   if (!ip) return;
   clearMessages(); modal.value = { type: 'scan', ip, loading: true, scan: null, history: null, selectedScanId: scanId };
-  const signal = modalRequest.nextSignal();
+  await loadScanModal(ip, scanId);
+}
+
+async function loadScanModal(ip, scanId = null, request = modalRequest) {
+  if (modal.value?.type !== 'scan' || modal.value.ip !== ip) return;
+  modal.value.loading = true;
+  const signal = request.nextSignal();
   try {
     const [scan, history] = await Promise.all([apiJson(scanJsonUrl(ip, scanId), { signal }), apiJson(`/api/scans/${encodeURIComponent(ip)}/history`, { signal })]);
-    if (modalRequest.isCurrent(signal) && modal.value?.type === 'scan') {
+    if (request.isCurrent(signal)
+      && modal.value?.type === 'scan'
+      && modal.value.ip === ip
+      && (scanId === null || String(modal.value.selectedScanId || '') === String(scanId))) {
       modal.value.loading = false; modal.value.scan = scan; modal.value.history = history || []; modal.value.selectedScanId = scan.metadata?.id || scanId || null;
     }
   } catch (error) {
@@ -413,10 +424,29 @@ async function openScan(ip, scanId = null) {
   }
 }
 
+async function refreshLiveModal(scopes) {
+  const current = modal.value;
+  if (!current) return;
+  const all = scopes.has('all');
+  if (current.type === 'history' && (all || scopes.has('status') || scopes.has('hosts'))) {
+    await loadHistoryModal(current.ip, liveModalRequest);
+  } else if (current.type === 'scan' && (all || scopes.has('scans'))) {
+    await loadScanModal(current.ip, current.selectedScanId, liveModalRequest);
+  } else if (current.type === 'edit' && (all || scopes.has('netboot'))) {
+    const signal = liveModalRequest.nextSignal();
+    try {
+      const images = await apiJson('/api/netboot/images', { signal });
+      if (liveModalRequest.isCurrent(signal) && modal.value?.type === 'edit') netbootImages.value = images?.images || [];
+    } catch (error) {
+      if (!isAbortError(error)) modalError.value = error.message;
+    }
+  }
+}
+
 async function selectScanHistory(scanId) {
   if (modal.value?.type !== 'scan') return;
   const id = Number(scanId || 0); if (!id) return;
-  const ip = modal.value.ip; modal.value.loading = true; modalError.value = '';
+  const ip = modal.value.ip; modal.value.loading = true; modal.value.selectedScanId = id; modalError.value = '';
   const signal = modalRequest.nextSignal();
   try {
     const scan = await apiJson(scanJsonUrl(ip, id), { signal });
@@ -466,7 +496,7 @@ async function saveModal(action) {
   finally { saving.value = false; }
 }
 
-function closeModal() { modalRequest.abort(); modal.value = null; modalError.value = ''; saving.value = false; }
+function closeModal() { modalRequest.abort(); liveModalRequest.abort(); modal.value = null; modalError.value = ''; saving.value = false; }
 function clearMessages() { modalError.value = ''; globalError.value = ''; notice.value = ''; }
 function toShortIp(ip) { const value = String(ip || ''); const prefix = `${network.value}.`; return value.startsWith(prefix) ? value.slice(prefix.length) : value; }
 function hostForm(data) { return { id: data.id, ip: toShortIp(data.ip || ''), router: data.router || '', mac: formatMac(data.mac), name: data.name || '', important: toFlag(data.important), repeater: toFlag(data.repeater), dns: data.dns || '', web: toFlag(data.web), netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : '', scan_profile: data.scan_profile || 'standard', scan_interval_hours: Number(data.scan_interval_hours ?? 24) }; }

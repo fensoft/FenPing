@@ -83,6 +83,7 @@ import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, 
 import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkLabel, inventoryNetworkUrl } from '../lib/inventoryNetworks.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
 import { formatDuration, formatMac, formatServerDate, parseServerDate, scanIsActiveState, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
@@ -162,6 +163,7 @@ usePageController({
   refresh: () => props.isAuthenticated ? emit('ping-refresh') : load(),
   reload: load
 });
+useLiveRefresh(['hosts', 'status', 'scans', 'leases', 'networks', 'vendors'], load);
 watch(filters, (value) => writeStorage('fenping_filters', value), { deep: true });
 watch(collapsed, (value) => writeStorage('fenping_collapsed_categories', Array.from(value)));
 onMounted(load);

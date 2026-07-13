@@ -115,6 +115,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
+import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
 import {
@@ -152,6 +153,7 @@ usePageController({
   disabled: false,
   refresh: load
 });
+useLiveRefresh(['hosts', 'status', 'scans', 'conflicts', 'vendors'], load);
 
 onMounted(load);
 

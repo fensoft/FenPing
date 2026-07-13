@@ -13,6 +13,7 @@ use PDO;
 use PDOException;
 use RuntimeException;
 use Throwable;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait PingBehavior
 {
@@ -82,6 +83,7 @@ public function savePingHosts(array $hosts): void {
     foreach ($hosts as $host)
       $this->savePingHost($host, $statements);
     $this->dbCommit($database);
+    $this->liveUpdates->publish(LiveUpdateScope::Status);
   } catch (Throwable $error) {
     $this->dbRollback($database);
     throw $error;

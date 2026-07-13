@@ -9,16 +9,17 @@ use OutOfBoundsException;
 use PDO;
 use PDOException;
 use RuntimeException;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait RoutesNetbootBehavior
 {
 public function netbootApiRoutes(): array {
   return array(
     $this->apiRoute('GET', '/netboot/images', 'handleNetbootImagesList'),
-    $this->apiRoute('POST', '/netboot/images', 'handleNetbootImageCreate', 'session'),
+    $this->apiRoute('POST', '/netboot/images', 'handleNetbootImageCreate', 'session', array('live' => array(LiveUpdateScope::Netboot))),
     $this->apiRoute('GET', '/netboot/images/{id:int}', 'handleNetbootImageGet'),
     $this->apiRoute('GET', '/netboot/images/{id:int}/file', 'handleNetbootImageFile'),
-    $this->apiRoute('DELETE', '/netboot/images/{id:int}', 'handleNetbootImageDelete', 'session')
+    $this->apiRoute('DELETE', '/netboot/images/{id:int}', 'handleNetbootImageDelete', 'session', array('live' => array(LiveUpdateScope::Netboot, LiveUpdateScope::Hosts)))
   );
 }
 
