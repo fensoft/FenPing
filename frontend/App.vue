@@ -29,6 +29,14 @@
 
       <div class="app-main">
         <main class="app-content container-xl py-3">
+        <div v-if="activeConflicts.length" class="alert alert-danger d-flex align-items-center gap-3 mb-3" role="alert">
+          <AppIcon name="alert-triangle" />
+          <div class="flex-fill">
+            <strong>{{ t('{count} active IP conflicts', { count: activeConflicts.length }) }}</strong>
+            <div class="small">{{ t('Multiple devices are answering for the same IPv4 address.') }}</div>
+          </div>
+          <button class="btn btn-danger btn-sm" type="button" @click="go('/ipam')">{{ t('Review conflicts') }}</button>
+        </div>
         <div v-if="globalError" class="alert alert-danger mb-3" role="alert">{{ globalError }}</div>
         <div v-if="notice" class="alert alert-success mb-3" role="status">{{ notice }}</div>
         <RouterView v-slot="{ Component }">
@@ -116,6 +124,7 @@ const modal = ref(null);
 const modalError = ref('');
 const saving = ref(false);
 const netbootImages = ref([]);
+const conflictState = ref({ status: 'pending', conflicts: [] });
 const appRequest = useAbortableTask();
 const modalRequest = useAbortableTask();
 const pollingTimers = new Set();
@@ -126,13 +135,17 @@ const pageLoading = computed(() => Boolean(controllerValue('loading', false)));
 const refreshLabel = computed(() => controllerValue('label', t(isAuthenticated.value ? 'Ready' : 'Read only')));
 const refreshTitle = computed(() => controllerValue('title', t(isAuthenticated.value ? 'Refresh' : 'Login to refresh')));
 const refreshDisabled = computed(() => Boolean(controllerValue('disabled', false)));
+const activeConflicts = computed(() => conflictState.value?.conflicts || []);
+let conflictTimer = null;
 
 onMounted(async () => {
   applyTheme();
-  await loadSession();
+  await Promise.all([loadSession(), loadIpConflicts()]);
+  conflictTimer = window.setInterval(loadIpConflicts, 60000);
 });
 
 onUnmounted(() => {
+  if (conflictTimer !== null) window.clearInterval(conflictTimer);
   for (const timer of pollingTimers) window.clearTimeout(timer);
   pollingTimers.clear();
 });
@@ -187,6 +200,15 @@ async function loadSession() {
   }
 }
 
+async function loadIpConflicts() {
+  try {
+    const data = await apiJson('/api/ipam/conflicts');
+    if (data && Array.isArray(data.conflicts)) conflictState.value = data;
+  } catch {
+    // Preserve the last known warning when polling is temporarily unavailable.
+  }
+}
+
 function openLogin() {
   clearMessages();
   modal.value = { type: 'login', password: '' };
@@ -226,6 +248,7 @@ async function refreshScan() {
       method: 'POST',
       body: JSON.stringify({ network: selectedNetwork.value || undefined })
     });
+    await loadIpConflicts();
     await reloadCurrentPage();
   } catch (error) {
     globalError.value = error.message;

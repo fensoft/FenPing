@@ -60,6 +60,7 @@ done
 
 echo inventory bytes: `wc -c < "${OUT_DIR}/fenping-GET--api-inventory.json"`
 
+expect_code "GET /api/ipam/conflicts guest" 200 "${SITE}/api/ipam/conflicts"
 expect_code "PUT /api/ipam approval guest" 403 -X PUT "${SITE}/api/ipam/devices/02%3A00%3A00%3A00%3A00%3A01/approval"
 expect_code "GET /api/hosts/by-ip invalid" 400 "${SITE}/api/hosts/by-ip/not-an-ip/detail"
 

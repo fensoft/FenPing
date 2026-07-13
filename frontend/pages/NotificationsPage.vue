@@ -5,7 +5,7 @@
     <div class="page-refresh-header">
       <div>
         <h2>{{ t('Notify') }}</h2>
-        <div class="text-secondary small">{{ t('Last {hours}h of status and service changes', { hours: notify.hours || 24 }) }}</div>
+        <div class="text-secondary small">{{ t('Last {hours}h of status, service, and IP conflict changes', { hours: notify.hours || 24 }) }}</div>
       </div>
       <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load">
         <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />
@@ -17,9 +17,29 @@
       <div class="notify-summary-item"><span>{{ t('Total') }}</span><strong>{{ summary.total || 0 }}</strong></div>
       <div class="notify-summary-item"><span>{{ t('Hosts') }}</span><strong>{{ summary.hosts || 0 }}</strong></div>
       <div class="notify-summary-item"><span>{{ t('Services') }}</span><strong>{{ summary.port_total || 0 }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('IP conflicts') }}</span><strong>{{ summary.conflict_total || 0 }}</strong></div>
       <div v-for="item in statusCounts" :key="item.status" class="notify-summary-item">
         <span>{{ statusLabel(item.status) }}</span><strong>{{ item.count }}</strong>
       </div>
+    </div>
+
+    <div class="notification-section-heading"><h3>{{ t('IP conflicts') }}</h3><span class="text-secondary small">{{ t('{count} conflict events', { count: conflictChanges.length }) }}</span></div>
+    <div class="table-wrap">
+      <table class="table table-sm notify-table conflict-table">
+        <thead><tr><th>{{ t('Time') }}</th><th>IP</th><th>{{ t('Change') }}</th><th>{{ t('Devices') }}</th></tr></thead>
+        <tbody>
+          <tr v-if="loading && conflictChanges.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && conflictChanges.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('No IP conflict events in the last {hours}h', { hours: notify.hours || 24 }) }}</td></tr>
+          <tr v-for="change in conflictChanges" :key="change.event_id" :class="change.type === 'detected' ? 'table-danger' : ''">
+            <td class="notify-time"><span>{{ formatNotifyDate(change.occurred_at) }}</span><small>{{ formatRelativeAge(change.occurred, now) }}</small></td>
+            <td><strong class="font-monospace">{{ change.ip }}</strong><small class="d-block text-secondary">{{ change.network }}</small></td>
+            <td><span class="badge" :class="change.type === 'resolved' ? 'bg-green-lt text-green' : 'bg-red-lt text-red'">{{ t(change.type === 'resolved' ? 'Resolved' : 'Detected') }}</span></td>
+            <td>
+              <div v-for="device in change.devices" :key="device.mac" class="mb-1"><strong>{{ conflictDeviceName(device) }}</strong><small class="d-block font-monospace text-secondary">{{ formatMac(device.mac) }}</small></div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="notification-section-heading"><h3>{{ t('Host status') }}</h3><span class="text-secondary small">{{ t('{count} changes', { count: summary.status_total || changes.length }) }}</span></div>
@@ -112,13 +132,14 @@ import { scanProfileBadgeClass, scanProfileLabel } from '../lib/scanProfiles.js'
 
 defineOptions({ inheritAttrs: false });
 const emit = defineEmits(['network', 'open-history', 'open-scan']);
-const notify = ref({ hours: 24, summary: {}, changes: [], port_changes: [] });
+const notify = ref({ hours: 24, summary: {}, changes: [], port_changes: [], conflict_changes: [] });
 const loading = ref(false);
 const error = ref('');
 const now = useNow();
 const request = useAbortableTask();
 const changes = computed(() => notify.value.changes || []);
 const portChanges = computed(() => notify.value.port_changes || []);
+const conflictChanges = computed(() => notify.value.conflict_changes || []);
 const summary = computed(() => notify.value.summary || {});
 const statusCounts = computed(() => Object.entries(summary.value.status_counts || {})
   .sort(([a], [b]) => String(a).localeCompare(String(b)))
@@ -146,7 +167,8 @@ async function load() {
       hours: data.hours || 24,
       summary: data.summary || {},
       changes: data.changes || [],
-      port_changes: data.port_changes || []
+      port_changes: data.port_changes || [],
+      conflict_changes: data.conflict_changes || []
     };
   } catch (loadError) {
     if (!isAbortError(loadError) && request.isCurrent(signal)) error.value = loadError.message;
@@ -176,4 +198,9 @@ function portChangeClass(type) {
 function serviceLabel(change, prefix) {
   return [change?.[`${prefix}_service`], change?.[`${prefix}_version`]].filter(Boolean).join(' ') || '-';
 }
+
+function conflictDeviceName(device) {
+  return device?.name || device?.vendor || formatMac(device?.mac) || t('Unknown device');
+}
+
 </script>

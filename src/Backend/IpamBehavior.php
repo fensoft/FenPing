@@ -47,9 +47,12 @@ public function getIpam(): array {
 
   usort($pending, fn($left, $right) => strcmp((string)$right['last_seen'], (string)$left['last_seen']));
   usort($approved, fn($left, $right) => strcmp((string)$right['approved_at'], (string)$left['approved_at']));
+  $conflictStatus = $this->getIpConflictStatus($this->config->dhcpNetwork->cidr);
 
   return array(
     'network' => $this->config->network,
+    'conflict_monitor' => $conflictStatus,
+    'conflicts' => $conflictStatus['conflicts'],
     'pool' => $this->ipamPoolUtilization($pool),
     'pending' => $pending,
     'approved' => $approved

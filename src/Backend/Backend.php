@@ -6,6 +6,8 @@ namespace FenPing\Backend;
 
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
+use FenPing\Ipam\IpConflictDetector;
+use FenPing\Ipam\IpConflictRepository;
 use FenPing\Network\NetworkManager;
 use FenPing\Network\RouteDetector;
 use FenPing\Process\NativeProcessRunner;
@@ -34,6 +36,7 @@ final class Backend
     use HttpBehavior;
     use InventoryScannerBehavior;
     use InventorySchedulerBehavior;
+    use IpConflictBehavior;
     use IpamBehavior;
     use OuiBehavior;
     use PingBehavior;
@@ -55,6 +58,8 @@ final class Backend
     public function __construct(
         public readonly AppConfig $config,
         public readonly DatabaseManager $database,
+        public readonly IpConflictRepository $ipConflicts,
+        public readonly IpConflictDetector $ipConflictDetector,
         ?NetworkManager $networks = null,
     ) {
         $this->networks = $networks ?? new NetworkManager($config, new RouteDetector(new NativeProcessRunner()));

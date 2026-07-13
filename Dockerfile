@@ -11,6 +11,7 @@ RUN npm run build
 FROM alpine:3.23 AS runtime-base
 RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-nselib.php,readonly \
     apk add --no-cache \
+      arp-scan \
       ca-certificates \
       doas \
       dnsmasq \
@@ -35,7 +36,12 @@ RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-
     && php /tmp/prune-nmap-nselib.php /usr/share/nmap \
     && nmap --script-updatedb >/dev/null \
     && nmap --script-help default >/dev/null \
-    && rm -f /tmp/nmap-default-scripts /usr/share/nmap/nmap-mac-prefixes \
+    && rm -f \
+      /tmp/nmap-default-scripts \
+      /usr/share/nmap/nmap-mac-prefixes \
+      /usr/share/arp-scan/ieee-oui.txt \
+      /usr/share/arp-scan/ieee-iab.txt \
+      /etc/arp-scan/mac-vendor.txt \
     && adduser -S -D -H -s /sbin/nologin -G www-data www-data
 RUN printf '%s\n' \
       'upload_max_filesize=512M' \

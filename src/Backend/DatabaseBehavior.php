@@ -10,7 +10,7 @@ use Throwable;
 
 trait DatabaseBehavior
 {
-public const DATABASE_SCHEMA_VERSION = 2;
+public const DATABASE_SCHEMA_VERSION = 3;
 public const DATABASE_BUSY_TIMEOUT_MS = 30000;
 
 public function db(): PDO {

@@ -40,6 +40,32 @@ CREATE TABLE IF NOT EXISTS device_approvals (
   approved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS ip_conflicts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  network TEXT NOT NULL,
+  ip TEXT NOT NULL,
+  detected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS ip_conflict_devices (
+  conflict_id INTEGER NOT NULL,
+  mac TEXT COLLATE NOCASE NOT NULL,
+  first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (conflict_id, mac),
+  FOREIGN KEY (conflict_id) REFERENCES ip_conflicts (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ip_conflict_monitor (
+  network TEXT PRIMARY KEY,
+  last_attempt_at DATETIME NOT NULL,
+  last_success_at DATETIME,
+  last_error_at DATETIME,
+  error TEXT
+);
+
 CREATE TABLE IF NOT EXISTS ping (
   ip TEXT PRIMARY KEY,
   mac TEXT COLLATE NOCASE,
@@ -280,6 +306,10 @@ CREATE INDEX IF NOT EXISTS leases_ends ON leases (ends);
 CREATE INDEX IF NOT EXISTS leases_active_last_seen ON leases (active, last_seen);
 CREATE INDEX IF NOT EXISTS leases_mac_last_seen ON leases (`hardware-ethernet`, last_seen);
 CREATE INDEX IF NOT EXISTS device_approvals_approved_at ON device_approvals (approved_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ip_conflicts_one_active_per_ip ON ip_conflicts (network, ip) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS ip_conflicts_detected ON ip_conflicts (detected_at);
+CREATE INDEX IF NOT EXISTS ip_conflicts_resolved ON ip_conflicts (resolved_at);
+CREATE INDEX IF NOT EXISTS ip_conflict_devices_mac ON ip_conflict_devices (mac COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS ping_mac ON ping (mac COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS range_ip_begin ON `range` (ip_begin);
 CREATE INDEX IF NOT EXISTS stats_ip ON stats (ip);
@@ -301,4 +331,4 @@ CREATE INDEX IF NOT EXISTS scan_snapshot_ports_service ON scan_snapshot_ports (s
 CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scripts (snapshot_id, port_id);
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
 
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;

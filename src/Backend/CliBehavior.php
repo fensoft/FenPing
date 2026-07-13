@@ -96,6 +96,12 @@ public function runPingCommand($args) {
     $targets[$i] = $selectedNetwork->host($i);
 
   $notifyAfterId = $this->discordNotificationsEnabled() ? $this->statsMaxId() : null;
+  $conflictScan = $this->ipConflictDetector->scan($selectedNetwork);
+  if (!$conflictScan['successful'])
+    fwrite(STDERR, 'IP conflict scan failed: ' . $conflictScan['error'] . PHP_EOL);
+  else
+    $this->sendDiscordIpConflictChanges($this->ipConflictTransitionDetails($conflictScan['transitions']));
+
   $hosts = $this->pingHosts($targets, $this->config->interface ?? '', array_filter(array_unique(array(
     getenv('IP') ?: '',
     $this->config->applianceIp ?? ''

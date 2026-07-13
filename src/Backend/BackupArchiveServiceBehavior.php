@@ -135,6 +135,7 @@ public function backupRestoreArchive(string $source): void {
 public function backupTableNames(): array {
   return array(
     'device_approvals', 'netboot_images', 'ips', 'leases', 'oui_vendors',
+    'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',
     'ping', 'range', 'scan_snapshots', 'scans', 'scan_port_changes',
     'scan_snapshot_addresses', 'scan_snapshot_hostnames',
     'scan_snapshot_scopes', 'scan_snapshot_ports',

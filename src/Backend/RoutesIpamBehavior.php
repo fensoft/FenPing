@@ -15,6 +15,7 @@ trait RoutesIpamBehavior
 public function ipamApiRoutes(): array {
   return array(
     $this->apiRoute('GET', '/ipam', 'handleIpamGet'),
+    $this->apiRoute('GET', '/ipam/conflicts', 'handleIpamConflictsGet'),
     $this->apiRoute('PUT', '/ipam/devices/{mac}/approval', 'handleIpamApprove', 'session'),
     $this->apiRoute('DELETE', '/ipam/devices/{mac}/approval', 'handleIpamUnapprove', 'session')
   );
@@ -22,6 +23,10 @@ public function ipamApiRoutes(): array {
 
 public function handleIpamGet(array $params): array {
   return $this->getIpam();
+}
+
+public function handleIpamConflictsGet(array $params): array {
+  return $this->getIpConflictStatus();
 }
 
 public function handleIpamApprove(array $params): array {

@@ -51,6 +51,63 @@ public function sendDiscordPortChangesForScan(int $scanId): void {
     $this->discordPostPayload($payload);
 }
 
+public function sendDiscordIpConflictChanges(array $changes): void {
+  if (!$this->discordNotificationsEnabled() || $changes === array())
+    return;
+
+  foreach ($this->discordIpConflictPayloads($changes) as $payload)
+    $this->discordPostPayload($payload);
+}
+
+public function discordIpConflictPayloads(array $changes): array {
+  $payloads = array();
+  foreach (array_chunk($changes, 10) as $chunk) {
+    $embeds = array();
+    foreach ($chunk as $change)
+      $embeds[] = $this->discordIpConflictEmbed($change);
+    $payloads[] = array('username' => 'FenPing', 'embeds' => $embeds);
+  }
+  return $payloads;
+}
+
+public function discordIpConflictEmbed(array $change): array {
+  $type = (string)($change['type'] ?? 'detected');
+  $resolved = $type === 'resolved';
+  $ip = (string)($change['ip'] ?? '');
+  $network = (string)($change['network'] ?? '');
+  $occurredAt = (string)($change['occurred_at'] ?? '');
+  $deviceLines = array();
+  foreach ($change['devices'] ?? array() as $device) {
+    $name = trim((string)($device['name'] ?? ''));
+    $mac = strtolower((string)($device['mac'] ?? ''));
+    $vendor = trim((string)($device['vendor'] ?? ''));
+    $managedIp = trim((string)($device['managed_ip'] ?? ''));
+    $label = $name !== '' ? $name . ' — ' . $mac : $mac;
+    if ($vendor !== '')
+      $label .= ' (' . $vendor . ')';
+    if ($managedIp !== '' && $managedIp !== $ip)
+      $label .= ' [reserved ' . $managedIp . ']';
+    $deviceLines[] = $label;
+  }
+  $timestamp = strtotime($occurredAt);
+  $embed = array(
+    'title' => $resolved ? 'IP conflict resolved: ' . $ip : 'Possible IP conflict: ' . $ip,
+    'description' => $resolved
+      ? 'The address returned to a single or no ARP responder.'
+      : 'Multiple MAC addresses answered for the same IPv4 address.',
+    'color' => $resolved ? 0x16a34a : 0xdc2626,
+    'fields' => array(
+      $this->discordEmbedField('IP', $ip, true),
+      $this->discordEmbedField('Network', $network, true),
+      $this->discordEmbedField('Devices', implode("\n", $deviceLines), false),
+      $this->discordEmbedField('Time', $occurredAt, false)
+    )
+  );
+  if ($timestamp !== false)
+    $embed['timestamp'] = date(DATE_ATOM, $timestamp);
+  return $embed;
+}
+
 public function sendDiscordRestartNotification(): bool {
   if (!$this->discordNotificationsEnabled())
     return false;

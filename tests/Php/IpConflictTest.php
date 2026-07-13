@@ -1,0 +1,210 @@
+<?php
+
+declare(strict_types=1);
+
+namespace FenPing\Tests;
+
+use DateTimeImmutable;
+use FenPing\Api\Request;
+use FenPing\Ipam\IpConflictDetector;
+use FenPing\Process\ProcessResult;
+use FenPing\Process\ProcessRunner;
+use FenPing\Support\Clock;
+
+final class IpConflictTest extends IntegrationTestCase
+{
+    protected function setUp(): void
+    {
+        $this->resetDatabase();
+    }
+
+    public function testParserRequiresDistinctValidMacsAndSeedsTheAppliance(): void
+    {
+        $network = $this->app()->config()->dhcpNetwork;
+        $conflicts = $this->app()->ipConflictDetector()->parse(implode("\n", [
+            '192.0.2.10 02:00:00:00:00:10',
+            '192.0.2.10 02:00:00:00:00:10 DUP:2',
+            '192.0.2.20 02:00:00:00:00:20',
+            '192.0.2.20 02:00:00:00:00:21',
+            '192.0.2.30 01:00:5e:00:00:01',
+            '192.0.2.30 00:00:00:00:00:00',
+            '192.0.2.0 02:00:00:00:00:01',
+            '198.51.100.20 02:00:00:00:00:22',
+            'malformed output',
+            '192.0.2.100 02:00:00:00:01:00',
+        ]), $network, '192.0.2.100', '02:00:00:00:00:64');
+
+        self::assertSame(['192.0.2.20', '192.0.2.100'], array_keys($conflicts));
+        self::assertSame([
+            '02:00:00:00:00:20',
+            '02:00:00:00:00:21',
+        ], array_keys($conflicts['192.0.2.20']));
+        self::assertCount(2, $conflicts['192.0.2.100']);
+    }
+
+    public function testConflictEpisodeOpensUpdatesResolvesAndCanRecur(): void
+    {
+        $repository = $this->app()->ipConflicts();
+        $network = $this->app()->config()->dhcpNetwork;
+        $startedAt = new DateTimeImmutable('-45 minutes UTC');
+        $observations = ['192.0.2.40' => [
+            '02:00:00:00:00:40' => true,
+            '02:00:00:00:00:41' => true,
+        ]];
+
+        $opened = $repository->reconcile($network, $observations, $startedAt);
+        self::assertSame('detected', $opened[0]['type']);
+        $firstId = $opened[0]['id'];
+        self::assertCount(1, $this->app()->backend()->discordIpConflictPayloads(
+            $this->app()->backend()->ipConflictTransitionDetails($opened),
+        ));
+
+        $updatedObservations = ['192.0.2.40' => [
+            '02:00:00:00:00:40' => true,
+            '02:00:00:00:00:42' => true,
+        ]];
+        $continued = $repository->reconcile($network, $updatedObservations, $startedAt->modify('+15 minutes'));
+        self::assertSame([], $continued);
+        self::assertSame([], $this->app()->backend()->discordIpConflictPayloads(
+            $this->app()->backend()->ipConflictTransitionDetails($continued),
+        ));
+        self::assertCount(1, $repository->active());
+        self::assertSame([
+            '02:00:00:00:00:40',
+            '02:00:00:00:00:42',
+        ], array_column($repository->active()[0]['devices'], 'mac'));
+
+        $resolved = $repository->reconcile($network, [], $startedAt->modify('+30 minutes'));
+        self::assertSame([['id' => $firstId, 'type' => 'resolved']], $resolved);
+        $resolvedPayloads = $this->app()->backend()->discordIpConflictPayloads(
+            $this->app()->backend()->ipConflictTransitionDetails($resolved),
+        );
+        self::assertCount(1, $resolvedPayloads);
+        self::assertStringContainsString('IP conflict resolved', $resolvedPayloads[0]['embeds'][0]['title']);
+        self::assertSame([], $repository->active());
+
+        $reopened = $repository->reconcile($network, $observations, $startedAt->modify('+45 minutes'));
+        self::assertSame('detected', $reopened[0]['type']);
+        self::assertNotSame($firstId, $reopened[0]['id']);
+        self::assertCount(3, $repository->recent(168));
+    }
+
+    public function testFailedScanPreservesActiveConflictAndMarksMonitorDegraded(): void
+    {
+        $repository = $this->app()->ipConflicts();
+        $network = $this->app()->config()->dhcpNetwork;
+        $repository->reconcile($network, ['192.0.2.50' => [
+            '02:00:00:00:00:50' => true,
+            '02:00:00:00:00:51' => true,
+        ]], new DateTimeImmutable('2026-07-13 11:00:00 UTC'));
+
+        $detector = new IpConflictDetector(
+            $this->app()->config(),
+            new StubProcessRunner(new ProcessResult(2, '', 'capture failed')),
+            $repository,
+            new FixedClock(new DateTimeImmutable('2026-07-13 11:15:00 UTC')),
+        );
+        $result = $detector->scan($network);
+
+        self::assertFalse($result['successful']);
+        self::assertCount(1, $repository->active());
+        self::assertSame('degraded', $repository->monitors()[0]['status']);
+        $status = $this->app()->backend()->getIpConflictStatus($network->cidr);
+        self::assertSame('degraded', $status['status']);
+        self::assertCount(1, $status['conflicts']);
+        self::assertSame(
+            'degraded', $this->app()->backend()->getHealth()['ip_conflict_detection']['status'],
+        );
+    }
+
+    public function testApiNotificationsDiscordAndBackupsExposeConflictData(): void
+    {
+        $network = $this->app()->config()->dhcpNetwork;
+        $this->app()->hosts()->create('192.0.2.60', '02:00:00:00:00:60');
+        $opened = $this->app()->ipConflicts()->reconcile($network, ['192.0.2.60' => [
+            '02:00:00:00:00:60' => true,
+            '02:00:00:00:00:61' => true,
+        ]], new DateTimeImmutable());
+
+        $response = $this->app()->api()->handle(new Request(
+            'GET', '/api/ipam/conflicts', [], [], [],
+            ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/api/ipam/conflicts'], [],
+        ));
+        self::assertSame(200, $response->status);
+        $body = json_decode($response->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('192.0.2.60', $body['conflicts'][0]['ip']);
+        self::assertCount(2, $body['conflicts'][0]['devices']);
+
+        $ipam = $this->app()->ipam()->summary();
+        self::assertCount(1, $ipam['conflicts']);
+        $notifications = $this->app()->notifications()->recent();
+        self::assertSame(1, $notifications['summary']['conflict_total']);
+        self::assertSame('detected', $notifications['conflict_changes'][0]['type']);
+
+        $details = $this->app()->backend()->ipConflictTransitionDetails($opened);
+        $payloads = $this->app()->backend()->discordIpConflictPayloads($details);
+        self::assertCount(1, $payloads);
+        self::assertStringContainsString('Possible IP conflict', $payloads[0]['embeds'][0]['title']);
+        self::assertContains('ip_conflicts', $this->app()->backend()->backupTableNames());
+        self::assertContains('ip_conflict_devices', $this->app()->backend()->backupTableNames());
+        self::assertContains('ip_conflict_monitor', $this->app()->backend()->backupTableNames());
+    }
+
+    public function testBackupRestorePreservesConflictHistoryAndMonitorState(): void
+    {
+        $repository = $this->app()->ipConflicts();
+        $network = $this->app()->config()->dhcpNetwork;
+        $startedAt = new DateTimeImmutable('-15 minutes UTC');
+        $repository->reconcile($network, ['192.0.2.70' => [
+            '02:00:00:00:00:70' => true,
+            '02:00:00:00:00:71' => true,
+        ]], $startedAt);
+        $repository->reconcile($network, [], $startedAt->modify('+5 minutes'));
+        $repository->reconcile($network, ['192.0.2.72' => [
+            '02:00:00:00:00:72' => true,
+            '02:00:00:00:00:73' => true,
+        ]], $startedAt->modify('+10 minutes'));
+
+        $path = tempnam(sys_get_temp_dir(), 'fenping-conflicts-');
+        self::assertIsString($path);
+        try {
+            $written = $this->app()->backend()->backupWriteDatabaseJson($path);
+            self::assertGreaterThanOrEqual(7, $written['rows']);
+            $document = $this->app()->backend()->backupReadJson($path, 'db.json');
+            self::assertCount(2, $document['tables']['ip_conflicts']['rows']);
+            self::assertCount(4, $document['tables']['ip_conflict_devices']['rows']);
+            self::assertCount(1, $document['tables']['ip_conflict_monitor']['rows']);
+
+            $database = $this->app()->database()->connection();
+            $database->exec('DELETE FROM ip_conflict_devices');
+            $database->exec('DELETE FROM ip_conflicts');
+            $database->exec('DELETE FROM ip_conflict_monitor');
+            self::assertSame([], $repository->active());
+
+            $this->app()->backend()->backupRestoreDatabase($document);
+            self::assertCount(1, $repository->active());
+            self::assertSame('192.0.2.72', $repository->active()[0]['ip']);
+            self::assertSame(2, (int) $database->query('SELECT COUNT(*) FROM ip_conflicts')->fetchColumn());
+            self::assertSame(4, (int) $database->query('SELECT COUNT(*) FROM ip_conflict_devices')->fetchColumn());
+            self::assertSame('ok', $repository->monitors()[0]['status']);
+            self::assertSame([], $this->app()->database()->integrityErrors());
+        } finally {
+            unlink($path);
+        }
+    }
+}
+
+final readonly class FixedClock implements Clock
+{
+    public function __construct(private DateTimeImmutable $date) {}
+    public function now(): DateTimeImmutable { return $this->date; }
+}
+
+final readonly class StubProcessRunner implements ProcessRunner
+{
+    public function __construct(private ProcessResult $result) {}
+    public function run(array $command, array $environment = [], ?string $stdinFile = null, ?string $stdoutFile = null): ProcessResult
+    {
+        return $this->result;
+    }
+}

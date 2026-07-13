@@ -26,9 +26,12 @@ use FenPing\Health\HealthService;
 use FenPing\Host\CategoryRepository;
 use FenPing\Host\HostRepository;
 use FenPing\Inventory\InventoryService;
+use FenPing\Ipam\IpConflictDetector;
+use FenPing\Ipam\IpConflictRepository;
 use FenPing\Ipam\IpamService;
 use FenPing\Netboot\NetbootImageService;
 use FenPing\Ping\PingScanner;
+use FenPing\Process\NativeProcessRunner;
 use FenPing\Scan\PortChangeService;
 use FenPing\Scan\ProfileCatalog;
 use FenPing\Scan\ResultService;
@@ -45,6 +48,8 @@ final class Application
 {
     private readonly DatabaseManager $database;
     private readonly Backend $backend;
+    private readonly IpConflictRepository $ipConflicts;
+    private readonly IpConflictDetector $ipConflictDetector;
     private readonly AuthService $auth;
     private readonly ProfileCatalog $profiles;
     private readonly ScanJobRepository $scanJobs;
@@ -62,10 +67,12 @@ final class Application
     private function __construct(private readonly AppConfig $config)
     {
         $this->database = new DatabaseManager($config);
-        $this->backend = new Backend($config, $this->database);
 
         $clock = new SystemClock();
         $this->auth = new AuthService($config);
+        $this->ipConflicts = new IpConflictRepository($this->database);
+        $this->ipConflictDetector = new IpConflictDetector($config, new NativeProcessRunner(), $this->ipConflicts, $clock);
+        $this->backend = new Backend($config, $this->database, $this->ipConflicts, $this->ipConflictDetector);
         $this->profiles = new ProfileCatalog();
         $this->scanJobs = new ScanJobRepository($this->backend, $this->database);
         $this->snapshots = new SnapshotRepository($this->backend, $this->database);
@@ -148,4 +155,6 @@ final class Application
     public function netboot(): NetbootImageService { return $this->netboot; }
     public function ipam(): IpamService { return $this->ipam; }
     public function backups(): BackupService { return $this->backups; }
+    public function ipConflicts(): IpConflictRepository { return $this->ipConflicts; }
+    public function ipConflictDetector(): IpConflictDetector { return $this->ipConflictDetector; }
 }

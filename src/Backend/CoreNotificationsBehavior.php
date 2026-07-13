@@ -202,20 +202,33 @@ public function get_notify($hours = 24) {
       $hosts[$ip] = true;
   }
 
+  $conflictChanges = $this->getIpConflictChanges($hours);
+  $conflictCounts = array();
+  foreach ($conflictChanges as $change) {
+    $type = (string)($change['type'] ?? '');
+    $conflictCounts[$type] = ($conflictCounts[$type] ?? 0) + 1;
+    $ip = (string)($change['ip'] ?? '');
+    if ($ip !== '')
+      $hosts[$ip] = true;
+  }
+
   return array(
     "network" => $this->config->network,
     "since" => date("Y-m-d H:i:s", time() - $hours * 60 * 60),
     "hours" => $hours,
     "summary" => array(
-      "total" => count($changes) + count($portChanges),
+      "total" => count($changes) + count($portChanges) + count($conflictChanges),
       "status_total" => count($changes),
       "port_total" => count($portChanges),
+      "conflict_total" => count($conflictChanges),
       "hosts" => count($hosts),
       "status_counts" => $statusCounts,
-      "port_change_counts" => $portChangeCounts
+      "port_change_counts" => $portChangeCounts,
+      "conflict_counts" => $conflictCounts
     ),
     "changes" => $changes,
-    "port_changes" => $portChanges
+    "port_changes" => $portChanges,
+    "conflict_changes" => $conflictChanges
   );
 }
 }

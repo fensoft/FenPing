@@ -294,5 +294,22 @@
   "Rollback checkpoint": "Rollback checkpoint",
   "Weekly retention": "Weekly retention",
   "Daily retention": "Daily retention",
-  "Refresh backups": "Refresh backups"
+  "Refresh backups": "Refresh backups",
+  "{count} active IP conflicts": "{count} active IP conflicts",
+  "Multiple devices are answering for the same IPv4 address.": "Multiple devices are answering for the same IPv4 address.",
+  "Review conflicts": "Review conflicts",
+  "Active IP conflicts": "Active IP conflicts",
+  "IP conflict detection is degraded. Active conflicts will not be cleared until a scan succeeds.": "IP conflict detection is degraded. Active conflicts will not be cleared until a scan succeeds.",
+  "Devices": "Devices",
+  "First detected": "First detected",
+  "Last detected": "Last detected",
+  "No active IP conflicts": "No active IP conflicts",
+  "Possible conflict": "Possible conflict",
+  "Reserved IP": "Reserved IP",
+  "Last {hours}h of status, service, and IP conflict changes": "Last {hours}h of status, service, and IP conflict changes",
+  "IP conflicts": "IP conflicts",
+  "{count} conflict events": "{count} conflict events",
+  "No IP conflict events in the last {hours}h": "No IP conflict events in the last {hours}h",
+  "Resolved": "Resolved",
+  "Detected": "Detected"
 }

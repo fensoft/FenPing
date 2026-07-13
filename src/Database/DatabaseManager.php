@@ -11,7 +11,7 @@ use Throwable;
 
 final class DatabaseManager
 {
-    public const SCHEMA_VERSION = 2;
+    public const SCHEMA_VERSION = 3;
     private const BUSY_TIMEOUT_MS = 30000;
 
     private ?PDO $connection = null;

@@ -28,6 +28,7 @@ abstract class IntegrationTestCase extends TestCase
                 'scan_snapshot_os_cpes', 'scan_snapshot_os_classes', 'scan_snapshot_os_matches',
                 'scan_snapshot_trace_hops', 'scan_snapshot_hostnames', 'scan_snapshot_addresses',
                 'scan_snapshot_scopes', 'scan_snapshots', 'device_approvals', 'leases',
+                'ip_conflict_devices', 'ip_conflicts', 'ip_conflict_monitor',
                 'stats', 'ping', 'ips', 'range', 'netboot_images',
             ] as $table) {
                 $pdo->exec('DELETE FROM ' . $table);

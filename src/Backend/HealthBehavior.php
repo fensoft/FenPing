@@ -22,9 +22,11 @@ public function getHealth(): array {
   $lastInventory = $db['ok'] ? $this->healthLastInventoryScan() : null;
   $dnsmasq = $this->healthProcess('dnsmasq', '/var/run/dnsmasq.pid');
   $cron = $this->healthProcess('crond');
+  $conflictDetection = $db['ok'] ? $this->ipConflictMonitorStatus() : array('status' => 'unknown', 'monitors' => array());
+  $healthy = $db['ok'] && $dnsmasq['running'] && $cron['running'] && $conflictDetection['status'] !== 'degraded';
 
   return array(
-    'status' => ($db['ok'] && $dnsmasq['running'] && $cron['running']) ? 'ok' : 'degraded',
+    'status' => $healthy ? 'ok' : 'degraded',
     'checked_at' => $this->healthNow(),
     'web' => array(
       'ok' => true,
@@ -36,6 +38,7 @@ public function getHealth(): array {
     'dnsmasq' => $dnsmasq,
     'cron' => $cron,
     'last_ping_scan_time' => $lastPing['time'] ?? null,
+    'ip_conflict_detection' => $conflictDetection,
     'last_ping_scan_age_seconds' => $lastPing['age_seconds'] ?? null,
     'last_inventory_scan_time' => $lastInventory['time'] ?? null,
     'last_inventory_scan_age_seconds' => $lastInventory['age_seconds'] ?? null,

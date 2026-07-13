@@ -6,6 +6,34 @@
       <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />{{ t('Refresh') }}</button>
     </div>
 
+    <div v-if="conflictMonitor.status === 'degraded'" class="alert alert-warning" role="alert">
+      <AppIcon name="alert-triangle" class="me-1" />{{ t('IP conflict detection is degraded. Active conflicts will not be cleared until a scan succeeds.') }}
+    </div>
+
+    <div class="notification-section-heading"><h3>{{ t('Active IP conflicts') }}</h3><span class="text-secondary small">{{ t('{count} active IP conflicts', { count: conflicts.length }) }}</span></div>
+    <div class="table-wrap mb-3">
+      <table class="table table-sm ipam-table conflict-table">
+        <thead><tr><th>IP</th><th>{{ t('Devices') }}</th><th>{{ t('First detected') }}</th><th>{{ t('Last detected') }}</th></tr></thead>
+        <tbody>
+          <tr v-if="loading && conflicts.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && conflicts.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('No active IP conflicts') }}</td></tr>
+          <tr v-for="conflict in conflicts" :key="conflict.id" class="table-danger">
+            <td><strong class="font-monospace">{{ conflict.ip }}</strong><small class="d-block text-secondary">{{ conflict.network }}</small><span class="badge bg-red-lt text-red">{{ t('Possible conflict') }}</span></td>
+            <td>
+              <div v-for="device in conflict.devices" :key="device.mac" class="mb-1">
+                <strong>{{ device.name || formatMac(device.mac) }}</strong>
+                <small class="d-block font-monospace">{{ formatMac(device.mac) }}</small>
+                <small v-if="device.vendor" class="d-block text-secondary">{{ device.vendor }}</small>
+                <small v-if="device.managed_ip && device.managed_ip !== conflict.ip" class="d-block text-warning">{{ t('Reserved IP') }}: {{ device.managed_ip }}</small>
+              </div>
+            </td>
+            <td class="text-nowrap">{{ formatServerDate(conflict.detected_at) }}</td>
+            <td class="text-nowrap">{{ formatServerDate(conflict.last_seen_at) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <div class="ipam-pool">
       <div class="notify-summary mb-2">
         <div class="notify-summary-item"><span>{{ t('Pool') }}</span><strong>{{ pool.start || '-' }} – {{ pool.end || '-' }}</strong></div>
@@ -80,6 +108,8 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps({ isAuthenticated: Boolean });
 const emit = defineEmits(['network', 'notice', 'reserve-device']);
 const pool = ref({});
+const conflicts = ref([]);
+const conflictMonitor = ref({ status: 'pending', monitors: [] });
 const pending = ref([]);
 const approved = ref([]);
 const loading = ref(false);
@@ -101,6 +131,8 @@ async function load() {
     if (!loadRequest.isCurrent(signal)) return;
     emit('network', data.network || '');
     pool.value = data.pool || {};
+    conflicts.value = data.conflicts || [];
+    conflictMonitor.value = data.conflict_monitor || { status: 'pending', monitors: [] };
     pending.value = data.pending || [];
     approved.value = data.approved || [];
   } catch (loadError) {
