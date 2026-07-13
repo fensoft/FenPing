@@ -17,13 +17,13 @@
         </div>
 
         <form v-if="modal.type === 'login'" @submit.prevent="$emit('submit-login')">
-          <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><label class="form-label">{{ t('Password') }}<input v-model="modal.password" class="form-control" type="password" autocomplete="current-password" autofocus /></label></div>
+          <div class="modal-body"><div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div><label class="form-label">{{ t('Password') }}<input v-model="modal.password" class="form-control" type="password" autocomplete="current-password" autofocus /></label></div>
           <ModalFooter :saving="saving" :submit-label="t('Login')" submit-icon="login" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'edit'" @submit.prevent="$emit('submit-edit')">
           <div class="modal-body">
-            <div v-if="error" class="alert alert-danger">{{ error }}</div>
+            <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>
             <div class="modal-body-grid">
               <label class="form-label">IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" /></div></label>
               <label class="form-label">{{ t('Router') }}<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.router" class="form-control" name="router" type="text" /></div></label>
@@ -44,22 +44,22 @@
         </form>
 
         <form v-else-if="modal.type === 'create'" @submit.prevent="$emit('submit-create')">
-          <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" required /></label><label class="form-label">IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" inputmode="numeric" required /></div></label></div></div>
+          <div class="modal-body"><div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div><div class="modal-body-grid"><label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" required /></label><label class="form-label">IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" inputmode="numeric" required /></div></label></div></div>
           <ModalFooter :saving="saving" :submit-label="t(modal.purpose === 'reserve' ? 'Reserve' : 'Create')" :submit-icon="modal.purpose === 'reserve' ? 'pin' : 'plus'" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'category'" @submit.prevent="$emit('submit-category')">
-          <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">{{ t('Start IP') }}<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" /></div></label><label class="form-label">{{ t('Name') }}<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label></div></div>
+          <div class="modal-body"><div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div><div class="modal-body-grid"><label class="form-label">{{ t('Start IP') }}<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" /></div></label><label class="form-label">{{ t('Name') }}<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label></div></div>
           <ModalFooter :saving="saving" :submit-label="t('Add')" submit-icon="folder-plus" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'renameCategory'" @submit.prevent="$emit('submit-rename-category')">
-          <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><div class="modal-body-grid"><label class="form-label">{{ t('Start IP') }}<input :value="modal.ip" class="form-control font-monospace" name="ip" type="text" disabled /></label><label class="form-label">{{ t('Name') }}<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label></div></div>
+          <div class="modal-body"><div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div><div class="modal-body-grid"><label class="form-label">{{ t('Start IP') }}<input :value="modal.ip" class="form-control font-monospace" name="ip" type="text" disabled /></label><label class="form-label">{{ t('Name') }}<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label></div></div>
           <ModalFooter :saving="saving" :submit-label="t('Save')" submit-icon="device-floppy" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'deleteHost' || modal.type === 'deleteCategory'" @submit.prevent="$emit(modal.type === 'deleteHost' ? 'submit-delete-host' : 'submit-delete-category')">
-          <div class="modal-body"><div v-if="error" class="alert alert-danger">{{ error }}</div><p class="mb-3">{{ modal.name || modal.mac || modal.ip || modal.id }}</p></div>
+          <div class="modal-body"><div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div><p class="mb-3">{{ modal.name || modal.mac || modal.ip || modal.id }}</p></div>
           <div class="modal-footer"><button class="btn btn-link" type="button" :disabled="saving" @click="requestClose">{{ t('Cancel') }}</button><button class="btn btn-danger" type="submit" :disabled="saving"><AppIcon name="trash" class="me-1" />{{ t('Delete') }}</button></div>
         </form>
 
@@ -120,7 +120,7 @@
 
         <div v-else-if="modal.type === 'scan'">
           <div class="modal-body scan-body">
-            <div v-if="error" class="alert alert-danger">{{ error }}</div><div v-if="modal.loading" class="text-secondary py-4 text-center">{{ t('Loading') }}</div>
+            <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div><div v-if="modal.loading" class="text-secondary py-4 text-center">{{ t('Loading') }}</div>
             <template v-else-if="modal.scan">
               <div class="scan-topline"><div><div class="font-monospace scan-ip">{{ modal.ip }}</div><div class="text-secondary small">{{ modal.scan.started || modal.scan.args }}</div><div v-if="modal.scan.merged_with" class="text-secondary small">{{ t('Merged with full scan from {date}', { date: formatScanDate(modal.scan.merged_with.date_end || modal.scan.merged_with.date_begin) }) }}</div></div>
                 <div v-if="modal.history && modal.history.length" class="scan-actions"><label class="scan-history-control"><span>{{ t('Scan history') }}</span><select class="form-select form-select-sm scan-history-select" :value="modal.selectedScanId || ''" :disabled="modal.history.length < 2" @change="$emit('select-scan', $event.target.value)"><option v-for="scan in modal.history" :key="scan.id" :value="scan.id">{{ scanHistoryLabel(scan) }}</option></select></label></div>

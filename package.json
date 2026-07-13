@@ -4,7 +4,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "test": "node --test tests/*.test.js",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@tabler/core": "1.4.0",
@@ -15,6 +16,7 @@
     "vue-router": "4.6.4"
   },
   "devDependencies": {
-    "@fullhuman/postcss-purgecss": "8.0.0"
+    "@fullhuman/postcss-purgecss": "8.0.0",
+    "@playwright/test": "1.61.0"
   }
 }

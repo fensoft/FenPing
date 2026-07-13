@@ -8,6 +8,18 @@ COPY index.html vite.config.js postcss.config.mjs ./
 COPY frontend ./frontend
 RUN npm run build
 
+FROM mcr.microsoft.com/playwright:v1.61.0-noble AS frontend-test
+WORKDIR /app
+ENV CI=1
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY index.html vite.config.js postcss.config.mjs playwright.config.js ./
+COPY frontend ./frontend
+COPY tests ./tests
+RUN npm test
+RUN npm run build
+RUN npm run test:browser
+
 FROM alpine:3.23 AS runtime-base
 RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-nselib.php,readonly \
     apk add --no-cache \

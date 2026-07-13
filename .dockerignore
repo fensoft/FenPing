@@ -8,3 +8,5 @@ vendor
 templates_c
 node_modules
 dist
+playwright-report
+test-results

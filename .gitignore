@@ -15,4 +15,6 @@ q.sh
 .vscode/settings.json
 node_modules/
 dist/
+playwright-report/
+test-results/
 todo

@@ -290,12 +290,14 @@ docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
 npm test
+npm run test:browser
 npm run build
 composer validate --strict
 composer dump-autoload --optimize --strict-psr
 composer test
 find src tests/Php -name '*.php' -type f -print0 | xargs -0 -n1 php -l
 docker build --target backend-test -t fenping-backend-test .
+docker build --target frontend-test -t fenping-frontend-test .
 curl -fsS http://127.0.0.1/api/health
 curl -fsS http://127.0.0.1/api/inventory
 ```

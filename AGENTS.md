@@ -103,6 +103,7 @@ bash -n boot.sh restart.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build --target backend-test -t fenping-backend-test .
+docker build --target frontend-test -t fenping-frontend-test .
 docker build -t fenping-check .
 composer validate --strict
 composer dump-autoload --optimize --strict-psr
@@ -110,6 +111,7 @@ composer test
 find src tests/Php -name '*.php' -type f -print0 | xargs -0 -n1 php -l
 npm run build
 npm test
+npm run test:browser
 ```
 
 After implementation work, run `./restart.sh` as the final deployment check. Use `./restart.sh demo` only when the user explicitly requests replacing the active data with the synthetic screenshot environment.

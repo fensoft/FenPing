@@ -1284,6 +1284,7 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
 .inventory-table .icon-btn {
   font-size: 0.94rem;
   height: 1.5rem;
+  min-width: 1.5rem;
   width: 1.5rem;
 }
 
