@@ -1,12 +1,16 @@
 # Changelog
 
-All notable FenPing changes are documented here. This file was reconstructed from the complete Git history, from the initial commit on 2019-02-20 through `513f023` on 2026-07-12.
+All notable FenPing changes are documented here. This file was reconstructed from the complete Git history, from the initial commit on 2019-02-20 through the `1.6` release on 2026-07-14.
 
-Release dates use the corresponding Git tag dates. The repository currently defaults Docker publication and backup compatibility to version 1.6, but no `1.6` Git tag exists yet; changes after `1.5` are therefore listed as unreleased 1.6 development. The history contains one merge-only commit (`b1b6c8f`) with no distinct feature to list separately.
+Release dates use the corresponding Git tag dates. Application and Docker development now target version 1.7, while the forward-compatible portable backup contract remains version 1.6. The history contains one merge-only commit (`b1b6c8f`) with no distinct feature to list separately.
 
-## [Unreleased] - 1.6 development
+## [Unreleased] - 1.7 development
 
-Development after the `1.5` tag through 2026-07-12.
+Development after the `1.6` tag.
+
+## [1.6] - 2026-07-14
+
+Development after the `1.5` tag through 2026-07-13.
 
 ### Added
 
@@ -261,7 +265,8 @@ The `1.2` tag includes the original 2019-2020 application, its Docker conversion
 - Marked the 1.2 release in `restart.sh` and refreshed installation documentation.
 - Added the missing bundled `res/xsl/nmap.xsl` report stylesheet before the final tag.
 
-[Unreleased]: https://github.com/fensoft/FenPing/compare/1.5...HEAD
+[Unreleased]: https://github.com/fensoft/FenPing/compare/1.6...HEAD
+[1.6]: https://github.com/fensoft/FenPing/compare/1.5...1.6
 [1.5]: https://github.com/fensoft/FenPing/compare/1.4...1.5
 [1.4]: https://github.com/fensoft/FenPing/compare/1.3...1.4
 [1.3]: https://github.com/fensoft/FenPing/compare/1.2...1.3

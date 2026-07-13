@@ -23,7 +23,7 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 
 The image contains no database server or SQL client process. SQLite is embedded through PDO and persists its database and WAL files on the application bind mount.
 
-Normal runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.6`.
+Normal runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.7`.
 
 `./restart.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev` and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next normal restart uses the configured published version again.
 
