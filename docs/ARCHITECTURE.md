@@ -93,6 +93,7 @@ docker exec fenping php /opt/fenping/cli.php backup [backup.tgz]
 docker exec fenping php /opt/fenping/cli.php backup-verify <backup.tgz>
 docker exec fenping php /opt/fenping/cli.php backup-maintenance <daily|verify>
 docker exec fenping php /opt/fenping/cli.php restore <backup.tgz>
+docker exec fenping php /opt/fenping/cli.php notify-restart
 docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
 
@@ -156,7 +157,8 @@ The inventory and scan services under `src/Inventory/` and `src/Scan/` perform d
 - Scan profiles are compared independently. Default scan details prefer the latest deep snapshot and fall back to the newest partial result only when no deep result exists.
 - Selecting a lightweight or standard snapshot merges it at read time with the preceding deep snapshot. Partial values override matching ports; deep-only ports and OS data remain and each port carries its source profile.
 - Port-change detection builds an effective view from the latest deep snapshot plus every newer partial observation in chronological order. It removes only ports included in each scan scope, retains richer version data when partial detection is incomplete, and records services in the first usable result as newly appeared.
-- Service-change events are retained for one week, returned by `/api/notify`, rendered alongside host-status changes, and optionally posted to Discord after the scan transaction commits.
+- Service-change events are retained for one week, returned by `/api/notify`, and rendered alongside host-status changes.
+- A singleton `notification_delivery_settings` row supplies the shared restart, conflict, normal/important host-status, and normal/important service-change rules plus the selected Telegram destination. Authenticated chat discovery ingests `getUpdates` into the local-only `telegram_known_chats` table, retaining chat and sender display details while excluding all Telegram IDs and discovery state from backups. A bot-token fingerprint clears stale destinations when the configured bot changes. Discord and Telegram independently deliver the same permitted events; every Discord delivery receives the environment-derived mention with explicit `allowed_mentions` when one is configured.
 - Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained structured snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
 - History pruning keeps one week of jobs plus the latest complete and latest changed result for each profile.
 

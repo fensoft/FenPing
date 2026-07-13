@@ -7,10 +7,14 @@
         <h2>{{ t('Notify') }}</h2>
         <div class="text-secondary small">{{ t('Last {hours}h of status, service, and IP conflict changes', { hours: notify.hours || 24 }) }}</div>
       </div>
-      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load">
-        <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />
-        {{ t('Refresh') }}
-      </button>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-outline-primary btn-sm" type="button" @click="openNotificationSettings">
+          <AppIcon name="edit" class="me-1" />{{ t('Notification delivery') }}
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading" @click="load">
+          <AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />{{ t('Refresh') }}
+        </button>
+      </div>
     </div>
 
     <div class="notify-summary">
@@ -108,11 +112,29 @@
         </tbody>
       </table>
     </div>
+    <NotificationDeliveryModal
+      v-if="settingsOpen"
+      v-model:rules="draftRules"
+      v-model:telegram-chat-id="draftTelegramChatId"
+      :delivery="delivery"
+      :is-authenticated="isAuthenticated"
+      :dirty="settingsDirty"
+      :saving="saving"
+      :settings-error="settingsError"
+      :settings-success="settingsSuccess"
+      :telegram-chats="telegramChats"
+      :telegram-chats-error="telegramChatsError"
+      :telegram-chats-loading="telegramChatsLoading"
+      @close="closeNotificationSettings"
+      @refresh-telegram-chats="loadTelegramChats"
+      @save="saveRules"
+    />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import NotificationDeliveryModal from '../components/NotificationDeliveryModal.vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useLiveRefresh } from '../composables/useLiveUpdates.js';
@@ -132,10 +154,34 @@ import { t } from '../lib/i18n.js';
 import { scanProfileBadgeClass, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
-const emit = defineEmits(['network', 'open-history', 'open-scan']);
+const props = defineProps({ isAuthenticated: Boolean });
+const emit = defineEmits(['network', 'notice', 'open-history', 'open-scan']);
+const defaultRules = Object.freeze({
+  restart: true,
+  host_status: { normal: true, important: true },
+  service_changes: { normal: true, important: true },
+  ip_conflicts: true
+});
 const notify = ref({ hours: 24, summary: {}, changes: [], port_changes: [], conflict_changes: [] });
+const delivery = ref({
+  rules: cloneRules(defaultRules),
+  discord: { configured: false, mention_target: null },
+  telegram: { configured: false, chat_selected: false }
+});
+const savedRules = ref(cloneRules(defaultRules));
+const draftRules = ref(cloneRules(defaultRules));
+const telegramChats = ref([]);
+const savedTelegramChatId = ref('');
+const draftTelegramChatId = ref('');
+const telegramChatsLoading = ref(false);
+const telegramChatsLoaded = ref(false);
+const telegramChatsError = ref('');
 const loading = ref(false);
+const saving = ref(false);
 const error = ref('');
+const settingsError = ref('');
+const settingsSuccess = ref('');
+const settingsOpen = ref(false);
 const now = useNow();
 const request = useAbortableTask();
 const changes = computed(() => notify.value.changes || []);
@@ -145,7 +191,10 @@ const summary = computed(() => notify.value.summary || {});
 const statusCounts = computed(() => Object.entries(summary.value.status_counts || {})
   .sort(([a], [b]) => String(a).localeCompare(String(b)))
   .map(([status, count]) => ({ status, count })));
-
+const rulesDirty = computed(() => JSON.stringify(draftRules.value) !== JSON.stringify(savedRules.value));
+const telegramChatDirty = computed(() => telegramChatsLoaded.value
+  && draftTelegramChatId.value !== savedTelegramChatId.value);
+const settingsDirty = computed(() => rulesDirty.value || telegramChatDirty.value);
 usePageController({
   loading,
   label: computed(() => loading.value ? t('Loading') : t('Notify')),
@@ -156,6 +205,18 @@ usePageController({
 useLiveRefresh(['hosts', 'status', 'scans', 'conflicts', 'vendors'], load);
 
 onMounted(load);
+
+function openNotificationSettings() {
+  settingsError.value = '';
+  settingsSuccess.value = '';
+  settingsOpen.value = true;
+  if (props.isAuthenticated && delivery.value.telegram.configured)
+    loadTelegramChats();
+}
+
+function closeNotificationSettings() {
+  if (!saving.value) settingsOpen.value = false;
+}
 
 async function load() {
   const signal = request.nextSignal();
@@ -172,11 +233,99 @@ async function load() {
       port_changes: data.port_changes || [],
       conflict_changes: data.conflict_changes || []
     };
+    const wasDirty = rulesDirty.value;
+    const incoming = normalizeDelivery(data.delivery);
+    delivery.value = incoming;
+    savedRules.value = cloneRules(incoming.rules);
+    if (!wasDirty) draftRules.value = cloneRules(incoming.rules);
   } catch (loadError) {
     if (!isAbortError(loadError) && request.isCurrent(signal)) error.value = loadError.message;
   } finally {
     if (request.isCurrent(signal)) loading.value = false;
   }
+}
+
+async function saveRules() {
+  if (!props.isAuthenticated || saving.value || !settingsDirty.value) return;
+  saving.value = true;
+  settingsError.value = '';
+  settingsSuccess.value = '';
+  try {
+    const payload = { rules: cloneRules(draftRules.value) };
+    if (telegramChatsLoaded.value)
+      payload.telegram_chat_id = draftTelegramChatId.value || null;
+    const updated = await apiJson('/api/notify/delivery', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+    const incoming = normalizeDelivery(updated);
+    delivery.value = incoming;
+    savedRules.value = cloneRules(incoming.rules);
+    draftRules.value = cloneRules(incoming.rules);
+    if (telegramChatsLoaded.value)
+      savedTelegramChatId.value = draftTelegramChatId.value;
+    emit('notice', t('Notification rules saved'));
+    settingsSuccess.value = t('Notification rules saved');
+  } catch (saveError) {
+    settingsError.value = saveError.message;
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function loadTelegramChats() {
+  if (!props.isAuthenticated || !delivery.value.telegram.configured || telegramChatsLoading.value)
+    return;
+  const wasDirty = telegramChatDirty.value;
+  telegramChatsLoading.value = true;
+  telegramChatsError.value = '';
+  try {
+    const data = await apiJson('/api/notify/telegram/chats');
+    telegramChats.value = Array.isArray(data.chats) ? data.chats : [];
+    const selected = typeof data.selected_chat_id === 'string' ? data.selected_chat_id : '';
+    const preserveDraft = wasDirty || telegramChatDirty.value;
+    savedTelegramChatId.value = selected;
+    if (!preserveDraft)
+      draftTelegramChatId.value = selected;
+    telegramChatsLoaded.value = true;
+    delivery.value.telegram = {
+      configured: Boolean(data.configured),
+      chat_selected: Boolean(selected)
+    };
+  } catch (chatError) {
+    telegramChatsError.value = chatError.message;
+  } finally {
+    telegramChatsLoading.value = false;
+  }
+}
+
+function normalizeDelivery(value) {
+  return {
+    rules: cloneRules(value?.rules || defaultRules),
+    discord: {
+      configured: Boolean(value?.discord?.configured),
+      mention_target: ['everyone', 'user'].includes(value?.discord?.mention_target) ? value.discord.mention_target : null
+    },
+    telegram: {
+      configured: Boolean(value?.telegram?.configured),
+      chat_selected: Boolean(value?.telegram?.chat_selected)
+    }
+  };
+}
+
+function cloneRules(value) {
+  return {
+    restart: Boolean(value?.restart),
+    host_status: {
+      normal: Boolean(value?.host_status?.normal),
+      important: Boolean(value?.host_status?.important)
+    },
+    service_changes: {
+      normal: Boolean(value?.service_changes?.normal),
+      important: Boolean(value?.service_changes?.important)
+    },
+    ip_conflicts: Boolean(value?.ip_conflicts)
+  };
 }
 
 function displayDuration(change) {

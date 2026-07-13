@@ -108,12 +108,31 @@ final readonly class HealthService
             : ['status' => 'unknown', 'monitors' => []];
         $dnsmasqFailures = $recentFailures['dnsmasq_generation'] ?? ['count' => 0, 'last_failure_at' => null];
         $notificationFailures = $recentFailures['notification_delivery'] ?? ['count' => 0, 'last_failure_at' => null];
+        $telegramNotificationFailures = $recentFailures['telegram_notification_delivery']
+            ?? ['count' => 0, 'last_failure_at' => null];
         $dnsmasq = $readiness['dnsmasq'] + [
             'generation' => $this->operation('dnsmasq_generation', $statuses, $dnsmasqFailures),
         ];
+        $discordDelivery = $this->operation('notification_delivery', $statuses, $notificationFailures);
+        $telegramDelivery = $this->operation(
+            'telegram_notification_delivery',
+            $statuses,
+            $telegramNotificationFailures,
+        );
         $notifications = [
             'enabled' => $this->backend->discordNotificationsEnabled(),
-            'delivery' => $this->operation('notification_delivery', $statuses, $notificationFailures),
+            'delivery' => $discordDelivery,
+            'discord' => [
+                'configured' => $this->backend->discordNotificationsEnabled(),
+                'mention_target' => $this->backend->discordMentionTarget(),
+                'delivery' => $discordDelivery,
+            ],
+            'telegram' => [
+                'configured' => $this->backend->telegramBotConfigured(),
+                'chat_selected' => $this->backend->telegramSelectedChatId() !== null,
+                'enabled' => $this->backend->telegramNotificationsEnabled(),
+                'delivery' => $telegramDelivery,
+            ],
         ];
 
         $warning = $scans['failed'] > 0
@@ -122,6 +141,7 @@ final readonly class HealthService
             || in_array(true, array_column($jobs, 'overdue'), true)
             || $dnsmasqFailures['count'] > 0
             || $notificationFailures['count'] > 0
+            || $telegramNotificationFailures['count'] > 0
             || in_array('failure', array_column($statuses, 'state'), true)
             || in_array($storage['status'], ['warning', 'critical'], true)
             || in_array($dhcp['status'] ?? 'unknown', ['warning', 'critical'], true)

@@ -31,6 +31,8 @@ putenv('INVENTORY_DOWN_RETENTION_DAYS');
 putenv('IP=192.0.2.100');
 putenv('DHCP_DEFAULT_ROUTER=192.0.2.1');
 putenv('DISCORD_WEBHOOK_URL=');
+putenv('DISCORD_MENTION=');
+putenv('TELEGRAM_BOT_TOKEN=');
 
 $GLOBALS['fenping_test_application'] = Application::forConfig(
     AppConfig::fromEnvironment(dirname(__DIR__)),

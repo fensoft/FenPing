@@ -112,10 +112,14 @@ Important `.env` values:
 | `DHCP_DYNAMIC_END` | Last dynamic DHCP address, last octet only. |
 | `PASSWORD` | Admin login password. Empty means a blank login password. |
 | `SECRET` | Session signing secret. |
-| `DISCORD_WEBHOOK_URL` | Optional Discord webhook for host status, service changes, and restart notifications. |
+| `DISCORD_WEBHOOK_URL` | Discord activates when this webhook URL is set. |
+| `DISCORD_MENTION` | Optional `@everyone` or Discord user ID (`123…`, `@123…`, or `<@123…>`). The mention is added to every Discord notification. |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token. After setting it, send the bot a message and select the discovered destination from the Notifications page. |
 | `HEALTH_FAILURE_WINDOW_HOURS`, `HEALTH_SCAN_QUEUE_MAX_AGE_MINUTES` | Recent failure window and queued-scan warning age. Defaults to `24` hours and `15` minutes. |
 | `HEALTH_*_MAX_AGE_MINUTES`, `HEALTH_*_MAX_AGE_DAYS` | Freshness limits for ping, discovery, lease import, OUI data, and backups; see `env.template` for defaults. |
 | `HEALTH_DISK_*_PERCENT`, `HEALTH_DHCP_*_PERCENT` | Warning and critical utilization thresholds for disk and the DHCP pool. Defaults to `80` and `90` percent. |
+
+Discord and Telegram use the same persisted delivery rules. The Notifications modal controls restarts, IP conflicts, and separate Normal/Important host-status and service-change switches. Telegram chat destinations are discovered through the Bot API's `getUpdates` method and selected in that modal; only authenticated administrators can retrieve chat/user details. The bot token and Discord settings remain environment-only, and Telegram destination IDs, bot fingerprints, and discovered user metadata are excluded from backups.
 
 Managed hosts require a valid IPv4 address and six-octet MAC address. Host names are optional; when set, they must contain one DNS label using letters, numbers, and internal hyphens. Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
 
@@ -207,6 +211,7 @@ docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup
 docker exec fenping php /opt/fenping/cli.php backup-verify /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 docker exec fenping php /opt/fenping/cli.php backup-maintenance verify
+docker exec fenping php /opt/fenping/cli.php notify-restart
 docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz
 docker exec fenping php /opt/fenping/cli.php discord-restart
 ```
@@ -301,6 +306,8 @@ Useful endpoints:
 | `GET` | `/api/ipam` | All configured subnets, their pending and approved dynamic devices, active conflicts, and DHCP pool utilization. |
 | `PUT` | `/api/ipam/devices/{mac}/approval` | Acknowledge a new device without changing DHCP behavior. |
 | `DELETE` | `/api/ipam/devices/{mac}/approval` | Mark an acknowledged dynamic device as new again. |
+| `PUT` | `/api/notify/delivery` | Admin-only replacement of the shared delivery rules and, when supplied, the selected discovered Telegram chat. |
+| `GET` | `/api/notify/telegram/chats` | Admin-only refresh and listing of Telegram chats discovered through `getUpdates`. |
 | `GET` | `/api/notify` | Last 24 hours of changes. |
 | `GET` | `/api/services` | Current open services by host using the latest effective scan. |
 | `POST` | `/api/ping/refresh` | Run ping scan and wait for completion. |

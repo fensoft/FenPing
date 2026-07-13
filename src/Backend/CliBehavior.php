@@ -98,18 +98,18 @@ public function runPingCommand($args) {
   for ($i = $from; $i <= $to; $i++)
     $targets[$i] = $selectedNetwork->host($i);
 
-  $notifyAfterId = $this->discordNotificationsEnabled() ? $this->statsMaxId() : null;
+  $notifyAfterId = $this->notificationStatusChangesEnabled() ? $this->statsMaxId() : null;
   $conflictScan = $this->ipConflictDetector->scan($selectedNetwork);
   if (!$conflictScan['successful'])
     fwrite(STDERR, 'IP conflict scan failed: ' . $conflictScan['error'] . PHP_EOL);
   else
-    $this->sendDiscordIpConflictChanges($this->ipConflictTransitionDetails($conflictScan['transitions']));
+    $this->sendNotificationIpConflictChanges($this->ipConflictTransitionDetails($conflictScan['transitions']));
 
   $hosts = $this->pingHosts($targets, $this->config->interface ?? '', array_filter(array_unique(array(
     getenv('IP') ?: '',
     $this->config->applianceIp ?? ''
   ))));
-  $this->sendDiscordStatusChangesSince($notifyAfterId);
+  $this->sendNotificationStatusChangesSince($notifyAfterId);
 
   if ($debug) {
     foreach ($hosts as $host)
@@ -117,6 +117,19 @@ public function runPingCommand($args) {
   }
 
   return 0;
+}
+
+public function runNotificationRestartCommand(): int {
+  $results = $this->sendNotificationRestartNotification();
+  foreach ($results as $provider => $sent) {
+    if ($sent === null)
+      echo $provider . " restart notification skipped" . PHP_EOL;
+    elseif ($sent)
+      echo $provider . " restart notification sent" . PHP_EOL;
+    else
+      echo $provider . " restart notification failed" . PHP_EOL;
+  }
+  return in_array(false, $results, true) ? 1 : 0;
 }
 
 public function runDiscordRestartCommand() {

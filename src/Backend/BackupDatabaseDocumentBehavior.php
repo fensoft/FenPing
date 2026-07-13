@@ -31,6 +31,7 @@ public function backupRestoreDatabase(array $document): void {
       if (isset($schema[$table]))
         $database->exec('DELETE FROM ' . $this->backupQuoteIdentifier($table));
     }
+    $database->exec('DELETE FROM telegram_known_chats');
     $database->exec('DELETE FROM sqlite_sequence');
 
     foreach ($orderedTables as $table) {
@@ -76,6 +77,9 @@ public function backupRestoreDatabase(array $document): void {
         $insert->execute($values);
       }
     }
+    if (isset($schema['notification_delivery_settings']))
+      $database->exec('INSERT OR IGNORE INTO notification_delivery_settings (id) VALUES (1)');
+
     $violations = $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC);
     if ($violations !== array())
       throw new RuntimeException('restored database violates foreign keys');

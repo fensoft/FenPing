@@ -36,7 +36,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         ");
 
         $this->app()->backend()->databaseApplyMigrations($database, \FenPing\Backend\Backend::DATABASE_SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
-        self::assertSame(4, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(6, $this->app()->backend()->databaseSchemaVersion($database));
         $existing = $database->query("SELECT scan_profile, scan_interval_hours FROM ips WHERE ip='192.0.2.40'")->fetch(PDO::FETCH_ASSOC);
         self::assertSame('deep', $existing['scan_profile']);
         self::assertSame(1, (int) $existing['scan_interval_hours']);
@@ -48,7 +48,8 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         foreach ([
             'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',
-            'operation_status', 'operation_failures',
+            'operation_status', 'operation_failures', 'notification_delivery_settings',
+            'telegram_known_chats',
         ] as $table) {
             $exists = $database->prepare(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:table",
@@ -60,9 +61,9 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         self::assertContains('queued_at', array_column($scanColumns, 'name'));
 
         $this->app()->backend()->databaseApplyMigrations(
-            $database, 4, $this->app()->config()->projectDir . '/migrations',
+            $database, 6, $this->app()->config()->projectDir . '/migrations',
         );
-        self::assertSame(4, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(6, $this->app()->backend()->databaseSchemaVersion($database));
         self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
     }
 

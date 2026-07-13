@@ -149,6 +149,37 @@ CREATE TABLE IF NOT EXISTS operation_failures (
   error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS notification_delivery_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  restart_enabled INTEGER NOT NULL DEFAULT 1 CHECK (restart_enabled IN (0, 1)),
+  host_status_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (host_status_normal_enabled IN (0, 1)),
+  host_status_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (host_status_important_enabled IN (0, 1)),
+  service_changes_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (service_changes_normal_enabled IN (0, 1)),
+  service_changes_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (service_changes_important_enabled IN (0, 1)),
+  ip_conflicts_enabled INTEGER NOT NULL DEFAULT 1 CHECK (ip_conflicts_enabled IN (0, 1)),
+  telegram_chat_id TEXT,
+  telegram_bot_fingerprint TEXT
+);
+
+INSERT OR IGNORE INTO notification_delivery_settings (id) VALUES (1);
+
+CREATE TABLE IF NOT EXISTS telegram_known_chats (
+  chat_id TEXT PRIMARY KEY,
+  chat_type TEXT NOT NULL,
+  chat_title TEXT,
+  chat_username TEXT,
+  chat_first_name TEXT,
+  chat_last_name TEXT,
+  user_id TEXT,
+  user_is_bot INTEGER CHECK (user_is_bot IS NULL OR user_is_bot IN (0, 1)),
+  user_first_name TEXT,
+  user_last_name TEXT,
+  user_username TEXT,
+  user_language_code TEXT,
+  last_update_id INTEGER NOT NULL,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS scan_port_changes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   scan_id INTEGER NOT NULL,
@@ -353,4 +384,4 @@ CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scrip
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
 CREATE INDEX IF NOT EXISTS operation_failures_operation_time ON operation_failures (operation, failed_at);
 
-PRAGMA user_version = 4;
+PRAGMA user_version = 6;

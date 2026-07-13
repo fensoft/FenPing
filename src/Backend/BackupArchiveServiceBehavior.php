@@ -136,6 +136,7 @@ public function backupTableNames(): array {
   return array(
     'device_approvals', 'netboot_images', 'ips', 'leases', 'oui_vendors',
     'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',
+    'notification_delivery_settings',
     'ping', 'range', 'scan_snapshots', 'scans', 'scan_port_changes',
     'scan_snapshot_addresses', 'scan_snapshot_hostnames',
     'scan_snapshot_scopes', 'scan_snapshot_ports',
@@ -170,6 +171,12 @@ public function backupWriteDatabaseJson(string $target): array {
         continue;
 
       $columns = array_keys($schema[$table]);
+      if ($table === 'notification_delivery_settings') {
+        $columns = array_values(array_diff(
+          $columns,
+          array('telegram_chat_id', 'telegram_bot_fingerprint')
+        ));
+      }
       $quotedColumns = array_map([$this, 'backupQuoteIdentifier'], $columns);
       if ($tableCount > 0)
         $this->backupWriteChunk($out, ",\n");

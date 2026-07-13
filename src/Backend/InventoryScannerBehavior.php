@@ -50,8 +50,8 @@ public function inventoryScan(string $ip, string $mode = 'deep', ?int $scanId = 
     $status = $scan['status'] ?: 'unknown';
     $saved = $status === 'up';
     $changed = $this->scanMetadataComplete($scanId, $scan);
-    if ($saved && function_exists('sendDiscordPortChangesForScan'))
-      $this->sendDiscordPortChangesForScan($scanId);
+    if ($saved)
+      $this->sendNotificationPortChangesForScan($scanId);
     $this->scanPruneHistory($ip);
     return array(
       'saved' => $saved,

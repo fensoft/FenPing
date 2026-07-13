@@ -25,6 +25,8 @@ final readonly class AppConfig
         public string $secret,
         public string $discordWebhookUrl,
         public string $dataDir,
+        public string $discordMention = '',
+        public string $telegramBotToken = '',
         public int $inventoryDownRetentionDays = 7,
         public string $dhcpDefaultRouter = '',
         public int $healthFailureWindowHours = 24,
@@ -45,6 +47,9 @@ final readonly class AppConfig
         }
         if ($healthDhcpWarningPercent >= $healthDhcpCriticalPercent) {
             throw new InvalidArgumentException('DHCP warning threshold must be lower than critical threshold');
+        }
+        if ($discordMention !== '' && $discordMention !== '@everyone' && !ctype_digit($discordMention)) {
+            throw new InvalidArgumentException('DISCORD_MENTION must be @everyone or a numeric Discord user ID');
         }
         $this->network = $dhcpNetwork->prefix();
     }
@@ -89,6 +94,8 @@ final readonly class AppConfig
             $extraNetworks[] = $network;
         }
 
+        $telegramBotToken = trim(self::env('TELEGRAM_BOT_TOKEN'));
+        $discordMention = self::discordMentionEnv();
         return new self(
             projectDir: rtrim($projectDir, '/'),
             databasePath: self::env('DATABASE_PATH', $dataDir . '/database/fenping.sqlite3'),
@@ -102,6 +109,8 @@ final readonly class AppConfig
             secret: self::env('SECRET', 'token'),
             discordWebhookUrl: self::env('DISCORD_WEBHOOK_URL'),
             dataDir: $dataDir,
+            discordMention: $discordMention,
+            telegramBotToken: $telegramBotToken,
             inventoryDownRetentionDays: self::nonNegativeIntEnv('INVENTORY_DOWN_RETENTION_DAYS', 7),
             dhcpDefaultRouter: self::env('DHCP_DEFAULT_ROUTER'),
             healthFailureWindowHours: self::positiveIntEnv('HEALTH_FAILURE_WINDOW_HOURS', 24),
@@ -132,6 +141,26 @@ final readonly class AppConfig
     public function stateDir(): string
     {
         return $this->dataDir . '/state';
+    }
+
+    private static function discordMentionEnv(): string
+    {
+        $value = trim(self::env('DISCORD_MENTION'));
+        if ($value === '' || $value === '@everyone') {
+            return $value;
+        }
+        if (preg_match('/^[0-9]{1,30}$/', $value)) {
+            return $value;
+        }
+        if (preg_match('/^@([0-9]{1,30})$/', $value, $matches)) {
+            return $matches[1];
+        }
+        if (preg_match('/^<@([0-9]{1,30})>$/', $value, $matches)) {
+            return $matches[1];
+        }
+        throw new InvalidArgumentException(
+            'DISCORD_MENTION must be @everyone or a numeric Discord user ID',
+        );
     }
 
     private static function env(string $name, string $default = ''): string

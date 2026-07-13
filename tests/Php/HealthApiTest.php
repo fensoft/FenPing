@@ -43,6 +43,7 @@ final class HealthApiTest extends IntegrationTestCase
         $this->app()->backend()->operations->succeeded('database_integrity');
         $this->app()->backend()->operations->failed('dnsmasq_generation', 'invalid generated configuration');
         $this->app()->backend()->operations->failed('notification_delivery', 'HTTP 503');
+        $this->app()->backend()->operations->failed('telegram_notification_delivery', 'HTTP 429');
 
         $response = $this->app()->api()->handle($this->request('/api/health'));
         self::assertSame(200, $response->status);
@@ -58,6 +59,12 @@ final class HealthApiTest extends IntegrationTestCase
         self::assertSame(1, $health['exceptions']['important_hosts_down']);
         self::assertSame(1, $health['dnsmasq']['generation']['recent_failures']);
         self::assertSame(1, $health['notifications']['delivery']['recent_failures']);
+        self::assertSame(1, $health['notifications']['discord']['delivery']['recent_failures']);
+        self::assertSame(1, $health['notifications']['telegram']['delivery']['recent_failures']);
+        self::assertFalse($health['notifications']['discord']['configured']);
+        self::assertFalse($health['notifications']['telegram']['configured']);
+        self::assertFalse($health['notifications']['telegram']['chat_selected']);
+        self::assertFalse($health['notifications']['telegram']['enabled']);
         self::assertSame('ok', $health['integrity']['status']);
         self::assertNotNull($health['jobs']['ping']['last_success_at']);
         self::assertGreaterThan(0, $health['storage']['sqlite_bytes']);

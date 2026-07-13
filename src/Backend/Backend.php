@@ -6,6 +6,7 @@ namespace FenPing\Backend;
 
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
+use FenPing\Http\HttpTransport;
 use FenPing\Health\OperationTracker;
 use FenPing\Ipam\IpConflictDetector;
 use FenPing\Ipam\IpConflictRepository;
@@ -36,12 +37,14 @@ final class Backend
     use DhcpManagerBehavior;
     use DhcpRendererBehavior;
     use DiscordBehavior;
+    use DiscordPayloadBehavior;
     use HealthBehavior;
     use HttpBehavior;
     use InventoryScannerBehavior;
     use InventorySchedulerBehavior;
     use IpConflictBehavior;
     use IpamBehavior;
+    use NotificationDeliveryBehavior;
     use OuiBehavior;
     use PingBehavior;
     use RoutesAuthBehavior;
@@ -58,6 +61,7 @@ final class Backend
     use ScanSnapshotStoreBehavior;
     use ScanXmlParserBehavior;
     use ScanXmlRendererBehavior;
+    use TelegramChatDiscoveryBehavior;
 
     public function __construct(
         public readonly AppConfig $config,
@@ -67,6 +71,7 @@ final class Backend
         public readonly OperationTracker $operations,
         ?NetworkManager $networks = null,
         ?LiveUpdatePublisher $liveUpdates = null,
+        public readonly ?HttpTransport $httpTransport = null,
     ) {
         $this->networks = $networks ?? new NetworkManager($config, new RouteDetector(new NativeProcessRunner()));
         $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();

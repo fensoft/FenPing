@@ -279,6 +279,129 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   margin: 0;
 }
 
+.notification-delivery-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.notification-provider-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.notification-delivery-modal .modal-body {
+  max-height: calc(100vh - 11rem);
+  overflow-y: auto;
+}
+
+.notification-telegram-settings {
+  border-top: 1px solid #dce1e7;
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+}
+
+.notification-telegram-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.notification-telegram-heading h3 {
+  font-size: 0.85rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.notification-telegram-chats {
+  border: 1px solid #dce1e7;
+  border-radius: 6px;
+  max-height: 17rem;
+  overflow-y: auto;
+}
+
+.notification-telegram-chat {
+  align-items: flex-start;
+  border-bottom: 1px solid #e5e9ef;
+  cursor: pointer;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.55rem 0.7rem;
+}
+
+.notification-telegram-chat:last-of-type {
+  border-bottom: 0;
+}
+
+.notification-telegram-chat:hover {
+  background: #f6f8fb;
+}
+
+.notification-telegram-chat > .form-check-input {
+  margin-top: 0.2rem;
+}
+
+.notification-telegram-chat > span,
+.notification-telegram-chat small {
+  display: block;
+  min-width: 0;
+}
+
+.notification-telegram-chat small {
+  color: #667085;
+  overflow-wrap: anywhere;
+}
+
+.notification-telegram-chat-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.notification-global-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.7rem 0 0.55rem;
+}
+
+.notification-global-rules .form-check {
+  margin: 0;
+}
+
+.notification-rules-wrap {
+  margin-bottom: 0.55rem;
+}
+
+.notification-rules-table {
+  margin: 0;
+}
+
+.notification-rules-table th,
+.notification-rules-table td {
+  padding: 0.35rem 0.5rem;
+  vertical-align: middle;
+}
+
+.notification-rules-table thead th {
+  background: #f0f3f7;
+  color: #2f3b4a;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.notification-rules-table td,
+.notification-rules-table thead th:not(:first-child) {
+  text-align: center;
+}
+
 .notify-summary {
   border: 1px solid #dce1e7;
   border-radius: 6px;
@@ -1573,6 +1696,21 @@ html[data-bs-theme='dark'] .table-toolbar {
 
 html[data-bs-theme='dark'] .notify-summary {
   border-color: #273444;
+}
+
+html[data-bs-theme='dark'] .notification-rules-table thead th {
+  background: #202c3a;
+  color: #d7dee8;
+}
+
+html[data-bs-theme='dark'] .notification-telegram-settings,
+html[data-bs-theme='dark'] .notification-telegram-chats,
+html[data-bs-theme='dark'] .notification-telegram-chat {
+  border-color: #273444;
+}
+
+html[data-bs-theme='dark'] .notification-telegram-chat:hover {
+  background: #202c3a;
 }
 
 html[data-bs-theme='dark'] .detail-summary,

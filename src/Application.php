@@ -35,6 +35,7 @@ use FenPing\Docker\DockerNetworkCache;
 use FenPing\Docker\DockerNetworkParser;
 use FenPing\Docker\DockerNetworkRefreshService;
 use FenPing\Docker\DockerNetworkWatcher;
+use FenPing\Http\HttpTransport;
 use FenPing\Docker\PrivilegedDockerNetworkRefreshGateway;
 use FenPing\Health\HealthService;
 use FenPing\Health\OperationTracker;
@@ -88,7 +89,7 @@ final class Application
     private readonly DockerNetworkWatcher $dockerNetworkWatcher;
     private readonly LiveUpdatePublisher $liveUpdates;
 
-    private function __construct(private readonly AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null)
+    private function __construct(private readonly AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null, ?HttpTransport $httpTransport = null)
     {
         $this->liveUpdates = $liveUpdates ?? new NchanLiveUpdatePublisher();
         $this->database = new DatabaseManager($config);
@@ -118,6 +119,7 @@ final class Application
             $this->ipConflictDetector,
             $this->operations,
             liveUpdates: $this->liveUpdates,
+            httpTransport: $httpTransport,
         );
         $this->profiles = new ProfileCatalog();
         $this->scanJobs = new ScanJobRepository($this->backend, $this->database);
@@ -144,9 +146,9 @@ final class Application
         return new self(AppConfig::fromEnvironment($projectDir));
     }
 
-    public static function forConfig(AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null): self
+    public static function forConfig(AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null, ?HttpTransport $httpTransport = null): self
     {
-        return new self($config, $liveUpdates);
+        return new self($config, $liveUpdates, $httpTransport);
     }
 
     public function api(): ApiKernel

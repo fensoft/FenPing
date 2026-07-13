@@ -63,6 +63,9 @@ final class CliKernel
                 'dnsmasq lease import',
                 fn(): int => $this->tracked('lease_import', fn(): int => $this->backend->runDnsmasqLeasesCommand($args)),
             )),
+            'notify-restart' => new CallableCommand(fn(array $args): int => $args === []
+                ? $this->backend->runNotificationRestartCommand()
+                : $this->usage()),
             'discord-restart' => new CallableCommand(fn(array $args): int => $args === []
                 ? $this->backend->runDiscordRestartCommand()
                 : $this->usage()),
@@ -166,6 +169,7 @@ final class CliKernel
         fwrite(STDERR, "       php cli.php oui-refresh" . PHP_EOL);
         fwrite(STDERR, "       php cli.php oui-sync" . PHP_EOL);
         fwrite(STDERR, "       php cli.php dnsmasq-leases" . PHP_EOL);
+        fwrite(STDERR, "       php cli.php notify-restart" . PHP_EOL);
         fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
         fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
         fwrite(STDERR, "       php cli.php backup-verify <backup.tgz>" . PHP_EOL);

@@ -10,6 +10,7 @@ use PDO;
 use PDOException;
 use RuntimeException;
 use FenPing\Network\NetworkPolicyException;
+use FenPing\Realtime\LiveUpdateScope;
 
 trait RoutesSystemBehavior
 {
@@ -18,6 +19,14 @@ public function systemApiRoutes(): array {
     $this->apiRoute('GET', '/health', 'handleHealth'),
     $this->apiRoute('GET', '/inventory', 'handleInventory'),
     $this->apiRoute('GET', '/notify', 'handleNotify'),
+    $this->apiRoute('GET', '/notify/telegram/chats', 'handleTelegramChats', 'session'),
+    $this->apiRoute(
+      'PUT',
+      '/notify/delivery',
+      'handleNotificationDeliveryUpdate',
+      'session',
+      array('live' => array(LiveUpdateScope::All))
+    ),
     $this->apiRoute('POST', '/ping/refresh', 'handlePingRefresh', 'session')
   );
 }
@@ -46,6 +55,34 @@ public function handleInventory(array $params): array {
 
 public function handleNotify(array $params): array {
   return $this->get_notify();
+}
+
+public function handleTelegramChats(array $params): array {
+  try {
+    return $this->telegramRefreshKnownChats();
+  } catch (RuntimeException $error) {
+    $this->jsonError(502, $error->getMessage());
+  }
+}
+
+public function handleNotificationDeliveryUpdate(array $params): array {
+  $body = $this->requestBody();
+  try {
+    $updateTelegramChat = array_key_exists('telegram_chat_id', $body);
+    $expected = $updateTelegramChat
+      ? array('rules', 'telegram_chat_id')
+      : array('rules');
+    $this->notificationRequireExactKeys($body, $expected);
+    if (!is_array($body['rules']))
+      throw new InvalidArgumentException('invalid notification rules');
+    $rules = $this->notificationValidateRules($body['rules']);
+    if ($updateTelegramChat)
+      $this->telegramChatSelectionUpdate($body['telegram_chat_id']);
+    $this->notificationRulesUpdate($rules);
+  } catch (InvalidArgumentException $error) {
+    $this->jsonError(400, $error->getMessage());
+  }
+  return $this->notificationDelivery();
 }
 
 public function handlePingRefresh(array $params): array {

@@ -66,6 +66,8 @@ export IFACE
 export PASSWORD
 export SECRET
 export DISCORD_WEBHOOK_URL
+export DISCORD_MENTION
+export TELEGRAM_BOT_TOKEN
 php /opt/fenping/cli.php scan-port-backfill
 if ! php /opt/fenping/cli.php oui-refresh; then
   echo "warning: IEEE OUI startup refresh failed; keeping the existing vendor cache and SQL data" >&2
@@ -97,7 +99,7 @@ cat > /etc/crontabs/root <<'EOF'
 43 1 * * * php /opt/fenping/cli.php database-check
 EOF
 chmod 0600 /etc/crontabs/root
-php /opt/fenping/cli.php discord-restart || true
+php /opt/fenping/cli.php notify-restart || true
 php /opt/fenping/cli.php hosts
 php-fpm84 --test
 nginx -t

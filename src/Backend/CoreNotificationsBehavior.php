@@ -228,7 +228,8 @@ public function get_notify($hours = 24) {
     ),
     "changes" => $changes,
     "port_changes" => $portChanges,
-    "conflict_changes" => $conflictChanges
+    "conflict_changes" => $conflictChanges,
+    "delivery" => $this->notificationDelivery()
   );
 }
 }

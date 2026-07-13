@@ -30,13 +30,25 @@ public function fenpingHttpRequest(string $url, array $options = array()): array
   $maxRedirects = max(0, (int)($options['max_redirects'] ?? 0));
   $maxBytes = max(1, (int)($options['max_bytes'] ?? 1024 * 1024));
   $currentUrl = $url;
+  if ($this->httpTransport !== null) {
+    $this->fenpingHttpValidateUrl($url);
+    return $this->fenpingHttpTransportResponse($this->httpTransport->request($url, array(
+      'method' => $method,
+      'headers' => $headers,
+      'body' => $body,
+      'timeout' => $timeout,
+      'max_redirects' => $maxRedirects,
+      'max_bytes' => $maxBytes
+    )));
+  }
+
 
   for ($redirects = 0; ; $redirects++) {
     $this->fenpingHttpValidateUrl($currentUrl);
     $response = $this->fenpingHttpRequestOnce($currentUrl, $method, $headers, $body, $timeout, $maxBytes);
     $location = $this->fenpingHttpResponseHeader($response['headers'], 'location');
     if (!in_array($response['status'], array(301, 302, 303, 307, 308), true) || $location === null)
-      return $response;
+      return $this->fenpingHttpTransportResponse($response);
     if ($redirects >= $maxRedirects)
       throw new RuntimeException('HTTPS request exceeded its redirect limit');
 
@@ -47,6 +59,19 @@ public function fenpingHttpRequest(string $url, array $options = array()): array
       unset($headers['Content-Type'], $headers['content-type']);
     }
   }
+}
+
+public function fenpingHttpTransportResponse(array $response): array {
+  $status = $response['status'] ?? null;
+  $headers = $response['headers'] ?? null;
+  $body = $response['body'] ?? null;
+  if (!is_int($status) || $status < 100 || $status > 599 || !is_array($headers) || !is_string($body))
+    throw new RuntimeException('HTTPS transport returned an invalid response');
+  return array(
+    'status' => $status,
+    'headers' => $headers,
+    'body' => $body
+  );
 }
 
 public function fenpingHttpRequestOnce(string $url, string $method, array $headers, ?string $body, float $timeout, int $maxBytes): array {

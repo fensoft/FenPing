@@ -70,10 +70,14 @@
         <div class="col-12 col-md-6 col-xl-4"><article class="card h-100"><div class="card-body">
           <div class="operations-card-title"><AppIcon name="bell" /><h4>{{ t('Notifications') }}</h4></div>
           <dl class="operations-details">
-            <div><dt>{{ t('Delivery') }}</dt><dd><span class="badge" :class="health.notifications?.enabled ? 'bg-blue-lt text-blue' : 'bg-secondary-lt text-secondary'">{{ t(health.notifications?.enabled ? 'Enabled' : 'Disabled') }}</span></dd></div>
-            <div><dt>{{ t('Delivery failures') }}</dt><dd>{{ health.notifications?.delivery?.recent_failures || 0 }}</dd></div>
-            <div><dt>{{ t('Last success') }}</dt><dd>{{ dateOrNever(health.notifications?.delivery?.last_success_at) }}</dd></div>
-          </dl><div v-if="health.notifications?.delivery?.last_error" class="small text-danger mt-2">{{ health.notifications.delivery.last_error }}</div>
+            <div><dt>Discord</dt><dd><span class="badge" :class="health.notifications?.discord?.configured ? 'bg-indigo-lt text-indigo' : 'bg-secondary-lt text-secondary'">{{ t(health.notifications?.discord?.configured ? 'Configured' : 'Not configured') }}</span></dd></div>
+            <div><dt>{{ t('Delivery failures') }} · Discord</dt><dd>{{ health.notifications?.discord?.delivery?.recent_failures || 0 }}</dd></div>
+            <div><dt>Telegram</dt><dd><span class="badge" :class="health.notifications?.telegram?.configured ? 'bg-blue-lt text-blue' : 'bg-secondary-lt text-secondary'">{{ t(health.notifications?.telegram?.configured ? 'Configured' : 'Not configured') }}</span></dd></div>
+            <div><dt>{{ t('Telegram destination') }}</dt><dd><span class="badge" :class="health.notifications?.telegram?.chat_selected ? 'bg-blue-lt text-blue' : 'bg-secondary-lt text-secondary'">{{ t(health.notifications?.telegram?.chat_selected ? 'Configured' : 'Not configured') }}</span></dd></div>
+            <div><dt>{{ t('Delivery failures') }} · Telegram</dt><dd>{{ health.notifications?.telegram?.delivery?.recent_failures || 0 }}</dd></div>
+          </dl>
+          <div v-if="health.notifications?.discord?.delivery?.last_error" class="small text-danger mt-2">Discord: {{ health.notifications.discord.delivery.last_error }}</div>
+          <div v-if="health.notifications?.telegram?.delivery?.last_error" class="small text-danger mt-2">Telegram: {{ health.notifications.telegram.delivery.last_error }}</div>
         </div></article></div>
       </div>
     </template>

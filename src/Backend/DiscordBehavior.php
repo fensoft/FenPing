@@ -17,8 +17,7 @@ use Throwable;
 trait DiscordBehavior
 {
 public function discordWebhookUrl(): string {
-  $url = getenv('DISCORD_WEBHOOK_URL');
-  return $url === false ? '' : trim($url);
+  return trim($this->config->discordWebhookUrl);
 }
 
 public function discordNotificationsEnabled(): bool {
@@ -31,28 +30,33 @@ public function statsMaxId(): int {
 }
 
 public function sendDiscordStatusChangesSince(?int $afterId): void {
-  if ($afterId === null || !$this->discordNotificationsEnabled())
+  if ($afterId === null)
     return;
+  $this->sendDiscordStatusChanges($this->discordStatusChangesSince($afterId));
+}
 
-  $changes = $this->discordStatusChangesSince($afterId);
-  if (count($changes) === 0)
+public function sendDiscordStatusChanges(array $changes): void {
+  if (!$this->discordNotificationsEnabled())
     return;
-
+  $changes = $this->notificationFilterStatusChanges($changes);
   foreach ($this->discordNotificationPayloads($changes) as $payload)
     $this->discordPostPayload($payload);
 }
 
 public function sendDiscordPortChangesForScan(int $scanId): void {
+  $this->sendDiscordPortChanges($this->discordPortChangesForScan($scanId));
+}
+
+public function sendDiscordPortChanges(array $changes): void {
   if (!$this->discordNotificationsEnabled())
     return;
-
-  $changes = $this->discordPortChangesForScan($scanId);
+  $changes = $this->notificationFilterServiceChanges($changes);
   foreach ($this->discordPortNotificationPayloads($changes) as $payload)
     $this->discordPostPayload($payload);
 }
 
 public function sendDiscordIpConflictChanges(array $changes): void {
-  if (!$this->discordNotificationsEnabled() || $changes === array())
+  if (!$this->discordNotificationsEnabled() || !$this->notificationRules()['ip_conflicts'] || $changes === array())
     return;
 
   foreach ($this->discordIpConflictPayloads($changes) as $payload)
@@ -65,7 +69,10 @@ public function discordIpConflictPayloads(array $changes): array {
     $embeds = array();
     foreach ($chunk as $change)
       $embeds[] = $this->discordIpConflictEmbed($change);
-    $payloads[] = array('username' => 'FenPing', 'embeds' => $embeds);
+    $payloads[] = $this->discordApplyMention(array(
+      'username' => 'FenPing',
+      'embeds' => $embeds
+    ));
   }
   return $payloads;
 }
@@ -109,7 +116,7 @@ public function discordIpConflictEmbed(array $change): array {
 }
 
 public function sendDiscordRestartNotification(): bool {
-  if (!$this->discordNotificationsEnabled())
+  if (!$this->discordNotificationsEnabled() || !$this->notificationRules()['restart'])
     return false;
 
   return $this->discordPostPayload($this->discordRestartPayload());
@@ -130,7 +137,7 @@ public function discordRestartPayload(): array {
   if (($this->config->applianceIp ?? '') !== '')
     $fields[] = $this->discordEmbedField('Address', $this->config->applianceIp, true);
 
-  return array(
+  return $this->discordApplyMention(array(
     'username' => 'FenPing',
     'embeds' => array(array(
       'title' => 'FenPing restarted',
@@ -139,7 +146,7 @@ public function discordRestartPayload(): array {
       'fields' => $fields,
       'timestamp' => date(DATE_ATOM)
     ))
-  );
+  ));
 }
 
 public function discordStatusChangesSince(int $afterId): array {
@@ -198,15 +205,20 @@ public function discordStatusChangesSince(int $afterId): array {
 
 public function discordNotificationPayloads(array $changes): array {
   $payloads = array();
-  foreach (array_chunk($changes, 10) as $chunk) {
-    $embeds = array();
-    foreach ($chunk as $change)
-      $embeds[] = $this->discordChangeEmbed($change);
-
-    $payloads[] = array(
-      'username' => 'FenPing',
-      'embeds' => $embeds
-    );
+  foreach (array(false, true) as $important) {
+    $group = array_values(array_filter(
+      $changes,
+      static fn(array $change): bool => ((int)($change['important'] ?? 0) === 1) === $important
+    ));
+    foreach (array_chunk($group, 10) as $chunk) {
+      $embeds = array();
+      foreach ($chunk as $change)
+        $embeds[] = $this->discordChangeEmbed($change);
+      $payloads[] = $this->discordApplyMention(array(
+        'username' => 'FenPing',
+        'embeds' => $embeds
+      ));
+    }
   }
   return $payloads;
 }
@@ -216,128 +228,51 @@ public function discordPortChangesForScan(int $scanId): array {
     SELECT
       c.*,
       COALESCE(NULLIF((SELECT i.name FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1), ''), '') AS name,
-      COALESCE(NULLIF((SELECT i.mac FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1), ''), '') AS mac
+      COALESCE(NULLIF((SELECT i.mac FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1), ''), '') AS mac,
+      COALESCE((
+        SELECT i.important FROM ips i WHERE i.ip=c.ip ORDER BY i.id DESC LIMIT 1
+      ), (
+        SELECT i.important
+        FROM ips i
+        WHERE LOWER(i.mac)=LOWER((
+          SELECT s.mac FROM stats s
+          WHERE s.ip=c.ip AND s.mac IS NOT NULL AND s.mac<>''
+          ORDER BY s.id DESC LIMIT 1
+        ))
+        ORDER BY i.id DESC LIMIT 1
+      ), 0) AS important
     FROM scan_port_changes c
     WHERE c.scan_id=:scan_id
     ORDER BY c.port ASC, c.protocol ASC
   ");
   $stmt->execute(array('scan_id' => $scanId));
-  return $stmt->fetchAll(PDO::FETCH_ASSOC);
+  $changes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($changes as &$change)
+    $change['important'] = (int)($change['important'] ?? 0);
+  unset($change);
+  return $changes;
 }
 
 public function discordPortNotificationPayloads(array $changes): array {
   $payloads = array();
-  foreach (array_chunk($changes, 10) as $chunk) {
-    $embeds = array();
-    foreach ($chunk as $change)
-      $embeds[] = $this->discordPortChangeEmbed($change);
-    $payloads[] = array('username' => 'FenPing', 'embeds' => $embeds);
+  foreach (array(false, true) as $important) {
+    $group = array_values(array_filter(
+      $changes,
+      static fn(array $change): bool => ((int)($change['important'] ?? 0) === 1) === $important
+    ));
+    foreach (array_chunk($group, 10) as $chunk) {
+      $embeds = array();
+      foreach ($chunk as $change)
+        $embeds[] = $this->discordPortChangeEmbed($change);
+      $payloads[] = $this->discordApplyMention(array(
+        'username' => 'FenPing',
+        'embeds' => $embeds
+      ));
+    }
   }
   return $payloads;
 }
 
-public function discordPortChangeEmbed(array $change): array {
-  $name = trim((string)($change['name'] ?? ''));
-  $ip = (string)($change['ip'] ?? '');
-  $protocol = strtolower((string)($change['protocol'] ?? ''));
-  $port = (int)($change['port'] ?? 0);
-  $type = (string)($change['change_type'] ?? 'changed');
-  $label = $name !== '' ? $name : ($ip !== '' ? $ip : 'Unknown host');
-  $action = array('appeared' => 'appeared', 'disappeared' => 'disappeared', 'changed' => 'changed version')[$type] ?? 'changed';
-  $timestamp = strtotime((string)($change['created_at'] ?? ''));
-
-  $embed = array(
-    'title' => $label . ': ' . $port . '/' . $protocol . ' ' . $action,
-    'description' => 'A network service changed.',
-    'color' => $this->discordPortChangeColor($type),
-    'fields' => array(
-      $this->discordEmbedField('Host', $label, true),
-      $this->discordEmbedField('IP', $ip, true),
-      $this->discordEmbedField('Port', $port . '/' . $protocol, true),
-      $this->discordEmbedField('Previous', $this->discordPortServiceLabel($change, 'previous'), false),
-      $this->discordEmbedField('Current', $this->discordPortServiceLabel($change, 'current'), false),
-      $this->discordEmbedField('Scan', (string)($change['mode'] ?? '-'), true)
-    )
-  );
-  if ($timestamp !== false)
-    $embed['timestamp'] = date(DATE_ATOM, $timestamp);
-  return $embed;
-}
-
-public function discordPortServiceLabel(array $change, string $prefix): string {
-  $service = trim((string)($change[$prefix . '_service'] ?? ''));
-  $version = trim((string)($change[$prefix . '_version'] ?? ''));
-  $value = trim($service . ' ' . $version);
-  return $value === '' ? '-' : $value;
-}
-
-public function discordPortChangeColor(string $type): int {
-  if ($type === 'appeared')
-    return 0x16a34a;
-  if ($type === 'disappeared')
-    return 0xdc2626;
-  return 0xf59e0b;
-}
-
-public function discordChangeEmbed(array $change): array {
-  $name = trim((string)($change['name'] ?? ''));
-  $ip = (string)($change['ip'] ?? '');
-  $mac = strtolower((string)($change['mac'] ?? ''));
-  $previous = (string)($change['previous_status'] ?? 'Unknown');
-  $status = (string)($change['status'] ?? 'Unknown');
-  $date = (string)($change['date_begin'] ?? '');
-  $important = (int)($change['important'] ?? 0) === 1;
-  $label = $name !== '' ? $name : ($ip !== '' ? $ip : 'Unknown host');
-  $description = $important ? 'Important host changed state.' : 'Host changed state.';
-  $timestamp = strtotime($date);
-
-  $embed = array(
-    'title' => $label . ' is now ' . ($status !== '' ? $status : 'Unknown'),
-    'description' => $description,
-    'color' => $this->discordStatusColor($status),
-    'fields' => array(
-      $this->discordEmbedField('Host', $label, true),
-      $this->discordEmbedField('IP', $ip, true),
-      $this->discordEmbedField('MAC', $mac, true),
-      $this->discordEmbedField('Previous', $previous, true),
-      $this->discordEmbedField('Current', $status, true),
-      $this->discordEmbedField('Important', $important ? 'Yes' : 'No', true),
-      $this->discordEmbedField('Time', $date, false)
-    )
-  );
-
-  if ($timestamp !== false)
-    $embed['timestamp'] = date(DATE_ATOM, $timestamp);
-
-  return $embed;
-}
-
-public function discordStatusColor(string $status): int {
-  if ($status === 'Up')
-    return 0x16a34a;
-  if ($status === 'Down')
-    return 0xdc2626;
-  if ($status === 'arp')
-    return 0x2563eb;
-  if ($status === 'arp-down')
-    return 0xf59e0b;
-  return 0x64748b;
-}
-
-public function discordEmbedField(string $name, string $value, bool $inline): array {
-  $value = trim($value);
-  if ($value === '')
-    $value = '-';
-
-  if (strlen($value) > 1000)
-    $value = substr($value, 0, 997) . '...';
-
-  return array(
-    'name' => $name,
-    'value' => $value,
-    'inline' => $inline
-  );
-}
 
 public function discordPost(string $message): bool {
   return $this->discordPostPayload(array(
@@ -347,6 +282,7 @@ public function discordPost(string $message): bool {
 }
 
 public function discordPostPayload(array $payload): bool {
+  $payload = $this->discordApplyMention($payload);
   $url = $this->discordWebhookUrl();
   if ($url === '')
     return false;

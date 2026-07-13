@@ -17,7 +17,7 @@ final class DatabaseIntegrationTest extends IntegrationTestCase
     {
         $database = $this->app()->database();
         $pdo = $database->connection();
-        self::assertSame(4, $database->schemaVersion());
+        self::assertSame(6, $database->schemaVersion());
         self::assertSame('wal', strtolower((string) $pdo->query('PRAGMA journal_mode')->fetchColumn()));
         self::assertSame([], $database->integrityErrors());
 

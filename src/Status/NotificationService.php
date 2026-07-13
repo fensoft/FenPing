@@ -17,4 +17,10 @@ final readonly class NotificationService
 
     public function recent(int $hours = 24): array { return $this->backend->get_notify($hours); }
     public function portChanges(int $hours = 24): array { return $this->backend->get_port_notify($hours); }
+    public function delivery(): array { return $this->backend->notificationDelivery(); }
+    public function updateRules(array $rules): array
+    {
+        $this->backend->notificationRulesUpdate($rules);
+        return $this->backend->notificationDelivery();
+    }
 }
