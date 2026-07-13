@@ -69,6 +69,7 @@ final class NetworkPolicyTest extends TestCase
         try {
             putenv('INVENTORY_DOWN_RETENTION_DAYS');
             self::assertSame(7, AppConfig::fromEnvironment(dirname(__DIR__, 2))->inventoryDownRetentionDays);
+            self::assertSame('192.0.2.1', AppConfig::fromEnvironment(dirname(__DIR__, 2))->dhcpDefaultRouter);
 
             foreach (['-1', '1.5', 'seven'] as $invalid) {
                 putenv('INVENTORY_DOWN_RETENTION_DAYS=' . $invalid);

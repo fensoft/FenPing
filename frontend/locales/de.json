@@ -311,5 +311,19 @@
   "{count} conflict events": "{count} conflict events",
   "No IP conflict events in the last {hours}h": "No IP conflict events in the last {hours}h",
   "Resolved": "Resolved",
-  "Detected": "Detected"
+  "Detected": "Detected",
+  "Doctor": "Doctor",
+  "Administrator diagnostics for network and appliance services": "Administrator diagnostics for network and appliance services",
+  "Run doctor": "Run doctor",
+  "Login to run system diagnostics.": "Login to run system diagnostics.",
+  "Running diagnostics": "Running diagnostics",
+  "All checks passed": "All checks passed",
+  "One or more checks failed": "One or more checks failed",
+  "Checked {time}": "Checked {time}",
+  "Passed": "Passed",
+  "Interface": "Interface",
+  "Subnet": "Subnet",
+  "DHCP pool": "DHCP pool",
+  "Storage": "Storage",
+  "DHCP server": "DHCP server"
 }

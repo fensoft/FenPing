@@ -22,6 +22,7 @@ putenv('DHCP_NETWORK=192.0.2.0/24');
 putenv('EXTRA_NETWORKS=198.51.100.0/24');
 putenv('INVENTORY_DOWN_RETENTION_DAYS');
 putenv('IP=192.0.2.100');
+putenv('DHCP_DEFAULT_ROUTER=192.0.2.1');
 putenv('DISCORD_WEBHOOK_URL=');
 
 $GLOBALS['fenping_test_application'] = Application::fromEnvironment(dirname(__DIR__));

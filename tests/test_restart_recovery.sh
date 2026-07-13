@@ -9,11 +9,12 @@ mkdir -p data/database data/netboot data/backups data/state
 touch .env
 
 EVENTS="$TMP/events"
+CONTAINER_RUNNING=true
 docker() {
   echo "$*" >> "$EVENTS"
   case "$*" in
     "inspect fenping") return 0 ;;
-    "inspect fenping --format {{.State.Running}}") echo true ;;
+    "inspect fenping --format {{.State.Running}}") echo "$CONTAINER_RUNNING" ;;
     "inspect fenping --format {{.Image}}") echo sha256:old ;;
     "inspect fenping --format {{.Config.Image}}") echo example/fenping:old ;;
     "image inspect sha256:old --format {{join .RepoDigests \"\\n\"}}") echo example/fenping@sha256:old ;;
@@ -45,5 +46,15 @@ STOP_LINE=$(grep -n '^stop ' "$EVENTS" | head -n1 | cut -d: -f1)
 test "$VERIFY_LINE" -lt "$STOP_LINE"
 grep -q '^image tag sha256:old fenping-rollback:' "$EVENTS"
 grep -q '^compose up -d --remove-orphans --pull never$' "$EVENTS"
+
+sleep 1
+: > "$EVENTS"
+CONTAINER_RUNNING=false
+run_restart "dev"
+
+! grep -q '^start fenping$' "$EVENTS"
+grep -q '^build --pull --tag example/fenping:new \.$' "$EVENTS"
+grep -q '^run --rm --env-file .env .* php /opt/fenping/cli.php backup ' "$EVENTS"
+! grep -q '^exec fenping php /opt/fenping/cli.php backup ' "$EVENTS"
 
 echo "restart recovery shell tests passed"

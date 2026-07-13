@@ -19,9 +19,11 @@ final class CliKernel
         private readonly Backend $backend,
         private readonly DatabaseManager $database,
         private readonly BackupService $backups,
+        Command $doctor,
     )
     {
         $this->commands = [
+            'doctor' => $doctor,
             'database' => new CallableCommand(fn(array $args): int => $this->database($args)),
             'ping' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
                 '/tmp/ping.lck',
@@ -106,6 +108,7 @@ final class CliKernel
 
     private function usage(): int
     {
+        fwrite(STDERR, "Usage: php cli.php doctor [--runtime] [--json]" . PHP_EOL);
         fwrite(STDERR, "Usage: php cli.php ping [--network IPv4/24] [1-254|DEBUG]" . PHP_EOL);
         fwrite(STDERR, "       php cli.php database" . PHP_EOL);
         fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);

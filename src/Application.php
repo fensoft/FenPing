@@ -6,6 +6,7 @@ namespace FenPing;
 
 use FenPing\Api\ApiKernel;
 use FenPing\Api\Controller\BackupController;
+use FenPing\Api\Controller\DoctorController;
 use FenPing\Api\Controller\AuthController;
 use FenPing\Api\Controller\HostController;
 use FenPing\Api\Controller\IpamController;
@@ -17,11 +18,15 @@ use FenPing\Auth\AuthService;
 use FenPing\Backend\Backend;
 use FenPing\Backup\BackupService;
 use FenPing\Cli\CliKernel;
+use FenPing\Cli\DoctorCommand;
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
 use FenPing\Dhcp\ConfigManager;
 use FenPing\Dhcp\HostValidator;
 use FenPing\Dhcp\MutationCoordinator;
+use FenPing\Doctor\DoctorService;
+use FenPing\Doctor\NativeDoctorSystem;
+use FenPing\Doctor\ProcessDoctorReportProvider;
 use FenPing\Health\HealthService;
 use FenPing\Host\CategoryRepository;
 use FenPing\Host\HostRepository;
@@ -32,6 +37,7 @@ use FenPing\Ipam\IpamService;
 use FenPing\Netboot\NetbootImageService;
 use FenPing\Ping\PingScanner;
 use FenPing\Process\NativeProcessRunner;
+use FenPing\Process\ProcessRunner;
 use FenPing\Scan\PortChangeService;
 use FenPing\Scan\ProfileCatalog;
 use FenPing\Scan\ResultService;
@@ -63,6 +69,8 @@ final class Application
     private readonly NetbootImageService $netboot;
     private readonly IpamService $ipam;
     private readonly BackupService $backups;
+    private readonly DoctorService $doctor;
+    private readonly ProcessRunner $processes;
 
     private function __construct(private readonly AppConfig $config)
     {
@@ -71,7 +79,8 @@ final class Application
         $clock = new SystemClock();
         $this->auth = new AuthService($config);
         $this->ipConflicts = new IpConflictRepository($this->database);
-        $this->ipConflictDetector = new IpConflictDetector($config, new NativeProcessRunner(), $this->ipConflicts, $clock);
+        $this->processes = new NativeProcessRunner();
+        $this->ipConflictDetector = new IpConflictDetector($config, $this->processes, $this->ipConflicts, $clock);
         $this->backend = new Backend($config, $this->database, $this->ipConflicts, $this->ipConflictDetector);
         $this->profiles = new ProfileCatalog();
         $this->scanJobs = new ScanJobRepository($this->backend, $this->database);
@@ -85,6 +94,12 @@ final class Application
         $this->netboot = new NetbootImageService($this->backend, $config, $this->database);
         $this->ipam = new IpamService($this->backend, $config, $this->database, $this->vendors);
         $this->backups = new BackupService($this->backend, $config, $this->database);
+        $this->doctor = new DoctorService(
+            $config,
+            $this->processes,
+            new NativeDoctorSystem($this->processes),
+            $clock,
+        );
     }
 
     public static function fromEnvironment(string $projectDir): self
@@ -107,6 +122,7 @@ final class Application
         $clock = new SystemClock();
 
         return new ApiKernel($this->auth, [
+            new DoctorController(new ProcessDoctorReportProvider($this->config, $this->processes)),
             new AuthController($this->backend, $this->auth, $adapter),
             new SystemController(
                 $this->backend,
@@ -134,7 +150,10 @@ final class Application
             new ScanController($this->backend, $this->scanJobs, $this->profiles, $results, $this->vendors, $adapter),
         ]);
     }
-    public function cli(): CliKernel { return new CliKernel($this->backend, $this->database, $this->backups); }
+    public function cli(): CliKernel
+    {
+        return new CliKernel($this->backend, $this->database, $this->backups, new DoctorCommand($this->doctor));
+    }
     public function config(): AppConfig { return $this->config; }
     public function database(): DatabaseManager { return $this->database; }
     public function backend(): Backend { return $this->backend; }

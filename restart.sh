@@ -41,11 +41,20 @@ build_demo_backup() {
 }
 
 wait_for_fenping() {
-  local response
+  local response state
   for i in $(seq 1 60); do
     response=$(curl -fsS http://127.0.0.1/api/health 2>/dev/null || true)
     case "$response" in
       '{"status":"ok"'*) return 0 ;;
+    esac
+    state=$(docker inspect fenping --format '{{.State.Status}}' 2>/dev/null || true)
+    case "$state" in
+      exited|dead|restarting)
+        echo "FenPing exited during startup" >&2
+        docker stop fenping >/dev/null 2>&1 || true
+        docker compose logs --tail 100 app >&2 || true
+        return 1
+        ;;
     esac
     sleep 1
   done

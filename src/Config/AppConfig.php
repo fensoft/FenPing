@@ -25,6 +25,7 @@ final readonly class AppConfig
         public string $discordWebhookUrl,
         public string $dataDir,
         public int $inventoryDownRetentionDays = 7,
+        public string $dhcpDefaultRouter = '',
     ) {
         $this->network = $dhcpNetwork->prefix();
     }
@@ -64,6 +65,7 @@ final readonly class AppConfig
             discordWebhookUrl: self::env('DISCORD_WEBHOOK_URL'),
             dataDir: $dataDir,
             inventoryDownRetentionDays: self::nonNegativeIntEnv('INVENTORY_DOWN_RETENTION_DAYS', 7),
+            dhcpDefaultRouter: self::env('DHCP_DEFAULT_ROUTER'),
         );
     }
 

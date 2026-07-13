@@ -16,6 +16,7 @@ RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-
       doas \
       dnsmasq \
       iproute2-minimal \
+      iproute2-ss \
       iputils-arping \
       iputils-ping \
       nginx \
@@ -29,15 +30,17 @@ RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-
       php84-posix \
       php84-session \
       php84-sockets \
-    && awk -F'"' '/categories = .*"default"/ { print $2 }' /usr/share/nmap/scripts/script.db > /tmp/nmap-default-scripts \
+    && awk -F'"' '/categories = .*"default"/ { print $2 }' /usr/share/nmap/scripts/script.db > /tmp/nmap-retained-scripts \
+    && printf '%s\n' broadcast-dhcp-discover.nse >> /tmp/nmap-retained-scripts \
     && find /usr/share/nmap/scripts -maxdepth 1 -type f -name '*.nse' | while IFS= read -r script; do \
-         grep -Fqx "${script##*/}" /tmp/nmap-default-scripts || rm -f "$script"; \
+         grep -Fqx "${script##*/}" /tmp/nmap-retained-scripts || rm -f "$script"; \
        done \
     && php /tmp/prune-nmap-nselib.php /usr/share/nmap \
     && nmap --script-updatedb >/dev/null \
     && nmap --script-help default >/dev/null \
+    && nmap --script-help broadcast-dhcp-discover >/dev/null \
     && rm -f \
-      /tmp/nmap-default-scripts \
+      /tmp/nmap-retained-scripts \
       /usr/share/nmap/nmap-mac-prefixes \
       /usr/share/arp-scan/ieee-oui.txt \
       /usr/share/arp-scan/ieee-iab.txt \
@@ -107,6 +110,7 @@ RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
       'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php hosts --sync-locked' \
       'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php ping' \
       'permit nopass setenv { DATABASE_PATH DHCP_NETWORK EXTRA_NETWORKS SCAN_NETWORK INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php inventory --work' \
+      'permit nopass setenv { DATABASE_PATH DHCP_NETWORK DHCP_DYNAMIC_BEGIN DHCP_DYNAMIC_END DHCP_DEFAULT_ROUTER EXTRA_NETWORKS INVENTORY_DOWN_RETENTION_DAYS IFACE IP PASSWORD SECRET DISCORD_WEBHOOK_URL FENPING_DATA_DIR DNSMASQ_RELOAD_MODE } www-data as root cmd /usr/bin/php args /opt/fenping/cli.php doctor --runtime --json' \
       > /etc/doas.conf \
     && chmod 0400 /etc/doas.conf \
     && doas -C /etc/doas.conf

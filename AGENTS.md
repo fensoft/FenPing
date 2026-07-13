@@ -20,7 +20,7 @@ This repo uses Docker Compose with one application service.
 - `restart.sh` normally pulls published images and starts the Compose project. `./restart.sh dev` explicitly builds the current platform as the local `dev` tag.
 - `fenping` uses host networking for DHCP/DNS/TFTP and the web UI.
 - `fenping` owns the SQLite database at `/var/lib/fenping/database/fenping.sqlite3`, mounted from `data/database`.
-- `boot.sh` initializes and checks SQLite, backfills service-change notifications, refreshes the IEEE vendor registry into persistent state and SQL, renders dnsmasq config, starts BusyBox cron, sends the restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
+- `boot.sh` runs the blocking network doctor, initializes and checks SQLite, backfills service-change notifications, refreshes the IEEE vendor registry into persistent state and SQL, renders dnsmasq config, starts BusyBox cron, sends the restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
 - Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
 Do not add a separate database service or split dnsmasq into another container unless the user explicitly asks.
@@ -66,6 +66,8 @@ nginx's document root is `/var/www/public`. Application code lives in `/opt/fenp
 Run application commands through the `fenping` container:
 
 ```bash
+docker compose run --rm --no-deps app php /opt/fenping/cli.php doctor [--json] # startup mode, with app stopped
+docker exec fenping php /opt/fenping/cli.php doctor --runtime [--json]
 docker exec fenping php /opt/fenping/cli.php database
 docker exec fenping php /opt/fenping/cli.php ping [--network IPv4/24] [1-254|DEBUG]
 docker exec fenping php /opt/fenping/cli.php hosts

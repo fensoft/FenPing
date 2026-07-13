@@ -39,6 +39,11 @@ run_image_cli() {
     -v "$(pwd)/data/backups:/var/lib/fenping/backups" \
     "$image" php /opt/fenping/cli.php "$@"
 }
+run_data_root() {
+  local image="$1"
+  shift
+  docker run --rm -v "$(pwd)/data:/data" "$image" "$@"
+}
 
 verify_with_image() {
   local image="$1" image_id="$2" filename="$3"
@@ -127,7 +132,8 @@ rollback_upgrade() {
     return 1
   }
 
-  current_id=$(docker inspect fenping --format '{{.Image}}' 2>/dev/null || journal_value "$journal" target_image_id)
+  current_id=$(docker inspect fenping --format '{{.Image}}' 2>/dev/null || true)
+  [ -n "$current_id" ] || current_id=$(journal_value "$journal" target_image_id)
   local current_tag="fenping-rollback-current:$id"
   docker image tag "$current_id" "$current_tag"
   if docker inspect fenping >/dev/null 2>&1; then
@@ -146,7 +152,7 @@ rollback_upgrade() {
 
   work="$(pwd)/data/state/rollback-work-$id"
   displaced="$(pwd)/data/state/rollback-displaced-$id"
-  rm -rf "$work" "$displaced"
+  run_data_root "$previous_tag" rm -rf "/data/state/rollback-work-$id" "/data/state/rollback-displaced-$id"
   mkdir -p "$work/database" "$work/netboot" "$displaced"
   if ! (
   docker run --rm --env-file .env \
@@ -161,19 +167,22 @@ rollback_upgrade() {
     -e FENPING_DATA_DIR=/restore \
     -e DATABASE_PATH=/restore/database/fenping.sqlite3 \
     -v "$work:/restore" \
-    "$previous_tag" php /opt/fenping/cli.php database
+    "$previous_tag" php /opt/fenping/cli.php database &&
+  docker run --rm \
+    -v "$work:/restore" \
+    "$previous_tag" chown -R www-data:www-data /restore/database /restore/netboot
   ); then
     echo "rollback checkpoint could not be staged; restarting the current image without replacing live data" >&2
     export FENPING_IMAGE=fenping-rollback-current FENPING_VERSION="$id"
     docker compose up -d --remove-orphans --pull never || true
-    rm -rf "$work" "$displaced"
+    run_data_root "$previous_tag" rm -rf "/data/state/rollback-work-$id" "/data/state/rollback-displaced-$id"
     return 1
   fi
 
-  mv "$(pwd)/data/database" "$displaced/database"
-  mv "$(pwd)/data/netboot" "$displaced/netboot"
-  mv "$work/database" "$(pwd)/data/database"
-  mv "$work/netboot" "$(pwd)/data/netboot"
+  run_data_root "$previous_tag" mv /data/database "/data/state/rollback-displaced-$id/database"
+  run_data_root "$previous_tag" mv /data/netboot "/data/state/rollback-displaced-$id/netboot"
+  run_data_root "$previous_tag" mv "/data/state/rollback-work-$id/database" /data/database
+  run_data_root "$previous_tag" mv "/data/state/rollback-work-$id/netboot" /data/netboot
 
   export FENPING_IMAGE
   FENPING_IMAGE=$(printf '%s' "$previous_tag" | cut -d: -f1)
@@ -181,7 +190,7 @@ rollback_upgrade() {
   FENPING_VERSION=$(printf '%s' "$previous_tag" | cut -d: -f2)
   if docker compose up -d --remove-orphans --pull never && wait_for_fenping; then
     update_journal_status "$journal" rolled-back
-    rm -rf "$displaced" "$work"
+    run_data_root "$previous_tag" rm -rf "/data/state/rollback-displaced-$id" "/data/state/rollback-work-$id"
     docker image rm "$current_tag" >/dev/null 2>&1 || true
     echo "rollback complete; post-upgrade state saved to data/backups/$rescue"
     return 0
@@ -190,9 +199,9 @@ rollback_upgrade() {
   echo "rollback image failed health checks; restoring the displaced post-upgrade state" >&2
   docker stop --time 30 fenping >/dev/null 2>&1 || true
   docker rm fenping >/dev/null 2>&1 || true
-  rm -rf "$(pwd)/data/database" "$(pwd)/data/netboot"
-  mv "$displaced/database" "$(pwd)/data/database"
-  mv "$displaced/netboot" "$(pwd)/data/netboot"
+  run_data_root "$previous_tag" rm -rf /data/database /data/netboot
+  run_data_root "$previous_tag" mv "/data/state/rollback-displaced-$id/database" /data/database
+  run_data_root "$previous_tag" mv "/data/state/rollback-displaced-$id/netboot" /data/netboot
   export FENPING_IMAGE=fenping-rollback-current FENPING_VERSION="$id"
   docker compose up -d --remove-orphans --pull never || true
   return 1
@@ -206,13 +215,18 @@ run_restart() {
   fi
   if [ "$mode" = "demo" ]; then build_demo_backup; fi
 
-  local id previous_id="" previous_ref="" previous_digest="" previous_tag=""
+  local id previous_id="" previous_ref="" previous_digest="" previous_tag="" previous_running="false"
   local target_ref target_id target_digest target_tag archive checksum journal=""
   id="$(date -u +%Y%m%d-%H%M%S)-$$"
   if docker inspect fenping >/dev/null 2>&1; then
-    if [ "$(docker inspect fenping --format '{{.State.Running}}')" != "true" ]; then
+    if [ "$(docker inspect fenping --format '{{.State.Running}}')" = "true" ]; then
+      previous_running="true"
+    elif [ "$mode" != "dev" ]; then
       docker start fenping >/dev/null
       wait_for_fenping
+      previous_running="true"
+    else
+      echo "existing FenPing container is stopped; dev build will replace it without reviving obsolete code"
     fi
     previous_id=$(docker inspect fenping --format '{{.Image}}')
     previous_ref=$(docker inspect fenping --format '{{.Config.Image}}')
@@ -239,7 +253,11 @@ run_restart() {
 
   if [ -n "$previous_id" ]; then
     archive="fenping-pre-upgrade-$(date -u +%Y%m%d-%H%M%S).tgz"
-    docker exec fenping php /opt/fenping/cli.php backup "/var/lib/fenping/backups/$archive"
+    if [ "$previous_running" = "true" ]; then
+      docker exec fenping php /opt/fenping/cli.php backup "/var/lib/fenping/backups/$archive"
+    else
+      run_image_cli "$target_tag" backup "/var/lib/fenping/backups/$archive"
+    fi
     verify_with_image "$target_tag" "$target_id" "$archive"
     checksum=$(docker run --rm -v "$BACKUP_DIR:/backups:ro" "$target_tag" sha256sum "/backups/$archive" | awk '{print $1}')
     [ -n "$checksum" ] || { echo "failed to record the verified backup checksum" >&2; return 1; }

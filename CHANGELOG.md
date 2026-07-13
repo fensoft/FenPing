@@ -10,6 +10,8 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Added
 
+- Added an every-startup network doctor that blocks all services until interface, subnet, on-link router, DHCP pool endpoints, required ports, persistent storage, SQLite WAL, and absence of competing DHCP servers are verified.
+- Added an admin-only Doctor page and authenticated API with privileged runtime checks for FenPing-owned listeners, storage, routing, and competing DHCP servers.
 - Added configured multi-network ping and inventory scanning with informational explicit-route detection, independent persistent round-robin scheduling, scan-only remote hosts, and an Inventory network selector that labels unrouted networks without disabling them.
 - Added read-only category grouping for extra networks, including restored legacy category ranges and HTML-entity decoding for their labels.
 - Added a single-file SQLite database at `data/database/fenping.sqlite3`, with automatic schema initialization and integrity checking at boot.
@@ -58,6 +60,7 @@ Development after the `1.5` tag through 2026-07-12.
 
 ### Fixed
 
+- Fixed startup with an intentionally omitted `DHCP_DEFAULT_ROUTER` by skipping router reachability and explicitly suppressing the dnsmasq router option.
 - Fixed retained successful scans incorrectly marking scan-only extra-network hosts online when their latest ping state is Down.
 - Fixed SQLite queue claims so concurrent coordinators cannot claim duplicate jobs or exceed four running scans.
 - Fixed transactional DHCP coordination under SQLite by acquiring the database writer before applying validated dnsmasq candidates.

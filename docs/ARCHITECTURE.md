@@ -9,16 +9,17 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 1. `restart.sh` creates persistent directories under `data/`.
 2. restart.sh records the running image digest, pulls or builds and pins the target image, then creates and restore-tests a pre-upgrade archive before stopping the current app. Upgrade outcomes are journaled for rollback.
 3. Compose starts `fenping` with host networking, reduced capabilities, and persistent mounts including `data/database`.
-4. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, downloads the IEEE vendor registries, and synchronizes changed assignments into SQLite.
-5. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
-6. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, and sends `/api/...` to PHP-FPM through a Unix socket. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
+4. `boot.sh` runs the blocking startup doctor before opening SQLite or starting any daemon.
+5. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, downloads the IEEE vendor registries, and synchronizes changed assignments into SQLite.
+6. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
+7. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, and sends `/api/...` to PHP-FPM through a Unix socket. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
 
 ## Docker Build
 
 `Dockerfile` has two stages:
 
 - `frontend`: uses `node:22-alpine` to run `npm ci` and `npm run build`.
-- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM and PDO SQLite, dnsmasq, nmap with scripts, minimal IP/ping/arping tools, and doas. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
+- runtime: uses `alpine:3.23` and installs nginx, PHP 8.4 with FPM and PDO SQLite, dnsmasq, nmap with default scripts plus `broadcast-dhcp-discover`, minimal IP/ping/arping tools, and doas. BusyBox supplies cron, `timeout`, and the remaining shell utilities.
 
 The image contains no database server or SQL client process. SQLite is embedded through PDO and persists its database and WAL files on the application bind mount.
 
@@ -165,6 +166,10 @@ The DHCP services under `src/Dhcp/` generate:
 
 `boot.sh` renders `/etc/dnsmasq.d/fenping.conf` from `dnsmasq.conf.template`.
 The required `IFACE` environment variable selects the host network interface that dnsmasq binds to for DHCP, DNS, and TFTP. Startup fails if it is unset.
+
+`FenPing\Doctor\DoctorService` runs on every startup before database initialization. It aggregates interface/address/routing, configured-router ARP reachability, pool endpoint overlap, TCP/UDP bind availability, persistent-write/SQLite-WAL, and active DHCP-discovery results. When `DHCP_DEFAULT_ROUTER` is absent, router reachability is reported as not configured and the rendered dnsmasq configuration explicitly suppresses DHCP option 3. DNS TCP/UDP 53, interface-bound DHCP UDP 67, TFTP UDP 69, and wildcard HTTP TCP 80 must all be available. Nmap's retained `broadcast-dhcp-discover` script is restricted to `IFACE` and uses its fixed client MAC with a five-second response timeout. Any offer or inability to complete the safety probe blocks all services; `restart.sh` stops the resulting restart loop and retains the failed replacement for logs or rollback.
+
+The authenticated `GET /api/doctor` route invokes the exact `doctor --runtime --json` CLI command as root through the constrained `doas` policy. Runtime mode uses `ss` to inspect DNS, DHCP, TFTP, and HTTP listeners. It accepts direct process metadata when available and, under the reduced capability set where dnsmasq file-descriptor ownership is intentionally hidden, requires the expected dnsmasq or nginx process to be live. DHCP discovery removes only a response whose server identifier is FenPing's configured appliance address. The admin-only Vue Doctor page displays the complete report and remediation text; PHP-FPM never receives a general-purpose privileged command capability.
 
 `DHCP_NETWORK` is a required canonical `/24`. `EXTRA_NETWORKS` optionally lists comma-separated scan-only `/24` networks. FenPing reports whether a connected or static non-default route covers each extra network, but the status is informational and does not disable scanning. Default and partial routes do not count as explicit routes. dnsmasq generation and all DHCP/IPAM/host/category/netboot mutations remain restricted to `DHCP_NETWORK`.
 

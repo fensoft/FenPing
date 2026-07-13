@@ -13,7 +13,7 @@ FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
 DATABASE_PATH=${DATABASE_PATH:-/var/lib/fenping/database/fenping.sqlite3}
 export FENPING_DATA_DIR DATABASE_PATH
 DATABASE_DIR=$(dirname "$DATABASE_PATH")
-mkdir -p "$DATABASE_DIR" /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
+mkdir -p "$DATABASE_DIR" /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc
 
 # Keep the bind-mounted SQLite directory and file under the host user's existing
 # ownership and mode. Match the unprivileged application worker to that numeric
@@ -27,10 +27,6 @@ if [ "$DATABASE_GID" -ne 0 ] && [ "$DATABASE_GID" -ne "$(id -g www-data)" ]; the
   sed -i "s/^\(www-data:[^:]*:[^:]*:\)[^:]*/\1$DATABASE_GID/" /etc/passwd
   sed -i "s/^\(www-data:[^:]*:\)[^:]*/\1$DATABASE_GID/" /etc/group
 fi
-if ! su www-data -s /bin/sh -c 'test -w "$(dirname "$DATABASE_PATH")" && { [ ! -e "$DATABASE_PATH" ] || [ -w "$DATABASE_PATH" ]; }'; then
-  echo "fatal: current permissions do not allow the database owner to write $DATABASE_PATH" >&2
-  exit 1
-fi
 
 chown www-data:www-data /var/lib/fenping/netboot
 chgrp www-data /var/lib/fenping/backups
@@ -42,9 +38,14 @@ install -d -o www-data -g www-data -m 0750 /tmp/nginx
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/client-body
 install -d -o www-data -g www-data -m 0700 /tmp/nginx/fastcgi
 install -m 0666 /dev/null /tmp/fenping-dnsmasq-update.lock
-su www-data -s /bin/sh -c 'exec php /opt/fenping/cli.php database'
-IP=${IP:-$(ip -4 a show dev "$IFACE" | awk '/inet/ {print $2}' | head -n1 | sed 's#/.*##')}
+for file in /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts; do
+  [ -e "$file" ] || install -m 0644 /dev/null "$file"
+done
+[ -e /var/lib/misc/dnsmasq.leases ] || install -m 0644 /dev/null /var/lib/misc/dnsmasq.leases
+IP=${IP:-$(ip -4 a show dev "$IFACE" 2>/dev/null | awk '/inet/ {print $2}' | head -n1 | sed 's#/.*##')}
 export IP
+php /opt/fenping/cli.php doctor
+su www-data -s /bin/sh -c 'exec php /opt/fenping/cli.php database'
 DHCP_ADDRESS=${DHCP_NETWORK%/24}
 DHCP_PREFIX=${DHCP_ADDRESS%.*}
 export DHCP_NETWORK
@@ -59,8 +60,13 @@ if ! php /opt/fenping/cli.php oui-refresh; then
   echo "warning: IEEE OUI startup refresh failed; keeping the existing vendor cache and SQL data" >&2
   php /opt/fenping/cli.php oui-sync || true
 fi
-mkdir -p /etc/dnsmasq.d
 DNSMASQ_RENDERED=/run/fenping/dnsmasq.conf
+if [ -n "${DHCP_DEFAULT_ROUTER:-}" ]; then
+  DHCP_ROUTER_OPTION="dhcp-option=option:router,$DHCP_DEFAULT_ROUTER"
+else
+  DHCP_ROUTER_OPTION="dhcp-option=option:router"
+fi
+export DHCP_ROUTER_OPTION
 cp dnsmasq.conf.template "$DNSMASQ_RENDERED"
 for i in $(env | sed 's#=.*##' | grep -v '^_$' | awk '{ print length, $0 }' | sort -r -n -s | cut -d' ' -f2-) IFACE ME; do
   eval "CURRENT=\${$i}"
@@ -68,11 +74,6 @@ for i in $(env | sed 's#=.*##' | grep -v '^_$' | awk '{ print length, $0 }' | so
 done
 cmp -s "$DNSMASQ_RENDERED" /etc/dnsmasq.d/fenping.conf || install -m 0644 "$DNSMASQ_RENDERED" /etc/dnsmasq.d/fenping.conf
 rm -f /etc/dnsmasq.d/fenping.conf.bak
-for file in /etc/dnsmasq.d/fenping.dhcp-hosts /etc/dnsmasq.d/fenping.dhcp-opts /etc/dnsmasq.d/fenping.hosts; do
-  [ -e "$file" ] || install -m 0644 /dev/null "$file"
-done
-mkdir -p /var/lib/misc
-[ -e /var/lib/misc/dnsmasq.leases ] || install -m 0644 /dev/null /var/lib/misc/dnsmasq.leases
 cat > /etc/crontabs/root <<'EOF'
 0 * * * * php /opt/fenping/cli.php inventory
 * * * * * php /opt/fenping/cli.php inventory --work
