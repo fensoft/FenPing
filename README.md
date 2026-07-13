@@ -151,6 +151,8 @@ Do not delete `data/` casually. It is the appliance state.
 | `data/backups` | `/var/lib/fenping/backups` | Backup archives and imported dumps. |
 | `data/state` | `/var/lib/fenping/state` | Refreshed IEEE vendor registry and optional state/health files. |
 
+FenPing preserves the existing owner and mode of `data/database` and its SQLite files. The container maps its unprivileged application worker to the directory's numeric owner and group, so the user that creates `data/database` must be able to write it.
+
 nginx serves only `/var/www/public`, which contains the built frontend and the small API entrypoint. PHP application code lives in `/opt/fenping`; runtime files under `/var/lib/fenping` are not directly web-accessible. nginx explicitly rejects dotfiles, private extensions, and legacy runtime paths, while netboot files can only be downloaded through the validated API route.
 
 ### SSD write endurance

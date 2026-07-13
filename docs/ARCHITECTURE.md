@@ -43,6 +43,8 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 | `data/backups` | `/var/lib/fenping/backups` | backup archives and imported dumps |
 | `data/state` | `/var/lib/fenping/state` | refreshed IEEE vendor registry and optional state files |
 
+Startup does not change the owner or mode of the database directory or SQLite files. Instead, the `www-data` worker adopts the bind mount's numeric owner and group before database initialization.
+
 The web root contains only the built frontend, static scan stylesheet assets, favicons, and the public API entrypoint. PHP modules, CLI code, templates, schema files, `.env` in development, and all persistent state remain outside the web root. nginx also explicitly denies dotfiles, source/config extensions, and legacy runtime URL paths.
 
 Avoid destructive edits in `data/` unless explicitly requested.

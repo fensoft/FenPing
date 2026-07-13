@@ -8,15 +8,33 @@ if [ -z "${IFACE:-}" ]; then
 fi
 echo "host networking enabled on $IFACE; leaving host routes, addresses and iptables unchanged"
 cd /opt/fenping
-mkdir -p /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
-chown www-data:www-data /var/lib/fenping/netboot
-chgrp www-data /var/lib/fenping/backups
-chmod 0750 /var/lib/fenping/backups
 umask 0007
 FENPING_DATA_DIR=${FENPING_DATA_DIR:-/var/lib/fenping}
 DATABASE_PATH=${DATABASE_PATH:-/var/lib/fenping/database/fenping.sqlite3}
 export FENPING_DATA_DIR DATABASE_PATH
-install -d -o www-data -g www-data -m 2770 "$(dirname "$DATABASE_PATH")"
+DATABASE_DIR=$(dirname "$DATABASE_PATH")
+mkdir -p "$DATABASE_DIR" /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state
+
+# Keep the bind-mounted SQLite directory and file under the host user's existing
+# ownership and mode. Match the unprivileged application worker to that numeric
+# owner instead of changing permissions on live database storage.
+DATABASE_UID=$(stat -c '%u' "$DATABASE_DIR")
+DATABASE_GID=$(stat -c '%g' "$DATABASE_DIR")
+if [ "$DATABASE_UID" -ne 0 ] && [ "$DATABASE_UID" -ne "$(id -u www-data)" ]; then
+  sed -i "s/^www-data:\([^:]*\):[^:]*:/www-data:\1:$DATABASE_UID:/" /etc/passwd
+fi
+if [ "$DATABASE_GID" -ne 0 ] && [ "$DATABASE_GID" -ne "$(id -g www-data)" ]; then
+  sed -i "s/^\(www-data:[^:]*:[^:]*:\)[^:]*/\1$DATABASE_GID/" /etc/passwd
+  sed -i "s/^\(www-data:[^:]*:\)[^:]*/\1$DATABASE_GID/" /etc/group
+fi
+if ! su www-data -s /bin/sh -c 'test -w "$(dirname "$DATABASE_PATH")" && { [ ! -e "$DATABASE_PATH" ] || [ -w "$DATABASE_PATH" ]; }'; then
+  echo "fatal: current permissions do not allow the database owner to write $DATABASE_PATH" >&2
+  exit 1
+fi
+
+chown www-data:www-data /var/lib/fenping/netboot
+chgrp www-data /var/lib/fenping/backups
+chmod 0750 /var/lib/fenping/backups
 install -d -o www-data -g www-data -m 0750 /run/fenping
 install -d -o www-data -g www-data -m 0700 /run/fenping/dnsmasq-pending
 install -d -o www-data -g www-data -m 0700 /run/fenping/sessions
