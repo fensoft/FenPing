@@ -56,6 +56,52 @@ final class ApiKernelTest extends IntegrationTestCase
         self::assertSame(400, $unknown->status);
     }
 
+    public function testInventoryReportsEffectivePortsFromLatestUsableScan(): void
+    {
+        $ip = '192.0.2.10';
+        $this->app()->backend()->savePingHosts([
+            ['ip' => $ip, 'mac' => '02:00:00:00:00:10', 'status' => 'Up'],
+        ]);
+
+        $deep = $this->app()->scanJobs()->start($ip, 'deep');
+        $this->app()->scanJobs()->complete($deep, $this->scanResult([
+            $this->scanPort(22, 'ssh'),
+            $this->scanPort(443, 'https'),
+        ]));
+
+        $fast = $this->app()->scanJobs()->start($ip, 'lightweight');
+        $this->app()->scanJobs()->complete($fast, $this->scanResult([]));
+        $fastInventory = $this->inventoryHost($ip);
+        self::assertSame($fast, $fastInventory['scan']['id']);
+        self::assertSame(0, $fastInventory['scan']['ports_count']);
+        self::assertSame(2, $fastInventory['scan']['effective_ports_count']);
+
+        $standard = $this->app()->scanJobs()->start($ip, 'standard');
+        $this->app()->scanJobs()->complete($standard, $this->scanResult([
+            $this->scanPort(22, 'ssh'),
+            $this->scanPort(80, 'http'),
+        ]));
+        $standardInventory = $this->inventoryHost($ip);
+        self::assertSame(2, $standardInventory['scan']['ports_count']);
+        self::assertSame(3, $standardInventory['scan']['effective_ports_count']);
+
+        $effectiveResponse = $this->app()->api()->handle(
+            $this->request('GET', "/api/scans/$ip/history/$standard"),
+        );
+        self::assertSame(200, $effectiveResponse->status);
+        $effective = json_decode($effectiveResponse->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame($standardInventory['scan']['effective_ports_count'], $effective['ports_count']);
+
+        $down = $this->app()->scanJobs()->start($ip, 'lightweight');
+        $this->app()->scanJobs()->complete($down, $this->scanResult([], 'down'));
+        $downInventory = $this->inventoryHost($ip);
+        self::assertSame($down, $downInventory['scan']['id']);
+        self::assertSame('down', $downInventory['scan']['status']);
+        self::assertSame(0, $downInventory['scan']['ports_count']);
+        self::assertSame(3, $downInventory['scan']['effective_ports_count']);
+        self::assertTrue($downInventory['scan']['result_available']);
+    }
+
     public function testIpamReturnsEveryConfiguredSubnetAndItsObservedDevices(): void
     {
         $this->app()->backend()->savePingHosts([
@@ -147,5 +193,34 @@ final class ApiKernelTest extends IntegrationTestCase
     private function request(string $method, string $uri): Request
     {
         return new Request($method, $uri, [], [], [], ['REQUEST_METHOD' => $method, 'REQUEST_URI' => $uri], []);
+    }
+
+    private function inventoryHost(string $ip): array
+    {
+        $response = $this->app()->api()->handle($this->request('GET', '/api/inventory'));
+        self::assertSame(200, $response->status);
+        $body = json_decode($response->body, true, flags: JSON_THROW_ON_ERROR);
+        $hosts = array_column($body['hosts'], null, 'ip');
+        self::assertArrayHasKey($ip, $hosts);
+        return $hosts[$ip];
+    }
+
+    private function scanResult(array $ports, string $status = 'up'): array
+    {
+        return [
+            'status' => $status,
+            'duration' => 1,
+            'ports' => $ports,
+        ];
+    }
+
+    private function scanPort(int $port, string $service): array
+    {
+        return [
+            'protocol' => 'tcp',
+            'port' => $port,
+            'state' => 'open',
+            'service' => $service,
+        ];
     }
 }

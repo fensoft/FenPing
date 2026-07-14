@@ -247,7 +247,7 @@ function serviceLabel(host) {
   if (host?.scan?.state === 'failed') return t('Scan failed');
   if (host?.scan?.state === 'timeout') return t('Scan timed out');
   if (!host?.scan?.result_available && !host?.scan?.snapshot_id) return '-';
-  const count = Number(host?.scan?.ports_count || 0);
+  const count = Number(host?.scan?.effective_ports_count ?? host?.scan?.ports_count ?? 0);
   return t(count === 1 ? '{count} service' : '{count} services', { count });
 }
 function serviceTitle(host) {

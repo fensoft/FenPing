@@ -261,6 +261,45 @@ public function getInventory(?string $networkCidr = null) {
 
 public function getLatestScans() {
   $stmt = $this->getDb()->prepare("
+    WITH latest_results AS (
+      SELECT result.id, result.ip, result.mode, result.snapshot_id
+      FROM scans result
+      INNER JOIN (
+        SELECT ip, MAX(id) AS id
+        FROM scans
+        WHERE state='complete'
+          AND snapshot_id IS NOT NULL
+        GROUP BY ip
+      ) latest_result ON latest_result.id=result.id
+    ),
+    effective_snapshots AS (
+      SELECT ip, snapshot_id
+      FROM latest_results
+      UNION ALL
+      SELECT latest_results.ip, (
+        SELECT deep.snapshot_id
+        FROM scans deep
+        WHERE deep.ip=latest_results.ip
+          AND deep.id<latest_results.id
+          AND deep.mode='deep'
+          AND deep.state='complete'
+          AND deep.snapshot_id IS NOT NULL
+        ORDER BY deep.id DESC
+        LIMIT 1
+      ) AS snapshot_id
+      FROM latest_results
+      WHERE latest_results.mode IN ('quick', 'lightweight', 'standard')
+    ),
+    effective_ports AS (
+      SELECT DISTINCT snapshots.ip, ports.protocol, ports.port
+      FROM effective_snapshots snapshots
+      INNER JOIN scan_snapshot_ports ports ON ports.snapshot_id=snapshots.snapshot_id
+    ),
+    effective_counts AS (
+      SELECT ip, COUNT(*) AS ports_count
+      FROM effective_ports
+      GROUP BY ip
+    )
     SELECT
       s.id,
       s.ip,
@@ -281,19 +320,16 @@ public function getLatestScans() {
       s.snapshot_id,
       s.result_changed,
       s.error,
-      EXISTS(
-        SELECT 1
-        FROM scans result
-        WHERE result.ip=s.ip
-          AND result.state='complete'
-          AND result.snapshot_id IS NOT NULL
-      ) AS result_available
+      latest_results.id IS NOT NULL AS result_available,
+      COALESCE(effective_counts.ports_count, 0) AS effective_ports_count
     FROM scans s
     INNER JOIN (
       SELECT ip, MAX(id) id
       FROM scans
       GROUP BY ip
     ) latest ON latest.id=s.id
+    LEFT JOIN latest_results ON latest_results.ip=s.ip
+    LEFT JOIN effective_counts ON effective_counts.ip=s.ip
   ");
   $stmt->execute();
 
@@ -303,6 +339,7 @@ public function getLatestScans() {
     $resultAvailable = (int)$row['result_available'] === 1;
     $metadata = $this->scanNormalizeMetadata($row, $queueAnnotations);
     $metadata['result_available'] = $resultAvailable;
+    $metadata['effective_ports_count'] = (int)$row['effective_ports_count'];
     $metadata['xml_usable'] = $resultAvailable;
     $metadata['xml_url'] = $resultAvailable ? $this->scanXmlUrl($metadata['ip']) : null;
     $metadata['xml'] = $metadata['xml_url'];
