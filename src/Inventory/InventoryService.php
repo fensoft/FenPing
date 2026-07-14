@@ -22,6 +22,7 @@ final readonly class InventoryService
     }
 
     public function inventory(): array { return $this->backend->getInventory(); }
+    public function forNetwork(?string $networkCidr = null): array { return $this->backend->getInventory($networkCidr); }
     public function run(array $arguments): int { return $this->backend->runInventoryCommand($arguments); }
     public function scheduledTargets(array $hosts, ?int $now = null): array { return $this->backend->inventoryScheduledTargets($hosts, $now); }
     public function initialUnmanagedHour(string $ip): int { return $this->backend->inventoryInitialUnmanagedScanHour($ip); }

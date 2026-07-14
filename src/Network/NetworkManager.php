@@ -45,9 +45,10 @@ final readonly class NetworkManager
 
     public function descriptors(): array
     {
-        return array_map(function (Ipv4Network $network): array {
+        $observation = $this->routeObservations();
+        return array_map(function (Ipv4Network $network) use ($observation): array {
             $dhcp = $network->cidr === $this->config->dhcpNetwork->cidr;
-            $routed = $dhcp || $this->routes->isRouted($network);
+            $routed = $dhcp || isset($observation['networks'][$network->cidr]);
             return [
                 'cidr' => $network->cidr,
                 'prefix' => $network->prefix(),
@@ -57,6 +58,20 @@ final readonly class NetworkManager
                 'docker_network_names' => $this->config->dockerNetworkNames[$network->cidr] ?? [],
             ];
         }, $this->configured());
+    }
+
+    /** @return array{status: string, networks: array<string, array>} */
+    public function routeObservations(): array
+    {
+        $inspection = $this->routes->inspect();
+        $observations = [];
+        foreach ($this->configured() as $network) {
+            $route = RouteDetector::coveringRoute($inspection['routes'], $network);
+            if ($route !== null) {
+                $observations[$network->cidr] = $route;
+            }
+        }
+        return ['status' => $inspection['status'], 'networks' => $observations];
     }
 
     public function nextScheduled(string $job): Ipv4Network

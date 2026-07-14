@@ -15,6 +15,7 @@ use FenPing\Api\Controller\NetbootController;
 use FenPing\Api\Controller\RouteAdapter;
 use FenPing\Api\Controller\ScanController;
 use FenPing\Api\Controller\SystemController;
+use FenPing\Api\Controller\TopologyController;
 use FenPing\Auth\AuthService;
 use FenPing\Backend\Backend;
 use FenPing\Backup\BackupService;
@@ -46,6 +47,8 @@ use FenPing\Ipam\IpConflictDetector;
 use FenPing\Ipam\IpConflictRepository;
 use FenPing\Ipam\IpamService;
 use FenPing\Netboot\NetbootImageService;
+use FenPing\Network\NetworkManager;
+use FenPing\Network\RouteDetector;
 use FenPing\Ping\PingScanner;
 use FenPing\Process\NativeProcessRunner;
 use FenPing\Process\ProcessRunner;
@@ -61,6 +64,8 @@ use FenPing\Scan\XmlCodec;
 use FenPing\Status\NotificationService;
 use FenPing\Status\StatusHistoryService;
 use FenPing\Support\SystemClock;
+use FenPing\Topology\TopologyRepository;
+use FenPing\Topology\TopologyService;
 use FenPing\Vendor\VendorLookup;
 
 final class Application
@@ -68,6 +73,7 @@ final class Application
     private readonly DatabaseManager $database;
     private readonly OperationTracker $operations;
     private readonly Backend $backend;
+    private readonly NetworkManager $networks;
     private readonly IpConflictRepository $ipConflicts;
     private readonly IpConflictDetector $ipConflictDetector;
     private readonly AuthService $auth;
@@ -84,6 +90,7 @@ final class Application
     private readonly IpamService $ipam;
     private readonly BackupService $backups;
     private readonly DoctorService $doctor;
+    private readonly TopologyService $topology;
     private readonly ProcessRunner $processes;
     private readonly DockerNetworkRefreshService $dockerNetworkRefresh;
     private readonly DockerNetworkWatcher $dockerNetworkWatcher;
@@ -98,6 +105,7 @@ final class Application
         $this->auth = new AuthService($config);
         $this->ipConflicts = new IpConflictRepository($this->database, $this->liveUpdates);
         $this->processes = new NativeProcessRunner();
+        $this->networks = new NetworkManager($config, new RouteDetector($this->processes));
         $dockerSocket = getenv('DOCKER_SOCKET');
         $dockerSource = new DockerEngineClient(
             $this->processes,
@@ -119,6 +127,7 @@ final class Application
             $this->ipConflicts,
             $this->ipConflictDetector,
             $this->operations,
+            networks: $this->networks,
             dockerNetworks: $dockerCache,
             liveUpdates: $this->liveUpdates,
             httpTransport: $httpTransport,
@@ -128,6 +137,12 @@ final class Application
         $this->snapshots = new SnapshotRepository($this->backend, $this->database);
         $this->vendors = new VendorLookup($this->backend, $config, $this->database);
         $this->inventory = new InventoryService($this->backend, $config, $this->database, $this->scanJobs, $clock);
+        $this->topology = new TopologyService(
+            $config,
+            $this->networks,
+            $this->inventory,
+            new TopologyRepository($this->database),
+        );
         $this->hosts = new HostRepository($this->backend, $this->database);
         $this->categories = new CategoryRepository($this->backend, $config, $this->database);
         $this->history = new StatusHistoryService($this->backend, $this->database, $clock);
@@ -190,6 +205,7 @@ final class Application
             new NetbootController($this->backend, $this->netboot, $mutations, $adapter),
             new BackupController($this->backups),
             new ScanController($this->backend, $this->scanJobs, $this->profiles, $results, $this->vendors, $adapter),
+            new TopologyController($this->topology),
         ], $this->liveUpdates);
     }
     public function cli(): CliKernel
@@ -217,6 +233,7 @@ final class Application
     public function scanXml(): XmlCodec { return new XmlCodec($this->backend); }
     public function vendors(): VendorLookup { return $this->vendors; }
     public function inventory(): InventoryService { return $this->inventory; }
+    public function topology(): TopologyService { return $this->topology; }
     public function hosts(): HostRepository { return $this->hosts; }
     public function categories(): CategoryRepository { return $this->categories; }
     public function history(): StatusHistoryService { return $this->history; }

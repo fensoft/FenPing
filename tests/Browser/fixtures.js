@@ -105,6 +105,36 @@ function detailFor(host) {
   };
 }
 
+function topologyPayload() {
+  return {
+    generated_at: '2026-07-14T10:00:00+00:00',
+    disclaimer: 'Connections are traceroute or route-table observations and gateway configurations, not verified physical links.',
+    route_observation_status: 'ok',
+    summary: {
+      network_count: 1, node_count: 4, connection_count: 3,
+      trace_target_count: 1, router_count: 1, host_count: 3,
+      untraced_host_count: 1, last_observed_at: '2026-07-14 09:55:00'
+    },
+    networks: [{
+      id: `network:${CIDR}`, cidr: CIDR, dhcp: true, routed: true,
+      docker_network_names: ['fenping-demo'], host_count: 3, untraced_host_count: 1,
+      route: { destination: CIDR, gateway: null, interface: 'eth0', source: `${NETWORK}.100` }
+    }],
+    nodes: [
+      { id: `ip:${NETWORK}.100`, type: 'appliance', ip: `${NETWORK}.100`, label: 'FenPing', network: CIDR, roles: ['appliance'] },
+      { id: `ip:${NETWORK}.10`, type: 'router', ip: `${NETWORK}.10`, label: 'Gateway', network: CIDR, roles: ['hop', 'host', 'router'], hostname: 'gateway.lan', host: { id: 1, name: 'Gateway', mac: '02:00:00:00:00:10', status: 'Up', vendor: 'Router Labs', last_seen: '2026-07-14 10:00:00' } },
+      { id: `ip:${NETWORK}.20`, type: 'host', ip: `${NETWORK}.20`, label: 'Office printer', network: CIDR, roles: ['host', 'target'], hostname: 'printer.lan', host: { id: 2, name: 'Office printer', mac: '02:00:00:00:00:20', status: 'Down', vendor: 'Print Corp', last_seen: '2026-07-14 09:00:00' } },
+      { id: `network:${CIDR}`, type: 'network', ip: null, label: CIDR, network: CIDR, roles: ['network'] }
+    ],
+    connections: [
+      { id: 'connection:trace-1', kind: 'traceroute_observation', from: `ip:${NETWORK}.100`, to: `ip:${NETWORK}.10`, label: 'Traceroute observation', observed_at: '2026-07-14 09:55:00', missing_hops: 0, networks: [CIDR], targets: [`${NETWORK}.20`], scan_ids: [42], observation_count: 1, evidence: [{ source: 'traceroute', scan_id: 42, target_ip: `${NETWORK}.20`, ttl_from: 0, ttl_to: 1, rtt: 0.2 }] },
+      { id: 'connection:trace-2', kind: 'traceroute_observation', from: `ip:${NETWORK}.10`, to: `ip:${NETWORK}.20`, label: 'Traceroute observation', observed_at: '2026-07-14 09:55:00', missing_hops: 0, networks: [CIDR], targets: [`${NETWORK}.20`], scan_ids: [42], observation_count: 1, evidence: [{ source: 'traceroute', scan_id: 42, target_ip: `${NETWORK}.20`, ttl_from: 1, ttl_to: 2, rtt: 0.5 }] },
+      { id: 'connection:route', kind: 'route_observation', from: `ip:${NETWORK}.100`, to: `network:${CIDR}`, label: 'Route-table observation', observed_at: '2026-07-14T10:00:00+00:00', missing_hops: 0, networks: [CIDR], targets: [], scan_ids: [], observation_count: 1, evidence: [{ source: 'route_table', network: CIDR, destination: CIDR, gateway: null, interface: 'eth0', source_address: `${NETWORK}.100` }] }
+    ],
+    paths: [{ id: 'trace:42', scan_id: 42, target_ip: `${NETWORK}.20`, target_node_id: `ip:${NETWORK}.20`, network: CIDR, mode: 'standard', protocol: 'tcp', port: 80, observed_at: '2026-07-14 09:55:00', reached_target: true, node_ids: [`ip:${NETWORK}.100`, `ip:${NETWORK}.10`, `ip:${NETWORK}.20`] }]
+  };
+}
+
 async function fulfillJson(route, payload, status = 200) {
   await route.fulfill({
     status,
@@ -189,6 +219,11 @@ async function handleApi(route, api) {
 
   if (method === 'GET' && path === '/api/ipam/conflicts') {
     await fulfillJson(route, { status: 'ok', conflicts: [] });
+    return;
+  }
+
+  if (method === 'GET' && path === '/api/topology') {
+    await fulfillJson(route, topologyPayload());
     return;
   }
 

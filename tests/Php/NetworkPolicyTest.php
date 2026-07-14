@@ -165,6 +165,28 @@ final class NetworkPolicyTest extends TestCase
         self::assertFalse(RouteDetector::outputCovers("192.168.21.0/24 via 10.0.0.1 dev eth0\n", $network));
     }
 
+    public function testRouteInspectionParsesDetailsAndChoosesTheMostSpecificCoveringRoute(): void
+    {
+        $network = Ipv4Network::from24('192.168.20.0/24');
+        $routes = RouteDetector::parse(implode("\n", [
+            'default via 192.0.2.1 dev eth0',
+            '192.168.0.0/16 via 192.0.2.2 dev eth0 src 192.0.2.100',
+            '192.168.20.0/24 via 192.0.2.3 dev eth1 src 192.0.2.101',
+            'unreachable 192.168.20.0/24 metric 100',
+            'not-a-route',
+        ]));
+
+        self::assertCount(2, $routes);
+        self::assertSame([
+            'destination' => '192.168.20.0/24',
+            'address' => '192.168.20.0',
+            'prefix_length' => 24,
+            'gateway' => '192.0.2.3',
+            'interface' => 'eth1',
+            'source' => '192.0.2.101',
+        ], RouteDetector::coveringRoute($routes, $network));
+    }
+
     public function testPingAndInventoryRotateIndependently(): void
     {
         $dir = sys_get_temp_dir() . '/fenping-network-' . bin2hex(random_bytes(4));

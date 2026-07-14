@@ -18,7 +18,7 @@
     "database": {
         "name": "fenping.sqlite3",
         "tables": 26,
-        "rows": 127,
-        "bytes": 45201
+        "rows": 136,
+        "bytes": 47714
     }
 }

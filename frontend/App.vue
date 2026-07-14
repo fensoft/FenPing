@@ -13,6 +13,7 @@
             <button class="app-nav-link" :class="{ active: route.name === routeNames.notify }" type="button" :title="t('Notify')" :aria-current="route.name === routeNames.notify ? 'page' : undefined" @click="go('/notify')"><AppIcon name="bell" /><span>{{ t('Notify') }}</span></button>
           </div>
           <div class="app-nav-group app-nav-bottom">
+            <button class="app-nav-link" :class="{ active: route.name === routeNames.topology }" type="button" :title="t('Observed topology')" :aria-current="route.name === routeNames.topology ? 'page' : undefined" @click="go('/topology')"><AppIcon name="topology" /><span>{{ t('Topology') }}</span></button>
             <button class="app-nav-link" :class="{ active: route.name === routeNames.ipam }" type="button" title="IPAM" :aria-current="route.name === routeNames.ipam ? 'page' : undefined" @click="go('/ipam')"><AppIcon name="address-book" /><span>IPAM</span></button>
             <button class="app-nav-link" :class="{ active: route.name === routeNames.scans }" type="button" :title="t('Scans')" :aria-current="route.name === routeNames.scans ? 'page' : undefined" @click="go('/scans')"><AppIcon name="radar" /><span>{{ t('Scans') }}</span></button>
             <button class="app-nav-link" :class="{ active: route.name === routeNames.netboot }" type="button" :title="t('Netboot images')" :aria-current="route.name === routeNames.netboot ? 'page' : undefined" @click="go('/netboot-images')"><AppIcon name="server" /><span>{{ t('Netboot') }}</span></button>

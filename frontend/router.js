@@ -8,6 +8,7 @@ import NetbootPage from './pages/NetbootPage.vue';
 import NotificationsPage from './pages/NotificationsPage.vue';
 import ScansPage from './pages/ScansPage.vue';
 import ServicesPage from './pages/ServicesPage.vue';
+import TopologyPage from './pages/TopologyPage.vue';
 
 export const routeNames = Object.freeze({
   inventory: 'inventory',
@@ -17,6 +18,7 @@ export const routeNames = Object.freeze({
   notify: 'notify',
   scans: 'scans',
   services: 'services',
+  topology: 'topology',
   netboot: 'netboot',
   host: 'host',
   hostByIp: 'host-by-ip'
@@ -32,6 +34,7 @@ export const router = createRouter({
     { path: '/notify', name: routeNames.notify, component: NotificationsPage },
     { path: '/scans', name: routeNames.scans, component: ScansPage },
     { path: '/services', name: routeNames.services, component: ServicesPage },
+    { path: '/topology', name: routeNames.topology, component: TopologyPage },
     { path: '/netboot-images', name: routeNames.netboot, component: NetbootPage },
     { path: '/hosts/:id(\\d+)', name: routeNames.host, component: HostDetailPage },
     { path: '/hosts/by-ip/:ip', name: routeNames.hostByIp, component: HostDetailPage },
