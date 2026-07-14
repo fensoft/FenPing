@@ -2,7 +2,8 @@
 set -e
 
 SITE=${SITE:-XXX}
-PASS=${PASS:-XXX}
+PASS=${PASS-XXX}
+CATEGORY_IP=${CATEGORY_IP:-10.68.69.2}
 JSON='Content-Type: application/json'
 COOKIE=${COOKIE:-/tmp/fenping-cookie.txt}
 OUT_DIR=${OUT_DIR:-/tmp}
@@ -75,6 +76,6 @@ if [ "$TEST_IP" != "" ]; then
 fi
 
 expect_code "POST /api/ping/refresh" 200 -b "$COOKIE" -X POST "${SITE}/api/ping/refresh"
-expect_code "POST /api/categories bad" 403 -X POST -H "$JSON" -d '{"ip":"10.68.69.2","name":"a","password":"bad"}' "${SITE}/api/categories"
-expect_code "POST /api/categories" 200 -b "$COOKIE" -X POST -H "$JSON" -d '{"ip":"10.68.69.2","name":"a"}' "${SITE}/api/categories"
-expect_code "DELETE /api/categories" 200 -b "$COOKIE" -X DELETE -H "$JSON" -d '{"ip":"10.68.69.2"}' "${SITE}/api/categories"
+expect_code "POST /api/categories bad" 403 -X POST -H "$JSON" -d "{\"ip\":\"${CATEGORY_IP}\",\"name\":\"a\",\"password\":\"bad\"}" "${SITE}/api/categories"
+expect_code "POST /api/categories" 200 -b "$COOKIE" -X POST -H "$JSON" -d "{\"ip\":\"${CATEGORY_IP}\",\"name\":\"a\"}" "${SITE}/api/categories"
+expect_code "DELETE /api/categories" 200 -b "$COOKIE" -X DELETE -H "$JSON" -d "{\"ip\":\"${CATEGORY_IP}\"}" "${SITE}/api/categories"

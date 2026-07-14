@@ -1,6 +1,6 @@
 FROM composer:2 AS composer
 
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -8,7 +8,7 @@ COPY index.html vite.config.js postcss.config.mjs ./
 COPY frontend ./frontend
 RUN npm run build
 
-FROM mcr.microsoft.com/playwright:v1.61.0-noble AS frontend-test
+FROM mcr.microsoft.com/playwright:v1.61.1-noble AS frontend-test
 WORKDIR /app
 ENV CI=1
 COPY package.json package-lock.json ./
@@ -20,7 +20,7 @@ RUN npm test
 RUN npm run build
 RUN npm run test:browser
 
-FROM alpine:3.23 AS runtime-base
+FROM alpine:3.24 AS runtime-base
 RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-nselib.php,readonly \
     apk add --no-cache \
       arp-scan \
@@ -44,6 +44,7 @@ RUN --mount=type=bind,source=tools/prune-nmap-nselib.php,target=/tmp/prune-nmap-
       php84-posix \
       php84-session \
       php84-sockets \
+    && ln -s /usr/bin/php84 /usr/bin/php \
     && awk -F'"' '/categories = .*"default"/ { print $2 }' /usr/share/nmap/scripts/script.db > /tmp/nmap-retained-scripts \
     && printf '%s\n' broadcast-dhcp-discover.nse >> /tmp/nmap-retained-scripts \
     && find /usr/share/nmap/scripts -maxdepth 1 -type f -name '*.nse' | while IFS= read -r script; do \
