@@ -55,8 +55,8 @@ final class IpConflictTest extends IntegrationTestCase
         $opened = $repository->reconcile($network, $observations, $startedAt);
         self::assertSame('detected', $opened[0]['type']);
         $firstId = $opened[0]['id'];
-        self::assertCount(1, $this->app()->backend()->discordIpConflictPayloads(
-            $this->app()->backend()->ipConflictTransitionDetails($opened),
+        self::assertCount(1, $this->app()->discord()->discordIpConflictPayloads(
+            $this->app()->ipConflictService()->transitionDetails($opened),
         ));
 
         $updatedObservations = ['192.0.2.40' => [
@@ -65,8 +65,8 @@ final class IpConflictTest extends IntegrationTestCase
         ]];
         $continued = $repository->reconcile($network, $updatedObservations, $startedAt->modify('+15 minutes'));
         self::assertSame([], $continued);
-        self::assertSame([], $this->app()->backend()->discordIpConflictPayloads(
-            $this->app()->backend()->ipConflictTransitionDetails($continued),
+        self::assertSame([], $this->app()->discord()->discordIpConflictPayloads(
+            $this->app()->ipConflictService()->transitionDetails($continued),
         ));
         self::assertCount(1, $repository->active());
         self::assertSame([
@@ -76,8 +76,8 @@ final class IpConflictTest extends IntegrationTestCase
 
         $resolved = $repository->reconcile($network, [], $startedAt->modify('+30 minutes'));
         self::assertSame([['id' => $firstId, 'type' => 'resolved']], $resolved);
-        $resolvedPayloads = $this->app()->backend()->discordIpConflictPayloads(
-            $this->app()->backend()->ipConflictTransitionDetails($resolved),
+        $resolvedPayloads = $this->app()->discord()->discordIpConflictPayloads(
+            $this->app()->ipConflictService()->transitionDetails($resolved),
         );
         self::assertCount(1, $resolvedPayloads);
         self::assertStringContainsString('IP conflict resolved', $resolvedPayloads[0]['embeds'][0]['title']);
@@ -109,11 +109,11 @@ final class IpConflictTest extends IntegrationTestCase
         self::assertFalse($result['successful']);
         self::assertCount(1, $repository->active());
         self::assertSame('degraded', $repository->monitors()[0]['status']);
-        $status = $this->app()->backend()->getIpConflictStatus($network->cidr);
+        $status = $this->app()->ipConflictService()->status($network->cidr);
         self::assertSame('degraded', $status['status']);
         self::assertCount(1, $status['conflicts']);
         self::assertSame(
-            'degraded', $this->app()->backend()->getHealth()['ip_conflict_detection']['status'],
+            'degraded', $this->app()->health()->status()['ip_conflict_detection']['status'],
         );
     }
 
@@ -141,13 +141,13 @@ final class IpConflictTest extends IntegrationTestCase
         self::assertSame(1, $notifications['summary']['conflict_total']);
         self::assertSame('detected', $notifications['conflict_changes'][0]['type']);
 
-        $details = $this->app()->backend()->ipConflictTransitionDetails($opened);
-        $payloads = $this->app()->backend()->discordIpConflictPayloads($details);
+        $details = $this->app()->ipConflictService()->transitionDetails($opened);
+        $payloads = $this->app()->discord()->discordIpConflictPayloads($details);
         self::assertCount(1, $payloads);
         self::assertStringContainsString('Possible IP conflict', $payloads[0]['embeds'][0]['title']);
-        self::assertContains('ip_conflicts', $this->app()->backend()->backupTableNames());
-        self::assertContains('ip_conflict_devices', $this->app()->backend()->backupTableNames());
-        self::assertContains('ip_conflict_monitor', $this->app()->backend()->backupTableNames());
+        self::assertContains('ip_conflicts', $this->app()->backupTables()->backupTableNames());
+        self::assertContains('ip_conflict_devices', $this->app()->backupTables()->backupTableNames());
+        self::assertContains('ip_conflict_monitor', $this->app()->backupTables()->backupTableNames());
     }
 
     public function testBackupRestorePreservesConflictHistoryAndMonitorState(): void
@@ -168,9 +168,9 @@ final class IpConflictTest extends IntegrationTestCase
         $path = tempnam(sys_get_temp_dir(), 'fenping-conflicts-');
         self::assertIsString($path);
         try {
-            $written = $this->app()->backend()->backupWriteDatabaseJson($path);
+            $written = $this->app()->backupArchives()->backupWriteDatabaseJson($path);
             self::assertGreaterThanOrEqual(7, $written['rows']);
-            $document = $this->app()->backend()->backupReadJson($path, 'db.json');
+            $document = $this->app()->backupTools()->backupReadJson($path, 'db.json');
             self::assertCount(2, $document['tables']['ip_conflicts']['rows']);
             self::assertCount(4, $document['tables']['ip_conflict_devices']['rows']);
             self::assertCount(1, $document['tables']['ip_conflict_monitor']['rows']);
@@ -181,7 +181,7 @@ final class IpConflictTest extends IntegrationTestCase
             $database->exec('DELETE FROM ip_conflict_monitor');
             self::assertSame([], $repository->active());
 
-            $this->app()->backend()->backupRestoreDatabase($document);
+            $this->app()->backupDocuments()->backupRestoreDatabase($document);
             self::assertCount(1, $repository->active());
             self::assertSame('192.0.2.72', $repository->active()[0]['ip']);
             self::assertSame(2, (int) $database->query('SELECT COUNT(*) FROM ip_conflicts')->fetchColumn());

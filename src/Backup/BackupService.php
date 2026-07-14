@@ -4,21 +4,21 @@ declare(strict_types=1);
 
 namespace FenPing\Backup;
 
-use FenPing\Backend\Backend;
-use FenPing\Config\AppConfig;
-use FenPing\Database\DatabaseManager;
+use FenPing\Health\OperationTracker;
 use FenPing\Realtime\LiveUpdatePublisher;
 use FenPing\Realtime\LiveUpdateScope;
 use FenPing\Realtime\NullLiveUpdatePublisher;
 
 final readonly class BackupService
 {
-    private BackupManager $manager;
     private LiveUpdatePublisher $liveUpdates;
 
-    public function __construct(private Backend $backend, AppConfig $config, DatabaseManager $database, ?LiveUpdatePublisher $liveUpdates = null)
-    {
-        $this->manager = new BackupManager($backend, $config, $database);
+    public function __construct(
+        private BackupManager $manager,
+        private BackupArchiveTools $tools,
+        private OperationTracker $operations,
+        ?LiveUpdatePublisher $liveUpdates = null,
+    ) {
         $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
     }
 
@@ -50,18 +50,18 @@ final readonly class BackupService
     public function apiList(): array { return $this->manager->apiList(); }
     public function downloadPath(string $filename): string { return $this->manager->downloadPath($filename); }
     public function sameFilesystem(): bool { return $this->manager->sameFilesystem(); }
-    public function validateDocument(array $document, string $format, string $label): void { $this->backend->backupValidateDocument($document, $format, $label); }
-    public function archiveEntryIsSafe(string $entry): bool { return $this->backend->backupArchiveEntrySafe($entry); }
-    public function readJson(string $path, string $label): array { return $this->backend->backupReadJson($path, $label); }
+    public function validateDocument(array $document, string $format, string $label): void { $this->tools->backupValidateDocument($document, $format, $label); }
+    public function archiveEntryIsSafe(string $entry): bool { return $this->tools->backupArchiveEntrySafe($entry); }
+    public function readJson(string $path, string $label): array { return $this->tools->backupReadJson($path, $label); }
 
     private function trackBackup(callable $command): int
     {
-        $this->backend->operations->started('backup');
+        $this->operations->started('backup');
         $code = $command();
         if ($code === 0) {
-            $this->backend->operations->succeeded('backup');
+            $this->operations->succeeded('backup');
         } else {
-            $this->backend->operations->failed('backup', "command exited with code $code");
+            $this->operations->failed('backup', "command exited with code $code");
         }
         return $code;
     }

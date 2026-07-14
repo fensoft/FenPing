@@ -35,8 +35,8 @@ final class NotificationDeliveryTest extends IntegrationTestCase
 
     public function testDefaultsPersistenceBackupAndOlderBackupCompatibility(): void
     {
-        $backend = $this->app()->backend();
-        self::assertSame($backend->notificationDefaultRules(), $backend->notificationRules());
+        $backend = $this->app();
+        self::assertSame($backend->notificationRules()->notificationDefaultRules(), $backend->notificationRules()->notificationRules());
 
         $rules = [
             'restart' => false,
@@ -44,8 +44,8 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'service_changes' => ['normal' => true, 'important' => false],
             'ip_conflicts' => false,
         ];
-        self::assertSame($rules, $backend->notificationRulesUpdate($rules));
-        self::assertSame($rules, $backend->notificationRules());
+        self::assertSame($rules, $backend->notificationRules()->notificationRulesUpdate($rules));
+        self::assertSame($rules, $backend->notificationRules()->notificationRules());
         $database = $this->app()->database()->connection();
         $database->exec("
             UPDATE notification_delivery_settings
@@ -61,8 +61,8 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         $path = tempnam(sys_get_temp_dir(), 'fenping-notification-rules-');
         self::assertIsString($path);
         try {
-            $backend->backupWriteDatabaseJson($path);
-            $document = $backend->backupReadJson($path, 'db.json');
+            $backend->backupArchives()->backupWriteDatabaseJson($path);
+            $document = $backend->backupTools()->backupReadJson($path, 'db.json');
             self::assertCount(1, $document['tables']['notification_delivery_settings']['rows']);
             self::assertNotContains(
                 'telegram_chat_id',
@@ -76,8 +76,8 @@ final class NotificationDeliveryTest extends IntegrationTestCase
 
             $this->app()->database()->connection()->exec('DELETE FROM notification_delivery_settings');
             $this->restoreDocument($document);
-            self::assertSame($rules, $backend->notificationRules());
-            self::assertNull($backend->telegramSelectedChatId());
+            self::assertSame($rules, $backend->notificationRules()->notificationRules());
+            self::assertNull($backend->telegramChats()->telegramSelectedChatId());
             self::assertSame(
                 0,
                 (int) $database->query('SELECT COUNT(*) FROM telegram_known_chats')->fetchColumn(),
@@ -85,7 +85,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
 
             $document['tables']['notification_delivery_settings']['rows'] = [];
             $this->restoreDocument($document);
-            self::assertSame($backend->notificationDefaultRules(), $backend->notificationRules());
+            self::assertSame($backend->notificationRules()->notificationDefaultRules(), $backend->notificationRules()->notificationRules());
             self::assertSame(
                 1,
                 (int) $database->query(
@@ -95,7 +95,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
 
             unset($document['tables']['notification_delivery_settings']);
             $this->restoreDocument($document);
-            self::assertSame($backend->notificationDefaultRules(), $backend->notificationRules());
+            self::assertSame($backend->notificationRules()->notificationDefaultRules(), $backend->notificationRules()->notificationRules());
             self::assertSame(
                 1,
                 (int) $this->app()->database()->connection()
@@ -113,18 +113,18 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         $importantId = $this->app()->hosts()->create('192.0.2.10', '02:00:00:00:00:10');
         $database->exec("UPDATE ips SET important=1 WHERE id=$importantId");
 
-        $this->app()->backend()->savePingHosts([
+        $this->app()->pingRepository()->save([
             ['ip' => '192.0.2.10', 'mac' => '02:00:00:00:00:10', 'status' => 'Up'],
             ['ip' => '192.0.2.20', 'mac' => '02:00:00:00:00:20', 'status' => 'Up'],
         ]);
-        $afterId = $this->app()->backend()->statsMaxId();
-        $this->app()->backend()->savePingHosts([
+        $afterId = $this->app()->discord()->statsMaxId();
+        $this->app()->pingRepository()->save([
             ['ip' => '192.0.2.10', 'mac' => '02:00:00:00:00:10', 'status' => 'Down'],
             ['ip' => '192.0.2.20', 'mac' => '02:00:00:00:00:20', 'status' => 'Down'],
         ]);
 
         $classified = array_column(
-            $this->app()->backend()->discordStatusChangesSince($afterId),
+            $this->app()->discord()->discordStatusChangesSince($afterId),
             'important',
             'ip',
         );
@@ -138,10 +138,10 @@ final class NotificationDeliveryTest extends IntegrationTestCase
               (91, '192.0.2.10', 'standard', 'appeared', 'tcp', 443, 'https'),
               (92, '192.0.2.20', 'standard', 'appeared', 'tcp', 80, 'http')
         ");
-        self::assertSame(1, $this->app()->backend()->discordPortChangesForScan(91)[0]['important']);
-        self::assertSame(0, $this->app()->backend()->discordPortChangesForScan(92)[0]['important']);
+        self::assertSame(1, $this->app()->discord()->discordPortChangesForScan(91)[0]['important']);
+        self::assertSame(0, $this->app()->discord()->discordPortChangesForScan(92)[0]['important']);
 
-        $this->app()->backend()->notificationRulesUpdate([
+        $this->app()->notificationRules()->notificationRulesUpdate([
             'restart' => true,
             'host_status' => ['normal' => false, 'important' => true],
             'service_changes' => ['normal' => true, 'important' => false],
@@ -154,11 +154,11 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         ];
         self::assertSame(
             ['important'],
-            array_column($this->app()->backend()->notificationFilterStatusChanges($events), 'id'),
+            array_column($this->app()->notificationRules()->filterStatusChanges($events), 'id'),
         );
         self::assertSame(
             ['normal', 'unmanaged'],
-            array_column($this->app()->backend()->notificationFilterServiceChanges($events), 'id'),
+            array_column($this->app()->notificationRules()->filterServiceChanges($events), 'id'),
         );
     }
 
@@ -170,7 +170,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             mention: '123456789012345678',
             telegram: false,
         );
-        $application->backend()->sendDiscordStatusChanges([
+        $application->discord()->sendDiscordStatusChanges([
             $this->statusChange('normal', 0),
             $this->statusChange('important', 1),
         ]);
@@ -183,7 +183,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         self::assertSame('<@123456789012345678>', $important['content']);
         self::assertSame(['users' => ['123456789012345678']], $important['allowed_mentions']);
 
-        $servicePayloads = $application->backend()->discordPortNotificationPayloads([
+        $servicePayloads = $application->discord()->discordPortNotificationPayloads([
             ['change_type' => 'appeared', 'protocol' => 'tcp', 'port' => 80, 'important' => 0],
             ['change_type' => 'appeared', 'protocol' => 'tcp', 'port' => 443, 'important' => 1],
         ]);
@@ -196,14 +196,14 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             );
         }
 
-        $restart = $application->backend()->discordRestartPayload();
+        $restart = $application->discord()->discordRestartPayload();
         self::assertSame('<@123456789012345678>', $restart['content']);
         self::assertSame(['users' => ['123456789012345678']], $restart['allowed_mentions']);
-        $conflict = $application->backend()->discordIpConflictPayloads([[]])[0];
+        $conflict = $application->discord()->discordIpConflictPayloads([[]])[0];
         self::assertSame('<@123456789012345678>', $conflict['content']);
         self::assertSame(['users' => ['123456789012345678']], $conflict['allowed_mentions']);
 
-        self::assertTrue($application->backend()->discordPost('Plain notification'));
+        self::assertTrue($application->discord()->discordPost('Plain notification'));
         $plain = json_decode(
             $transport->requests[array_key_last($transport->requests)]['options']['body'],
             true,
@@ -217,17 +217,17 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             mention: '@everyone',
             telegram: false,
         );
-        $payload = $everyone->backend()->discordNotificationPayloads([$this->statusChange('important', 1)])[0];
+        $payload = $everyone->discord()->discordNotificationPayloads([$this->statusChange('important', 1)])[0];
         self::assertSame('@everyone', $payload['content']);
         self::assertSame(['parse' => ['everyone']], $payload['allowed_mentions']);
-        $restart = $everyone->backend()->discordRestartPayload();
+        $restart = $everyone->discord()->discordRestartPayload();
         self::assertSame('@everyone', $restart['content']);
         self::assertSame(['parse' => ['everyone']], $restart['allowed_mentions']);
-        $conflict = $everyone->backend()->discordIpConflictPayloads([[]])[0];
+        $conflict = $everyone->discord()->discordIpConflictPayloads([[]])[0];
         self::assertSame('@everyone', $conflict['content']);
         self::assertSame(['parse' => ['everyone']], $conflict['allowed_mentions']);
 
-        $disabledPayload = $this->app()->backend()->discordNotificationPayloads([
+        $disabledPayload = $this->app()->discord()->discordNotificationPayloads([
             $this->statusChange('normal', 0),
         ])[0];
         self::assertArrayNotHasKey('content', $disabledPayload);
@@ -241,21 +241,21 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         $transport->enqueue(['status' => 200, 'headers' => [], 'body' => '{"ok":true,"result":{}}']);
         $application = $this->configuredApplication($transport, mention: '@everyone');
 
-        $results = $application->backend()->sendNotificationRestartNotification();
+        $results = $application->notifications()->sendRestartNotification();
         self::assertSame(['discord' => false, 'telegram' => true], $results);
         self::assertCount(2, $transport->requests);
         self::assertStringContainsString('discord.test', $transport->requests[0]['url']);
         self::assertStringContainsString('/sendMessage', $transport->requests[1]['url']);
 
-        $statuses = $application->backend()->operations->statuses();
+        $statuses = $application->operations()->statuses();
         self::assertSame('failure', $statuses['notification_delivery']['state']);
         self::assertSame('success', $statuses['telegram_notification_delivery']['state']);
         self::assertSame('HTTP 503', $statuses['notification_delivery']['last_error']);
         $transport->enqueue(['status' => 204, 'headers' => [], 'body' => '']);
         $transport->enqueue(['status' => 502, 'headers' => [], 'body' => '{"ok":false}']);
-        $inverse = $application->backend()->sendNotificationRestartNotification();
+        $inverse = $application->notifications()->sendRestartNotification();
         self::assertSame(['discord' => true, 'telegram' => false], $inverse);
-        $statuses = $application->backend()->operations->statuses();
+        $statuses = $application->operations()->statuses();
         self::assertSame('success', $statuses['notification_delivery']['state']);
         self::assertSame('failure', $statuses['telegram_notification_delivery']['state']);
         self::assertSame(
@@ -264,21 +264,21 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         );
 
         $transport->enqueue(['status' => 200, 'headers' => [], 'body' => '{"ok":false}']);
-        self::assertFalse($application->backend()->telegramPostText('API response validation'));
-        $statuses = $application->backend()->operations->statuses();
+        self::assertFalse($application->telegram()->telegramPostText('API response validation'));
+        $statuses = $application->operations()->statuses();
         self::assertSame(
             'Telegram sendMessage failed (HTTP 200)',
             $statuses['telegram_notification_delivery']['last_error'],
         );
 
 
-        $application->backend()->notificationRulesUpdate([
+        $application->notificationRules()->notificationRulesUpdate([
             'restart' => true,
             'host_status' => ['normal' => false, 'important' => true],
             'service_changes' => ['normal' => true, 'important' => true],
             'ip_conflicts' => true,
         ]);
-        $application->backend()->sendTelegramStatusChanges([
+        $application->telegram()->sendTelegramStatusChanges([
             $this->statusChange('normal', 0),
             $this->statusChange('important', 1),
         ]);
@@ -291,7 +291,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         self::assertStringContainsString('important', $request['text']);
         self::assertStringNotContainsString('normal', $request['text']);
 
-        $messages = $application->backend()->telegramBatchMessages(
+        $messages = $application->telegram()->telegramBatchMessages(
             'FenPing test',
             array_fill(0, 30, str_repeat('é', 300)),
         );
@@ -300,18 +300,18 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             self::assertLessThan(4096, strlen($message));
         }
 
-        $application->backend()->notificationRulesUpdate([
+        $application->notificationRules()->notificationRulesUpdate([
             'restart' => true,
             'host_status' => ['normal' => false, 'important' => false],
             'service_changes' => ['normal' => true, 'important' => true],
             'ip_conflicts' => true,
         ]);
         $requestCount = count($transport->requests);
-        $application->backend()->sendDiscordStatusChanges([$this->statusChange('important', 1)]);
-        $application->backend()->sendTelegramStatusChanges([$this->statusChange('important', 1)]);
+        $application->discord()->sendDiscordStatusChanges([$this->statusChange('important', 1)]);
+        $application->telegram()->sendTelegramStatusChanges([$this->statusChange('important', 1)]);
         self::assertCount($requestCount, $transport->requests);
 
-        $application->backend()->notificationRulesUpdate([
+        $application->notificationRules()->notificationRulesUpdate([
             'restart' => true,
             'host_status' => ['normal' => true, 'important' => true],
             'service_changes' => ['normal' => true, 'important' => true],
@@ -325,7 +325,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         $get = $this->app()->api()->handle($this->request('GET', '/api/notify'));
         self::assertSame(200, $get->status);
         $getBody = json_decode($get->body, true, flags: JSON_THROW_ON_ERROR);
-        self::assertSame($this->app()->backend()->notificationDefaultRules(), $getBody['delivery']['rules']);
+        self::assertSame($this->app()->notificationRules()->notificationDefaultRules(), $getBody['delivery']['rules']);
         self::assertFalse($getBody['delivery']['discord']['configured']);
         self::assertFalse($getBody['delivery']['telegram']['configured']);
         self::assertFalse($getBody['delivery']['telegram']['chat_selected']);
@@ -469,7 +469,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'PUT',
             '/api/notify/delivery',
             [
-                'rules' => $application->backend()->notificationDefaultRules(),
+                'rules' => $application->notificationRules()->notificationDefaultRules(),
                 'telegram_chat_id' => '123456789',
             ],
         ));
@@ -477,10 +477,10 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         self::assertTrue(
             json_decode($saved->body, true, flags: JSON_THROW_ON_ERROR)['telegram']['chat_selected'],
         );
-        self::assertSame('123456789', $application->backend()->telegramSelectedChatId());
-        self::assertTrue($application->backend()->telegramNotificationsEnabled());
+        self::assertSame('123456789', $application->telegramChats()->telegramSelectedChatId());
+        self::assertTrue($application->telegramChats()->telegramNotificationsEnabled());
 
-        self::assertTrue($application->backend()->telegramPostText('Selected chat test'));
+        self::assertTrue($application->telegram()->telegramPostText('Selected chat test'));
         $sent = json_decode(
             $transport->requests[array_key_last($transport->requests)]['options']['body'],
             true,
@@ -504,7 +504,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'PUT',
             '/api/notify/delivery',
             [
-                'rules' => $application->backend()->notificationDefaultRules(),
+                'rules' => $application->notificationRules()->notificationDefaultRules(),
                 'telegram_chat_id' => '999999999',
             ],
         ));
@@ -513,7 +513,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'PUT',
             '/api/notify/delivery',
             [
-                'rules' => $application->backend()->notificationDefaultRules(),
+                'rules' => $application->notificationRules()->notificationDefaultRules(),
                 'telegram_chat_id' => 'not-a-chat',
             ],
         ));
@@ -523,7 +523,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'PUT',
             '/api/notify/delivery',
             [
-                'rules' => $application->backend()->notificationDefaultRules(),
+                'rules' => $application->notificationRules()->notificationDefaultRules(),
                 'telegram_chat_id' => null,
             ],
         ));
@@ -531,13 +531,13 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         self::assertFalse(
             json_decode($cleared->body, true, flags: JSON_THROW_ON_ERROR)['telegram']['chat_selected'],
         );
-        self::assertFalse($application->backend()->telegramNotificationsEnabled());
+        self::assertFalse($application->telegramChats()->telegramNotificationsEnabled());
     }
 
     public function testTelegramBotTokenChangeInvalidatesKnownChatsAndSelection(): void
     {
         $application = $this->configuredApplication(new FakeNotificationHttpTransport());
-        self::assertTrue($application->backend()->telegramNotificationsEnabled());
+        self::assertTrue($application->telegramChats()->telegramNotificationsEnabled());
 
         $rotated = Application::forConfig(
             $this->copyConfig(
@@ -548,10 +548,10 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             new FakeNotificationHttpTransport(),
         );
         $rotated->database()->initialize();
-        self::assertNull($rotated->backend()->telegramSelectedChatId());
-        self::assertFalse($rotated->backend()->telegramNotificationsEnabled());
+        self::assertNull($rotated->telegramChats()->telegramSelectedChatId());
+        self::assertFalse($rotated->telegramChats()->telegramNotificationsEnabled());
 
-        $rotated->backend()->telegramEnsureBotState();
+        $rotated->telegramChats()->telegramEnsureBotState();
         self::assertSame(
             0,
             (int) $rotated->database()->connection()
@@ -627,16 +627,16 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             new FakeNotificationHttpTransport(),
         );
         $application->database()->initialize();
-        self::assertTrue($application->backend()->telegramBotConfigured());
-        self::assertFalse($application->backend()->telegramNotificationsEnabled());
-        self::assertNull($application->backend()->telegramSelectedChatId());
+        self::assertTrue($application->telegramChats()->telegramBotConfigured());
+        self::assertFalse($application->telegramChats()->telegramNotificationsEnabled());
+        self::assertNull($application->telegramChats()->telegramSelectedChatId());
     }
 
     private function restoreDocument(array $document): void
     {
         ob_start();
         try {
-            $this->app()->backend()->backupRestoreDatabase($document);
+            $this->app()->backupDocuments()->backupRestoreDatabase($document);
         } finally {
             ob_end_clean();
         }
@@ -693,13 +693,13 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         );
         $application->database()->initialize();
         if ($telegram && $selectTelegram) {
-            $application->backend()->telegramEnsureBotState();
-            $application->backend()->telegramKnownChatUpsert(
+            $application->telegramChats()->telegramEnsureBotState();
+            $application->telegramChats()->telegramKnownChatUpsert(
                 ['id' => -1001234567890, 'type' => 'supergroup', 'title' => 'FenPing tests'],
                 ['id' => 123456789, 'is_bot' => false, 'first_name' => 'Test'],
                 1,
             );
-            $application->backend()->telegramChatSelectionUpdate('-1001234567890');
+            $application->telegramChats()->telegramChatSelectionUpdate('-1001234567890');
         }
         return $application;
     }

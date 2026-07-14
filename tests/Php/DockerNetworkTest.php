@@ -292,7 +292,7 @@ final class DockerNetworkTest extends TestCase
 
         RequestContext::set(new Request('POST', '/api/networks/refresh', [], [], [], [], []));
         try {
-            self::assertSame('refreshed', ($route->handler)([])['status']);
+            self::assertSame('refreshed', ($route->handler)(new Request('POST', '/api/networks/refresh', [], [], [], [], []), [])['status']);
             self::assertSame(1, $gateway->calls);
         } finally {
             RequestContext::clear();
@@ -300,7 +300,7 @@ final class DockerNetworkTest extends TestCase
 
         RequestContext::set(new Request('POST', '/api/networks/refresh', [], [], [], [], [], '{"force":true}'));
         try {
-            ($route->handler)([]);
+            ($route->handler)(new Request('POST', '/api/networks/refresh', [], [], [], [], []), []);
             self::fail('refresh parameters were accepted');
         } catch (HttpException $error) {
             self::assertSame(400, $error->status);

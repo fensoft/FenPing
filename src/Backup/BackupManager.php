@@ -3,7 +3,6 @@ declare(strict_types=1);
 namespace FenPing\Backup;
 use DateTimeImmutable;
 use DateTimeZone;
-use FenPing\Backend\Backend;
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
 use InvalidArgumentException;
@@ -14,15 +13,15 @@ final readonly class BackupManager
 {
     private const LOCK_PATH = '/tmp/fenping-backup.lck';
     private const META_SUFFIX = '.metadata.json';
-    public function __construct(private Backend $backend, private AppConfig $config, private DatabaseManager $database) {}
+    public function __construct(private AppConfig $config, private DatabaseManager $database, private BackupArchiveService $archives, private BackupFilesystem $filesystem, private BackupArchiveTools $tools) {}
     public function backup(array $args): int {
         return $this->command(function () use ($args): void {
             if (count($args) > 1) throw new InvalidArgumentException('Usage: php cli.php backup [backup.tgz]');
             $this->locked(function () use ($args): void {
-                $target = $this->backend->backupTargetPath($args[0] ?? '');
+                $target = $this->archives->backupTargetPath($args[0] ?? '');
                 $this->create($target, $this->kind(basename($target), 'manual'));
                 echo "backup written: $target" . PHP_EOL;
-                echo 'size: ' . $this->backend->backupFormatBytes(filesize($target)) . PHP_EOL;
+                echo 'size: ' . $this->filesystem->backupFormatBytes(filesize($target)) . PHP_EOL;
                 $this->warnSameDisk();
             });
         });
@@ -31,8 +30,8 @@ final readonly class BackupManager
         return $this->command(function () use ($args): void {
             if (count($args) !== 1) throw new InvalidArgumentException('Usage: php cli.php restore <backup.tgz>');
             $this->locked(function () use ($args): void {
-                $this->backend->backupRestoreArchive($this->readableArchive($args[0]));
-                $this->backend->backupReloadHosts();
+                $this->archives->backupRestoreArchive($this->readableArchive($args[0]));
+                $this->tools->backupReloadHosts();
                 echo 'restore complete' . PHP_EOL;
             });
         });
@@ -76,7 +75,7 @@ final readonly class BackupManager
     public function restoreStage(array $args): int {
         return $this->command(function () use ($args): void {
             if (count($args) !== 1) throw new InvalidArgumentException('Usage: php cli.php backup-restore-stage <backup.tgz>');
-            $this->backend->backupRestoreArchive($this->readableArchive($args[0]));
+            $this->archives->backupRestoreArchive($this->readableArchive($args[0]));
             $errors = $this->database->integrityErrors();
             if ($errors !== []) throw new RuntimeException('restored database integrity check failed: ' . implode('; ', $errors));
             $foreignKeys = $this->database->connection()->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC);
@@ -104,7 +103,7 @@ final readonly class BackupManager
         ];
     }
     public function downloadPath(string $filename): string {
-        if (basename($filename) !== $filename || !$this->backend->backupIsArchive($filename)) {
+        if (basename($filename) !== $filename || !$this->filesystem->backupIsArchive($filename)) {
             throw new InvalidArgumentException('invalid backup file');
         }
         $path = $this->config->backupDir() . '/' . $filename;
@@ -117,14 +116,14 @@ final readonly class BackupManager
         return $real;
     }
     public function sameFilesystem(): bool {
-        $this->backend->backupEnsureDir($this->config->backupDir());
-        $this->backend->backupEnsureDir(dirname($this->config->databasePath));
+        $this->filesystem->backupEnsureDir($this->config->backupDir());
+        $this->filesystem->backupEnsureDir(dirname($this->config->databasePath));
         $database = stat(dirname($this->config->databasePath));
         $backups = stat($this->config->backupDir());
         return $database !== false && $backups !== false && $database['dev'] === $backups['dev'];
     }
     private function create(string $target, string $kind): void {
-        $this->backend->backupCreateArchive($target);
+        $this->archives->backupCreateArchive($target);
         chmod($target, 0640);
         @chgrp($target, 'www-data');
         $this->writeMeta($target, [
@@ -181,17 +180,17 @@ final readonly class BackupManager
         ];
     }
     private function validateContents(string $source): void {
-        $this->backend->backupValidateArchive($source);
-        $stage = $this->backend->backupTempDir('fenping-validate-');
+        $this->tools->backupValidateArchive($source);
+        $stage = $this->filesystem->backupTempDir('fenping-validate-');
         try {
-            $this->backend->backupRunProcess(['tar', '-xzf', $source, '-C', $stage]);
+            $this->tools->backupRunProcess(['tar', '-xzf', $source, '-C', $stage]);
             $this->rejectLinks($stage);
-            $manifest = $this->backend->backupReadJson($stage . '/manifest.json', 'manifest.json');
+            $manifest = $this->tools->backupReadJson($stage . '/manifest.json', 'manifest.json');
             $databasePath = $stage . '/db.json';
-            $database = $this->backend->backupReadJson($databasePath, 'db.json');
-            $netbootIndex = $this->backend->backupReadJson($stage . '/netboot-index.json', 'netboot-index.json');
-            $this->backend->backupValidateDocument($manifest, Backend::BACKUP_FORMAT, 'manifest.json');
-            $this->backend->backupValidateDocument($database, Backend::BACKUP_DATABASE_FORMAT, 'db.json');
+            $database = $this->tools->backupReadJson($databasePath, 'db.json');
+            $netbootIndex = $this->tools->backupReadJson($stage . '/netboot-index.json', 'netboot-index.json');
+            $this->tools->backupValidateDocument($manifest, BackupArchiveService::BACKUP_FORMAT, 'manifest.json');
+            $this->tools->backupValidateDocument($database, BackupArchiveService::BACKUP_DATABASE_FORMAT, 'db.json');
             if (($manifest['version'] ?? null) !== ($database['version'] ?? null)) {
                 throw new RuntimeException('manifest.json and db.json backup versions do not match');
             }
@@ -211,29 +210,29 @@ final readonly class BackupManager
             }
             if (!array_is_list($netbootIndex)) throw new RuntimeException('netboot-index.json must contain a list');
             if ((int) ($manifest['counts']['netboot_rows'] ?? -1) !== count($netbootIndex)
-                || (int) ($manifest['counts']['netboot_files'] ?? -1) !== $this->backend->backupCountFiles($stage . '/netboot')) {
+                || (int) ($manifest['counts']['netboot_files'] ?? -1) !== $this->filesystem->backupCountFiles($stage . '/netboot')) {
                 throw new RuntimeException('manifest netboot counts do not match the archive');
             }
         } finally {
-            $this->backend->backupRemoveTree($stage);
+            $this->filesystem->backupRemoveTree($stage);
         }
     }
     private function restoreTest(string $source): void {
         $base = $this->config->stateDir() . '/backup-tests';
-        $this->backend->backupEnsureDir($base);
+        $this->filesystem->backupEnsureDir($base);
         $stage = tempnam($base, 'restore-');
         if ($stage === false) throw new RuntimeException('failed to create restore-test workspace');
         @unlink($stage);
         if (!mkdir($stage, 0700)) throw new RuntimeException('failed to create restore-test workspace');
         try {
-            $this->backend->backupEnsureDir($stage . '/database');
-            $this->backend->backupEnsureDir($stage . '/netboot');
-            $this->backend->backupRunProcess(
+            $this->filesystem->backupEnsureDir($stage . '/database');
+            $this->filesystem->backupEnsureDir($stage . '/netboot');
+            $this->tools->backupRunProcess(
                 [PHP_BINARY, $this->config->projectDir . '/cli.php', 'backup-restore-stage', $source],
                 ['FENPING_DATA_DIR' => $stage, 'DATABASE_PATH' => $stage . '/database/fenping.sqlite3'],
             );
         } finally {
-            $this->backend->backupRemoveTree($stage);
+            $this->filesystem->backupRemoveTree($stage);
         }
     }
     private function rejectLinks(string $directory): void {
@@ -247,10 +246,10 @@ final readonly class BackupManager
         }
     }
     private function records(): array {
-        $this->backend->backupEnsureDir($this->config->backupDir());
+        $this->filesystem->backupEnsureDir($this->config->backupDir());
         $records = [];
         foreach (scandir($this->config->backupDir()) ?: [] as $filename) {
-            if ($filename === '.' || $filename === '..' || !$this->backend->backupIsArchive($filename)) continue;
+            if ($filename === '.' || $filename === '..' || !$this->filesystem->backupIsArchive($filename)) continue;
             $path = $this->config->backupDir() . '/' . $filename;
             if (is_link($path) || !is_file($path) || !is_readable($path)) continue;
             $meta = $this->readMeta($path);
@@ -322,7 +321,7 @@ final readonly class BackupManager
         $path = $this->metaPath($archive);
         if (!is_file($path) || is_link($path)) return [];
         try {
-            return $this->backend->backupReadJson($path, basename($path));
+            return $this->tools->backupReadJson($path, basename($path));
         } catch (Throwable) {
             return [];
         }
@@ -333,7 +332,7 @@ final readonly class BackupManager
         $tmp = tempnam(dirname($path), basename($path) . '.');
         if ($tmp === false) throw new RuntimeException('failed to create backup metadata file');
         try {
-            $this->backend->backupWriteJson($tmp, $meta);
+            $this->tools->backupWriteJson($tmp, $meta);
             chmod($tmp, 0640);
             @chgrp($tmp, 'www-data');
             if (!rename($tmp, $path)) throw new RuntimeException('failed to store backup metadata');
@@ -354,8 +353,8 @@ final readonly class BackupManager
         };
     }
     private function readableArchive(string $path): string {
-        $source = $this->backend->backupAbsolutePath($path);
-        if (!$this->backend->backupIsArchive($source) || is_link($source) || !is_file($source) || !is_readable($source)) {
+        $source = $this->filesystem->backupAbsolutePath($path);
+        if (!$this->filesystem->backupIsArchive($source) || is_link($source) || !is_file($source) || !is_readable($source)) {
             throw new InvalidArgumentException("backup not readable: $source");
         }
         return $source;

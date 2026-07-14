@@ -11,7 +11,7 @@ final class BackupFormatTest extends IntegrationTestCase
 {
     public function testBackupVersionAndArchiveContractsRemainCompatible(): void
     {
-        $service = new BackupService($this->app()->backend(), $this->app()->config(), $this->app()->database());
+        $service = $this->app()->backups();
         $service->validateDocument(['format' => 'fenping-db', 'version' => '1.6'], 'fenping-db', 'test.json');
         $service->validateDocument(['format' => 'fenping-db', 'version' => '1.99'], 'fenping-db', 'test.json');
 

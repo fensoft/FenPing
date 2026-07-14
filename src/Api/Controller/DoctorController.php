@@ -6,6 +6,7 @@ namespace FenPing\Api\Controller;
 
 use FenPing\Api\AuthPolicy;
 use FenPing\Api\HttpException;
+use FenPing\Api\Request;
 use FenPing\Api\Route;
 use FenPing\Doctor\DoctorReportProvider;
 use RuntimeException;
@@ -19,7 +20,7 @@ final readonly class DoctorController implements Controller
     public function routes(): array
     {
         return [
-            new Route('GET', '/doctor', function (array $params): array {
+            new Route('GET', '/doctor', function (Request $request, array $params): array {
                 try {
                     return $this->doctor->runtimeReport();
                 } catch (RuntimeException $error) {

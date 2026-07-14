@@ -27,9 +27,9 @@ final class HostMetadataTest extends IntegrationTestCase
 
     public function testMetadataTagsGuestReadsClearingAndHostCascade(): void
     {
-        $backend = $this->app()->backend();
-        $id = (int) $backend->create('192.0.2.40', '02:00:00:00:00:40');
-        $backend->edit(
+        $backend = $this->app();
+        $id = (int) $backend->hosts()->create('192.0.2.40', '02:00:00:00:00:40');
+        $backend->hosts()->update(
             $id,
             '192.0.2.40',
             '02:00:00:00:00:40',
@@ -42,15 +42,15 @@ final class HostMetadataTest extends IntegrationTestCase
             null,
             'standard',
             24,
-            $backend->normalizeHostNotes("Line one\r\nLine two"),
+            $backend->hostMetadataNormalizer()->notes("Line one\r\nLine two"),
             'Rack 4',
             'Alice',
             'PowerEdge R740',
             'server',
-            $backend->normalizeHostTags([' Server ', 'server', '', 'Camera']),
+            $backend->hostMetadataNormalizer()->tags([' Server ', 'server', '', 'Camera']),
         );
 
-        $host = $backend->getId($id);
+        $host = $backend->hosts()->byId($id);
         self::assertIsArray($host);
         self::assertSame("Line one\nLine two", $host['notes']);
         self::assertSame('Rack 4', $host['location']);
@@ -58,7 +58,7 @@ final class HostMetadataTest extends IntegrationTestCase
         self::assertSame('PowerEdge R740', $host['model']);
         self::assertSame('server', $host['icon']);
         self::assertSame(['Camera', 'Server'], $host['tags']);
-        $backend->savePingHosts([
+        $backend->pingRepository()->save([
             ['ip' => '192.0.2.40', 'mac' => '02:00:00:00:00:40', 'status' => 'Up'],
         ]);
 
@@ -76,8 +76,8 @@ final class HostMetadataTest extends IntegrationTestCase
         self::assertSame(['Camera', 'Server'], $inventoryHosts[$id]['tags']);
         self::assertSame(['Camera', 'Server'], $inventoryBody['available_tags']);
 
-        $secondId = (int) $backend->create('192.0.2.41', '02:00:00:00:00:41');
-        $backend->edit(
+        $secondId = (int) $backend->hosts()->create('192.0.2.41', '02:00:00:00:00:41');
+        $backend->hosts()->update(
             $secondId,
             '192.0.2.41',
             '02:00:00:00:00:41',
@@ -95,11 +95,11 @@ final class HostMetadataTest extends IntegrationTestCase
             '',
             '',
             'printer',
-            $backend->normalizeHostTags(['SERVER', 'Printer']),
+            $backend->hostMetadataNormalizer()->tags(['SERVER', 'Printer']),
         );
-        self::assertSame(['Printer', 'Server'], $backend->getId($secondId)['tags']);
+        self::assertSame(['Printer', 'Server'], $backend->hosts()->byId($secondId)['tags']);
 
-        $backend->edit(
+        $backend->hosts()->update(
             $id,
             '192.0.2.40',
             '02:00:00:00:00:40',
@@ -119,7 +119,7 @@ final class HostMetadataTest extends IntegrationTestCase
             null,
             [],
         );
-        $cleared = $backend->getId($id);
+        $cleared = $backend->hosts()->byId($id);
         self::assertSame('', $cleared['notes']);
         self::assertSame('', $cleared['location']);
         self::assertSame('', $cleared['owner']);
@@ -127,7 +127,7 @@ final class HostMetadataTest extends IntegrationTestCase
         self::assertNull($cleared['icon']);
         self::assertSame([], $cleared['tags']);
 
-        $backend->del($secondId);
+        $backend->hosts()->delete($secondId);
         $assignments = $this->app()->database()->connection()->prepare(
             'SELECT COUNT(*) FROM host_tags WHERE host_id=:host_id',
         );
@@ -141,9 +141,9 @@ final class HostMetadataTest extends IntegrationTestCase
 
     public function testDhcpMutationFailureRollsBackMetadataAndTags(): void
     {
-        $backend = $this->app()->backend();
-        $id = (int) $backend->create('192.0.2.45', '02:00:00:00:00:45');
-        $backend->edit(
+        $backend = $this->app();
+        $id = (int) $backend->hosts()->create('192.0.2.45', '02:00:00:00:00:45');
+        $backend->hosts()->update(
             $id,
             '192.0.2.45',
             '02:00:00:00:00:45',
@@ -165,8 +165,8 @@ final class HostMetadataTest extends IntegrationTestCase
         );
 
         try {
-            $backend->commitDhcpMutation(function () use ($backend, $id): void {
-                $backend->edit(
+            $backend->dhcpMutations()->commit(function () use ($backend, $id): void {
+                $backend->hosts()->update(
                     $id,
                     '192.0.2.45',
                     '02:00:00:00:00:45',
@@ -193,7 +193,7 @@ final class HostMetadataTest extends IntegrationTestCase
             self::assertSame('forced DHCP coordination failure', $error->getMessage());
         }
 
-        $host = $backend->getId($id);
+        $host = $backend->hosts()->byId($id);
         self::assertIsArray($host);
         self::assertSame('Before', $host['notes']);
         self::assertSame('Rack 1', $host['location']);
@@ -205,9 +205,9 @@ final class HostMetadataTest extends IntegrationTestCase
 
     public function testBackupRestorePreservesMetadataTagsAndViewsAndAcceptsOlderDocuments(): void
     {
-        $backend = $this->app()->backend();
-        $id = (int) $backend->create('192.0.2.44', '02:00:00:00:00:44');
-        $backend->edit(
+        $backend = $this->app();
+        $id = (int) $backend->hosts()->create('192.0.2.44', '02:00:00:00:00:44');
+        $backend->hosts()->update(
             $id,
             '192.0.2.44',
             '02:00:00:00:00:44',
@@ -227,8 +227,8 @@ final class HostMetadataTest extends IntegrationTestCase
             'database',
             ['Database', 'Server'],
         );
-        $savedFilter = $backend->createSavedInventoryFilter('Infrastructure', ['Server']);
-        $savedDevice = $backend->saveInventoryDeviceMetadata('backup_default', 'postgres', [
+        $savedFilter = $backend->inventory()->createSavedFilter('Infrastructure', ['Server']);
+        $savedDevice = $backend->hostMetadata()->saveInventoryDeviceMetadata('backup_default', 'postgres', [
             'display_name' => 'Container database',
             'scan_profile' => 'deep',
             'scan_interval_hours' => 12,
@@ -238,8 +238,8 @@ final class HostMetadataTest extends IntegrationTestCase
         $path = tempnam(sys_get_temp_dir(), 'fenping-host-metadata-backup-');
         self::assertIsString($path);
         try {
-            $backend->backupWriteDatabaseJson($path);
-            $document = $backend->backupReadJson($path, 'db.json');
+            $backend->backupArchives()->backupWriteDatabaseJson($path);
+            $document = $backend->backupTools()->backupReadJson($path, 'db.json');
             foreach ([
                 'tags', 'host_tags', 'inventory_saved_filters', 'inventory_saved_filter_tags',
                 'inventory_device_metadata', 'inventory_device_tags',
@@ -250,11 +250,11 @@ final class HostMetadataTest extends IntegrationTestCase
             $this->resetDatabase();
             ob_start();
             try {
-                $backend->backupRestoreDatabase($document);
+                $backend->backupDocuments()->backupRestoreDatabase($document);
             } finally {
                 ob_end_clean();
             }
-            $restored = $backend->getId($id);
+            $restored = $backend->hosts()->byId($id);
             self::assertIsArray($restored);
             self::assertSame('Restored notes', $restored['notes']);
             self::assertSame('Lab', $restored['location']);
@@ -264,9 +264,9 @@ final class HostMetadataTest extends IntegrationTestCase
             self::assertSame(['Database', 'Server'], $restored['tags']);
             self::assertSame(
                 [$savedFilter],
-                $backend->savedInventoryFilters(),
+                $backend->hostMetadata()->savedInventoryFilters(),
             );
-            $restoredDevice = $backend->inventoryDeviceMetadata('backup_default', 'postgres');
+            $restoredDevice = $backend->hostMetadata()->inventoryDeviceMetadata('backup_default', 'postgres');
             self::assertIsArray($restoredDevice);
             self::assertSame($savedDevice['display_name'], $restoredDevice['display_name']);
             self::assertSame($savedDevice['scan_profile'], $restoredDevice['scan_profile']);
@@ -282,11 +282,11 @@ final class HostMetadataTest extends IntegrationTestCase
             ];
             ob_start();
             try {
-                $backend->backupRestoreDatabase($legacyDocument);
+                $backend->backupDocuments()->backupRestoreDatabase($legacyDocument);
             } finally {
                 ob_end_clean();
             }
-            $legacy = $backend->getId(90);
+            $legacy = $backend->hosts()->byId(90);
             self::assertIsArray($legacy);
             self::assertSame('', $legacy['notes']);
             self::assertSame('', $legacy['location']);
@@ -294,8 +294,8 @@ final class HostMetadataTest extends IntegrationTestCase
             self::assertSame('', $legacy['model']);
             self::assertNull($legacy['icon']);
             self::assertSame([], $legacy['tags']);
-            self::assertSame([], $backend->savedInventoryFilters());
-            self::assertFalse($backend->inventoryDeviceMetadata('backup_default', 'postgres'));
+            self::assertSame([], $backend->hostMetadata()->savedInventoryFilters());
+            self::assertFalse($backend->hostMetadata()->inventoryDeviceMetadata('backup_default', 'postgres'));
         } finally {
             if (is_file($path)) {
                 unlink($path);
@@ -305,8 +305,8 @@ final class HostMetadataTest extends IntegrationTestCase
 
     public function testNamedDockerDeviceMetadataRequiresVerifiedIdentityAndFollowsIpChanges(): void
     {
-        $backend = $this->app()->backend();
-        $backend->dockerNetworks->replace([[
+        $backend = $this->app();
+        $backend->dockerNetworks()->replace([[
             'cidr' => '198.51.100.0/24',
             'names' => ['app_default'],
             'gateways' => [[
@@ -319,13 +319,13 @@ final class HostMetadataTest extends IntegrationTestCase
                 'ip' => '198.51.100.20',
             ]],
         ]], time());
-        $backend->savePingHosts([
+        $backend->pingRepository()->save([
             ['ip' => '198.51.100.1', 'mac' => '', 'status' => 'Up'],
             ['ip' => '198.51.100.20', 'mac' => '', 'status' => 'Up'],
             ['ip' => '198.51.100.21', 'mac' => '', 'status' => 'Up'],
         ]);
 
-        $inventory = $backend->getInventory('198.51.100.0/24');
+        $inventory = $backend->inventory()->forNetwork('198.51.100.0/24');
         $named = array_values(array_filter(
             $inventory,
             static fn(array $host): bool => ($host['device_identity']['container'] ?? null) === 'camera',
@@ -347,7 +347,7 @@ final class HostMetadataTest extends IntegrationTestCase
         self::assertSame(['gateway'], $gateway[0]['automatic_tags']);
         self::assertSame(
             ['app_default-camera', 'gateway'],
-            $backend->inventoryAvailableTags(),
+            $backend->inventory()->availableTags(),
         );
         $anonymous = array_values(array_filter(
             $inventory,
@@ -404,7 +404,7 @@ final class HostMetadataTest extends IntegrationTestCase
         self::assertSame('', $partial['notes']);
         self::assertSame('Security', $partial['owner']);
 
-        $backend->dockerNetworks->replace([[
+        $backend->dockerNetworks()->replace([[
             'cidr' => '198.51.100.0/24',
             'names' => ['app_default'],
             'containers' => [[
@@ -413,31 +413,31 @@ final class HostMetadataTest extends IntegrationTestCase
                 'ip' => '198.51.100.22',
             ]],
         ]], time());
-        $backend->savePingHosts([
+        $backend->pingRepository()->save([
             ['ip' => '198.51.100.22', 'mac' => '', 'status' => 'Up'],
         ]);
         $moved = array_values(array_filter(
-            $backend->getInventory('198.51.100.0/24'),
+            $backend->inventory()->forNetwork('198.51.100.0/24'),
             static fn(array $host): bool => ($host['device_identity']['container'] ?? null) === 'camera',
         ));
         self::assertCount(1, $moved);
         self::assertSame('198.51.100.22', $moved[0]['ip']);
         self::assertSame('Loading dock camera', $moved[0]['display_name']);
 
-        $backend->dockerNetworks->replace([], time());
+        $backend->dockerNetworks()->replace([], time());
         $stale = $this->app()->api()->handle($this->request(
             'PUT',
             '/api/inventory/device-metadata',
             ['network' => 'app_default', 'container' => 'camera', 'owner' => 'Nobody'],
         ));
         self::assertSame(409, $stale->status);
-        self::assertIsArray($backend->inventoryDeviceMetadata('app_default', 'camera'));
+        self::assertIsArray($backend->hostMetadata()->inventoryDeviceMetadata('app_default', 'camera'));
     }
 
     public function testDiscoveryCadenceAndDhcpPromotionFollowIdentityAtomically(): void
     {
-        $backend = $this->app()->backend();
-        $backend->dockerNetworks->replace([[
+        $backend = $this->app();
+        $backend->dockerNetworks()->replace([[
             'cidr' => '198.51.100.0/24',
             'names' => ['jobs_default'],
             'containers' => [[
@@ -446,31 +446,31 @@ final class HostMetadataTest extends IntegrationTestCase
                 'ip' => '198.51.100.50',
             ]],
         ]], time());
-        $backend->saveInventoryDeviceMetadata('jobs_default', 'worker', [
+        $backend->hostMetadata()->saveInventoryDeviceMetadata('jobs_default', 'worker', [
             'scan_profile' => 'deep',
             'scan_interval_hours' => 0,
         ]);
         self::assertSame(
             [],
-            $backend->inventoryScheduledTargets(
+            $backend->inventory()->scheduledTargets(
                 ['198.51.100.50'],
                 1_800_000_000,
                 '198.51.100.0/24',
             ),
         );
-        $backend->saveInventoryDeviceMetadata('jobs_default', 'worker', [
+        $backend->hostMetadata()->saveInventoryDeviceMetadata('jobs_default', 'worker', [
             'scan_interval_hours' => 6,
         ]);
         self::assertSame(
             [['ip' => '198.51.100.50', 'profile' => 'deep']],
-            $backend->inventoryScheduledTargets(
+            $backend->inventory()->scheduledTargets(
                 ['198.51.100.50'],
                 1_800_000_000,
                 '198.51.100.0/24',
             ),
         );
 
-        $backend->saveInventoryDeviceMetadata('edge_default', 'gateway-ui', [
+        $backend->hostMetadata()->saveInventoryDeviceMetadata('edge_default', 'gateway-ui', [
             'display_name' => 'Gateway UI',
             'important' => 1,
             'web' => 1,
@@ -486,8 +486,8 @@ final class HostMetadataTest extends IntegrationTestCase
         $database = $this->app()->database();
         $database->beginImmediate();
         try {
-            $hostId = (int) $backend->create('192.0.2.60', '02:00:00:00:00:60');
-            self::assertTrue($backend->transferInventoryDeviceMetadataToHost(
+            $hostId = (int) $backend->hosts()->create('192.0.2.60', '02:00:00:00:00:60');
+            self::assertTrue($backend->hostMetadata()->transferInventoryDeviceMetadataToHost(
                 'edge_default',
                 'gateway-ui',
                 $hostId,
@@ -497,7 +497,7 @@ final class HostMetadataTest extends IntegrationTestCase
             $database->rollback();
             throw $error;
         }
-        $host = $backend->getId($hostId);
+        $host = $backend->hosts()->byId($hostId);
         self::assertIsArray($host);
         self::assertSame('Gateway UI', $host['display_name']);
         self::assertSame('Transferred notes', $host['notes']);
@@ -506,29 +506,29 @@ final class HostMetadataTest extends IntegrationTestCase
         self::assertSame(4, (int) $host['scan_interval_hours']);
         self::assertSame('router', $host['icon']);
         self::assertSame(['Docker', 'Gateway'], $host['tags']);
-        self::assertFalse($backend->inventoryDeviceMetadata('edge_default', 'gateway-ui'));
+        self::assertFalse($backend->hostMetadata()->inventoryDeviceMetadata('edge_default', 'gateway-ui'));
 
-        $backend->saveInventoryDeviceMetadata('edge_default', 'rollback', [
+        $backend->hostMetadata()->saveInventoryDeviceMetadata('edge_default', 'rollback', [
             'display_name' => 'Rollback source',
             'tags' => ['Stable'],
         ]);
         try {
-            $backend->commitDhcpMutation(function () use ($backend): void {
-                $id = (int) $backend->create('192.0.2.61', '02:00:00:00:00:61');
-                $backend->transferInventoryDeviceMetadataToHost('edge_default', 'rollback', $id);
+            $backend->dhcpMutations()->commit(function () use ($backend): void {
+                $id = (int) $backend->hosts()->create('192.0.2.61', '02:00:00:00:00:61');
+                $backend->hostMetadata()->transferInventoryDeviceMetadataToHost('edge_default', 'rollback', $id);
                 throw new \RuntimeException('forced promotion failure');
             });
             self::fail('promotion failure was not raised');
         } catch (\RuntimeException $error) {
             self::assertSame('forced promotion failure', $error->getMessage());
         }
-        self::assertFalse($backend->getIp('192.0.2.61'));
-        $source = $backend->inventoryDeviceMetadata('edge_default', 'rollback');
+        self::assertFalse($backend->hosts()->byIp('192.0.2.61'));
+        $source = $backend->hostMetadata()->inventoryDeviceMetadata('edge_default', 'rollback');
         self::assertIsArray($source);
         self::assertSame('Rollback source', $source['display_name']);
         self::assertSame(['Stable'], $source['tags']);
 
-        $backend->dockerNetworks->replace([[
+        $backend->dockerNetworks()->replace([[
             'cidr' => '192.0.2.0/24',
             'names' => ['edge_default'],
             'containers' => [[
@@ -544,13 +544,13 @@ final class HostMetadataTest extends IntegrationTestCase
             'source_device' => ['network' => 'edge_default', 'container' => 'rollback'],
         ]));
         self::assertSame(409, $mismatch->status);
-        self::assertIsArray($backend->inventoryDeviceMetadata('edge_default', 'rollback'));
+        self::assertIsArray($backend->hostMetadata()->inventoryDeviceMetadata('edge_default', 'rollback'));
     }
 
     public function testOverlappingDockerAddressesUseNetworkAndContainerForDetail(): void
     {
-        $backend = $this->app()->backend();
-        $backend->dockerNetworks->replace([[
+        $backend = $this->app();
+        $backend->dockerNetworks()->replace([[
             'cidr' => '198.51.100.0/24',
             'names' => ['blue', 'green'],
             'containers' => [
@@ -558,18 +558,18 @@ final class HostMetadataTest extends IntegrationTestCase
                 ['network' => 'green', 'container' => 'api', 'ip' => '198.51.100.30'],
             ],
         ]], time());
-        $backend->savePingHosts([
+        $backend->pingRepository()->save([
             ['ip' => '198.51.100.30', 'mac' => '', 'status' => 'Up'],
         ]);
-        $backend->saveInventoryDeviceMetadata('blue', 'api', [
+        $backend->hostMetadata()->saveInventoryDeviceMetadata('blue', 'api', [
             'display_name' => 'Blue API',
         ]);
-        $backend->saveInventoryDeviceMetadata('green', 'api', [
+        $backend->hostMetadata()->saveInventoryDeviceMetadata('green', 'api', [
             'display_name' => 'Green API',
         ]);
 
         $rows = array_values(array_filter(
-            $backend->getInventory('198.51.100.0/24'),
+            $backend->inventory()->forNetwork('198.51.100.0/24'),
             static fn(array $host): bool => $host['ip'] === '198.51.100.30',
         ));
         self::assertCount(2, $rows);
@@ -594,9 +594,9 @@ final class HostMetadataTest extends IntegrationTestCase
 
     public function testNamedNonDhcpManagedRecordHasMetadataOnlyEditing(): void
     {
-        $backend = $this->app()->backend();
-        $id = (int) $backend->create('198.51.100.40', '02:00:00:00:01:40');
-        $backend->edit(
+        $backend = $this->app();
+        $id = (int) $backend->hosts()->create('198.51.100.40', '02:00:00:00:01:40');
+        $backend->hosts()->update(
             $id,
             '198.51.100.40',
             '02:00:00:00:01:40',
@@ -611,13 +611,13 @@ final class HostMetadataTest extends IntegrationTestCase
             24,
             'Original notes',
         );
-        $backend->savePingHosts([[
+        $backend->pingRepository()->save([[
             'ip' => '198.51.100.40',
             'mac' => '02:00:00:00:01:40',
             'status' => 'Up',
         ]]);
 
-        $inventory = $backend->getInventory('198.51.100.0/24');
+        $inventory = $backend->inventory()->forNetwork('198.51.100.0/24');
         $row = array_values(array_filter(
             $inventory,
             static fn(array $host): bool => (int)($host['id'] ?? 0) === $id,
@@ -684,7 +684,7 @@ final class HostMetadataTest extends IntegrationTestCase
                 ->query('SELECT COUNT(*) FROM operation_status')->fetchColumn(),
         );
 
-        $saved = $backend->getId($id);
+        $saved = $backend->hosts()->byId($id);
         self::assertIsArray($saved);
         self::assertSame('198.51.100.40', $saved['ip']);
         self::assertSame('02:00:00:00:01:40', $saved['mac']);
@@ -702,21 +702,21 @@ final class HostMetadataTest extends IntegrationTestCase
         self::assertSame(['Remote', 'Server'], $saved['tags']);
         self::assertSame(
             [],
-            $backend->inventoryScheduledTargets(
+            $backend->inventory()->scheduledTargets(
                 ['198.51.100.40'],
                 1_800_000_000,
                 '198.51.100.0/24',
             ),
         );
 
-        $unnamedId = (int) $backend->create('198.51.100.41', '02:00:00:00:01:41');
-        $backend->savePingHosts([[
+        $unnamedId = (int) $backend->hosts()->create('198.51.100.41', '02:00:00:00:01:41');
+        $backend->pingRepository()->save([[
             'ip' => '198.51.100.41',
             'mac' => '02:00:00:00:01:41',
             'status' => 'Up',
         ]]);
         $unnamed = array_values(array_filter(
-            $backend->getInventory('198.51.100.0/24'),
+            $backend->inventory()->forNetwork('198.51.100.0/24'),
             static fn(array $host): bool => (int)($host['id'] ?? 0) === $unnamedId,
         ))[0];
         self::assertSame(0, $unnamed['metadata_editable']);
@@ -731,15 +731,15 @@ final class HostMetadataTest extends IntegrationTestCase
     }
     public function testInvalidIconsAreRejectedBeforeAuthenticatedHostMutation(): void
     {
-        $backend = $this->app()->backend();
-        self::assertSame('printer', $backend->normalizeHostIcon('printer'));
+        $backend = $this->app();
+        self::assertSame('printer', $backend->hostMetadataNormalizer()->icon('printer'));
         $this->expectException(InvalidArgumentException::class);
-        $backend->normalizeHostIcon('user-supplied-svg');
+        $backend->hostMetadataNormalizer()->icon('user-supplied-svg');
     }
 
     public function testGuestCannotWriteMetadataAndAuthenticatedInvalidIconReturnsBadRequest(): void
     {
-        $id = (int) $this->app()->backend()->create('192.0.2.43', '02:00:00:00:00:43');
+        $id = (int) $this->app()->hosts()->create('192.0.2.43', '02:00:00:00:00:43');
         $body = [
             'ip' => '192.0.2.43',
             'mac' => '02:00:00:00:00:43',
@@ -754,7 +754,7 @@ final class HostMetadataTest extends IntegrationTestCase
         $invalid = $this->app()->api()->handle($this->request('PUT', "/api/hosts/$id", $body));
         self::assertSame(400, $invalid->status);
         self::assertSame(['error' => 'invalid host icon'], json_decode($invalid->body, true));
-        self::assertNull($this->app()->backend()->getId($id)['icon']);
+        self::assertNull($this->app()->hosts()->byId($id)['icon']);
     }
 
     private function request(

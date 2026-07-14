@@ -55,4 +55,22 @@ final class ArchitectureTest extends TestCase
         self::assertDirectoryDoesNotExist($root . '/routes');
         self::assertDirectoryDoesNotExist($root . '/src/Legacy');
     }
+
+    public function testLegacyBackendFacadeAndRouteAdapterAreAbsent(): void
+    {
+        $root = dirname(__DIR__, 2);
+        self::assertDirectoryDoesNotExist($root . '/src/Backend');
+        self::assertFileDoesNotExist($root . '/src/Api/Controller/RouteAdapter.php');
+
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/src'));
+        foreach ($iterator as $file) {
+            if (!$file->isFile() || $file->getExtension() !== 'php') {
+                continue;
+            }
+            $source = file_get_contents($file->getPathname());
+            self::assertIsString($source);
+            self::assertStringNotContainsString('FenPing\\Backend', $source, $file->getPathname());
+            self::assertStringNotContainsString('RouteAdapter', $source, $file->getPathname());
+        }
+    }
 }

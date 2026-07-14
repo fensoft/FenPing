@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace FenPing\Tests;
 
 use FenPing\Application;
-use FenPing\Backend\InventoryCancelledException;
-use FenPing\Backend\InventoryTimeoutException;
+use FenPing\Inventory\InventoryCancelledException;
+use FenPing\Inventory\InventoryTimeoutException;
 use FenPing\Realtime\LiveUpdateScope;
 use RuntimeException;
 
@@ -24,12 +24,12 @@ final class InventorySupervisorTest extends IntegrationTestCase
         $id = $app->scanJobs()->start('192.0.2.50', 'standard');
         $publisher->events = [];
 
-        $command = $app->backend()->inventoryScanCommand('192.0.2.50', 'standard', '/tmp/synthetic.xml');
+        $command = $app->inventoryScanner()->inventoryScanCommand('192.0.2.50', 'standard', '/tmp/synthetic.xml');
         $statsIndex = array_search('--stats-every', $command, true);
         self::assertIsInt($statsIndex);
         self::assertSame('5s', $command[$statsIndex + 1]);
 
-        $app->backend()->inventoryRunScanProcess([
+        $app->inventoryScanner()->inventoryRunScanProcess([
             PHP_BINARY,
             '-r',
             'fwrite(STDERR, "SYN Stealth Scan Timing: About 50.00% done; ETC: 12:00\n");',
@@ -49,7 +49,7 @@ final class InventorySupervisorTest extends IntegrationTestCase
         $id = $this->app()->scanJobs()->start('192.0.2.51', 'lightweight');
         $started = microtime(true);
         try {
-            $this->app()->backend()->inventoryRunScanProcess(
+            $this->app()->inventoryScanner()->inventoryRunScanProcess(
                 [PHP_BINARY, '-r', 'sleep(5);'],
                 1,
                 $id,
@@ -68,7 +68,7 @@ final class InventorySupervisorTest extends IntegrationTestCase
         $id = $this->app()->scanJobs()->start('192.0.2.52', 'deep');
         $this->app()->scanJobs()->cancel('192.0.2.52', $id);
         try {
-            $this->app()->backend()->inventoryRunScanProcess(
+            $this->app()->inventoryScanner()->inventoryRunScanProcess(
                 [PHP_BINARY, '-r', 'file_put_contents(' . var_export($marker, true) . ', "started");'],
                 5,
                 $id,
@@ -87,7 +87,7 @@ final class InventorySupervisorTest extends IntegrationTestCase
         $id = $this->app()->scanJobs()->start('192.0.2.53', 'lightweight');
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('synthetic nmap failure');
-        $this->app()->backend()->inventoryRunScanProcess(
+        $this->app()->inventoryScanner()->inventoryRunScanProcess(
             [PHP_BINARY, '-r', 'fwrite(STDERR, "synthetic nmap failure"); exit(7);'],
             5,
             $id,

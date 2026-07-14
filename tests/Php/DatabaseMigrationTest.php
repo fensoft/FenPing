@@ -102,8 +102,8 @@ final class DatabaseMigrationTest extends IntegrationTestCase
           PRAGMA user_version=1;
         ");
 
-        $this->app()->backend()->databaseApplyMigrations($database, \FenPing\Backend\Backend::DATABASE_SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
-        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        $this->app()->database()->applyMigrations($database, \FenPing\Database\DatabaseManager::SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
+        self::assertSame(9, $this->app()->database()->schemaVersion($database));
         $existing = $database->query("SELECT scan_profile, scan_interval_hours FROM ips WHERE ip='192.0.2.40'")->fetch(PDO::FETCH_ASSOC);
         self::assertSame('deep', $existing['scan_profile']);
         self::assertSame(1, (int) $existing['scan_interval_hours']);
@@ -128,10 +128,10 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         $scanColumns = $database->query('PRAGMA table_info(scans)')->fetchAll(PDO::FETCH_ASSOC);
         self::assertContains('queued_at', array_column($scanColumns, 'name'));
 
-        $this->app()->backend()->databaseApplyMigrations(
+        $this->app()->database()->applyMigrations(
             $database, 9, $this->app()->config()->projectDir . '/migrations',
         );
-        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(9, $this->app()->database()->schemaVersion($database));
         self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
     }
 
@@ -159,13 +159,13 @@ final class DatabaseMigrationTest extends IntegrationTestCase
           PRAGMA user_version=8;
         ");
 
-        $this->app()->backend()->databaseApplyMigrations(
+        $this->app()->database()->applyMigrations(
             $database,
             9,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(9, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
             'name',
@@ -207,13 +207,13 @@ final class DatabaseMigrationTest extends IntegrationTestCase
           PRAGMA user_version=7;
         ");
 
-        $this->app()->backend()->databaseApplyMigrations(
+        $this->app()->database()->applyMigrations(
             $database,
             9,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(9, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
             'name',
@@ -281,13 +281,13 @@ final class DatabaseMigrationTest extends IntegrationTestCase
           PRAGMA user_version=6;
         ");
 
-        $this->app()->backend()->databaseApplyMigrations(
+        $this->app()->database()->applyMigrations(
             $database,
             9,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(9, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(scans)')->fetchAll(PDO::FETCH_ASSOC),
             'name',
@@ -322,15 +322,15 @@ final class DatabaseMigrationTest extends IntegrationTestCase
             file_put_contents($directory . '/0003_add_row.sql', "INSERT INTO migration_probe (value, note) VALUES ('kept', 'version 3');");
             $database = $this->memoryDatabase();
             $database->exec('CREATE TABLE migration_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL); PRAGMA user_version=1;');
-            $this->app()->backend()->databaseApplyMigrations($database, 3, $directory);
-            self::assertSame(3, $this->app()->backend()->databaseSchemaVersion($database));
+            $this->app()->database()->applyMigrations($database, 3, $directory);
+            self::assertSame(3, $this->app()->database()->schemaVersion($database));
 
             file_put_contents($directory . '/0004_transaction.sql', 'COMMIT;');
             try {
-                $this->app()->backend()->databaseApplyMigrations($database, 4, $directory);
+                $this->app()->database()->applyMigrations($database, 4, $directory);
                 self::fail('transaction-control migration was accepted');
             } catch (RuntimeException) {
-                self::assertSame(3, $this->app()->backend()->databaseSchemaVersion($database));
+                self::assertSame(3, $this->app()->database()->schemaVersion($database));
             }
         } finally {
             foreach (glob($directory . '/*') ?: [] as $path) {

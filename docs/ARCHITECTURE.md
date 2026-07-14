@@ -58,13 +58,13 @@ Compose mounts size-limited tmpfs filesystems for scan output, nginx upload buff
 
 Stable ping records update their activity timestamp at most once per day; actual status, IP, or MAC changes are still written immediately. The boot-time IEEE sync hashes both registries and skips the 57,000-row transaction when SQL is already current. Backups, netboot uploads, DHCP leases, changed scan results, and actual application mutations remain persistent by design.
 
-## Backend Entry Points
+## Application Entry Points
 
 ### API
 
 `api.php` is a thin stable entrypoint that loads the Composer autoloader and delegates to `FenPing\Application`. The typed API kernel normalizes and matches `/api/...` routes, converts typed parameters, enforces explicit auth policy, and returns direct success documents or `{ "error": "message" }` errors.
 
-Class-owned implementation modules live under `src/Backend/` and are composed by the injected `FenPing\Backend\Backend` object. The former root modules, route directory, procedural compatibility functions, and `src/Legacy/` tree are absent; an architecture test enforces one primary type per production file, no free functions, and a 400-line ceiling.
+`FenPing\Application` is the only concrete composition root. It explicitly wires native API controllers, typed CLI commands and decorators, and focused services/repositories under `src/`. The former `FenPing\Backend` facade, behavior traits, `RouteAdapter`, root modules, route directory, procedural compatibility functions, and `src/Legacy/` tree are absent; architecture tests enforce those removals, one primary type per production file, no free functions, and a 400-line ceiling.
 
 The typed API kernel, router, request, authorization policies, and JSON/XML/file responses live under `src/Api/`. Domain-facing behavior is exposed through injected services and repositories under `src/`.
 
@@ -124,9 +124,9 @@ Important tables:
 - `netboot_images`: uploaded netboot file metadata.
 - `users`: legacy table still present in schema.
 
-`databaseInitialize()` creates a version-zero database from the current `db.sql`. For an older nonzero database, it requires every sequential `NNNN_description.sql` file through `DATABASE_SCHEMA_VERSION` and applies each file in its own `BEGIN IMMEDIATE` transaction. The framework advances `PRAGMA user_version` only after the SQL succeeds, so a failed migration rolls back both schema/data changes and the version. Migration files must not manage transactions or set `user_version` themselves.
+`DatabaseManager::initialize()` creates a version-zero database from the current `db.sql`. For an older nonzero database, it requires every sequential `NNNN_description.sql` file through `DatabaseManager::SCHEMA_VERSION` and applies each file in its own `BEGIN IMMEDIATE` transaction. The framework advances `PRAGMA user_version` only after the SQL succeeds, so a failed migration rolls back both schema/data changes and the version. Migration files must not manage transactions or set `user_version` themselves.
 
-Every schema change must update the canonical `db.sql`, increment both `DATABASE_SCHEMA_VERSION` and the final `PRAGMA user_version`, and add the next immutable migration file. Released migrations must never be edited or skipped.
+Every schema change must update the canonical `db.sql`, increment both `DatabaseManager::SCHEMA_VERSION` and the final `PRAGMA user_version`, and add the next immutable migration file. Released migrations must never be edited or skipped.
 
 The normalized scan-storage migration intentionally does not import legacy XML. When `scan_snapshots.xml` is detected, existing scan jobs, snapshots, and port-change events are discarded before the structured tables are created; other application tables are untouched.
 

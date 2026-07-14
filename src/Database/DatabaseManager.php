@@ -80,7 +80,7 @@ final class DatabaseManager
             $this->setSchemaVersion(8);
         }
         if ($this->schemaVersion() < self::SCHEMA_VERSION) {
-            $this->applyMigrations(self::SCHEMA_VERSION);
+            $this->applyMigrations($this->connection(), self::SCHEMA_VERSION, $this->config->projectDir . '/migrations');
         }
         $version = $this->schemaVersion();
         if ($version !== self::SCHEMA_VERSION) {
@@ -145,9 +145,10 @@ final class DatabaseManager
         }
     }
 
-    public function schemaVersion(): int
+    public function schemaVersion(?PDO $database = null): int
     {
-        return (int) $this->connection()->query('PRAGMA user_version')->fetchColumn();
+        $database ??= $this->connection();
+        return (int) $database->query('PRAGMA user_version')->fetchColumn();
     }
 
     public function integrityErrors(): array
@@ -309,15 +310,18 @@ final class DatabaseManager
         ));
     }
 
-    private function applyMigrations(int $targetVersion): void
+    public function applyMigrations(PDO $database, int $targetVersion, string $directory): void
     {
-        $directory = $this->config->projectDir . '/migrations';
+        $currentVersion = $this->schemaVersion($database);
+        if ($currentVersion > $targetVersion) {
+            throw new RuntimeException("database schema version $currentVersion is newer than supported version $targetVersion");
+        }
         $migrations = $this->migrationFiles($directory, $targetVersion);
-        for ($version = $this->schemaVersion() + 1; $version <= $targetVersion; $version++) {
+        for ($version = $currentVersion + 1; $version <= $targetVersion; $version++) {
             if (!isset($migrations[$version])) {
                 throw new RuntimeException("missing database migration for version $version");
             }
-            $this->applyMigration($version, $migrations[$version]);
+            $this->applyMigration($database, $version, $migrations[$version]);
         }
     }
 
@@ -342,7 +346,7 @@ final class DatabaseManager
         return $migrations;
     }
 
-    private function applyMigration(int $version, string $path): void
+    private function applyMigration(PDO $database, int $version, string $path): void
     {
         $filename = basename($path);
         $sql = file_get_contents($path);
@@ -354,15 +358,21 @@ final class DatabaseManager
             || preg_match('/(?:^|;)\s*(?:BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\b/i', (string) $guardSql)) {
             throw new RuntimeException("database migration must not manage transactions or user_version: $filename");
         }
+        if ($database->inTransaction()) {
+            throw new RuntimeException("database transaction already active");
+        }
+        $database->exec("BEGIN IMMEDIATE");
         try {
-            $this->immediate(function (PDO $database) use ($sql, $version): void {
-                $database->exec($sql);
-                $database->exec('PRAGMA user_version=' . $version);
-                if ($this->schemaVersion() !== $version) {
-                    throw new RuntimeException("database migration did not reach version $version");
-                }
-            });
+            $database->exec($sql);
+            $database->exec("PRAGMA user_version=" . $version);
+            if ($this->schemaVersion($database) !== $version) {
+                throw new RuntimeException("database migration did not reach version $version");
+            }
+            $database->exec("COMMIT");
         } catch (Throwable $error) {
+            if ($database->inTransaction()) {
+                $database->exec("ROLLBACK");
+            }
             throw new RuntimeException("database migration $filename failed: " . $error->getMessage(), 0, $error);
         }
     }

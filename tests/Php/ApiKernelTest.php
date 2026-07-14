@@ -61,7 +61,7 @@ final class ApiKernelTest extends IntegrationTestCase
     public function testInventoryReportsEffectivePortsFromLatestUsableScan(): void
     {
         $ip = '192.0.2.10';
-        $this->app()->backend()->savePingHosts([
+        $this->app()->pingRepository()->save([
             ['ip' => $ip, 'mac' => '02:00:00:00:00:10', 'status' => 'Up'],
         ]);
 
@@ -106,7 +106,7 @@ final class ApiKernelTest extends IntegrationTestCase
 
     public function testIpamReturnsEveryConfiguredSubnetAndItsObservedDevices(): void
     {
-        $this->app()->backend()->savePingHosts([
+        $this->app()->pingRepository()->save([
             ['ip' => '192.0.2.10', 'mac' => '02:00:00:00:00:10', 'status' => 'Up'],
             ['ip' => '198.51.100.10', 'mac' => '02:00:00:00:01:10', 'status' => 'Up'],
             ['ip' => '203.0.113.10', 'mac' => '02:00:00:00:02:10', 'status' => 'Up'],
@@ -312,5 +312,44 @@ final class ApiKernelTest extends IntegrationTestCase
             'state' => 'open',
             'service' => $service,
         ];
+    }
+
+    public function testNativeRouteManifestRemainsStable(): void
+    {
+        $actual = array_map(
+            static fn(\FenPing\Api\Route $route): string => implode(' ', [
+                $route->method, $route->pattern, $route->auth->value,
+                implode(',', array_map(static fn(\FenPing\Realtime\LiveUpdateScope $scope): string => $scope->value, $route->liveScopes)),
+            ]),
+            $this->app()->api()->routes(),
+        );
+        $expected = [
+            'GET /doctor session ', 'POST /networks/refresh guest ',
+            'GET /auth/session guest ', 'POST /auth/login guest ', 'POST /auth/logout guest ',
+            'GET /health guest ', 'GET /health/live guest ', 'GET /health/ready guest ',
+            'GET /inventory guest ', 'PUT /inventory/device-metadata body hosts',
+            'POST /inventory/saved-filters body hosts', 'PUT /inventory/saved-filters/{id:int} body hosts',
+            'DELETE /inventory/saved-filters/{id:int} body hosts', 'GET /notify guest ',
+            'GET /notify/telegram/chats session ', 'PUT /notify/delivery session all',
+            'POST /ping/refresh session ', 'GET /history/{ip:ipv4} guest ',
+            'GET /hosts/{id:int}/detail guest ', 'GET /hosts/by-ip/{ip:ipv4}/detail guest ',
+            'GET /hosts/{id:int} guest ', 'POST /hosts body hosts', 'PUT /hosts/{id:int}/metadata body hosts',
+            'PUT /hosts/{id:int} body hosts', 'DELETE /hosts/{id:int} body hosts',
+            'POST /categories body hosts', 'PUT /categories body hosts', 'DELETE /categories body hosts',
+            'GET /ipam guest ', 'GET /ipam/conflicts guest ',
+            'PUT /ipam/devices/{mac}/approval session hosts', 'DELETE /ipam/devices/{mac}/approval session hosts',
+            'GET /netboot/images guest ', 'POST /netboot/images session netboot',
+            'GET /netboot/images/{id:int} guest ', 'GET /netboot/images/{id:int}/file guest ',
+            'DELETE /netboot/images/{id:int} session netboot,hosts', 'GET /backups session ',
+            'GET /backups/{filename}/file session ', 'GET /scans guest ', 'GET /scans/profiles guest ',
+            'GET /services guest ', 'POST /scans/{ip:ipv4} session scans',
+            'POST /scans/{ip:ipv4}/quick session scans', 'GET /scans/{ip:ipv4}/status guest ',
+            'POST /scans/{ip:ipv4}/{id:int}/cancel session ', 'GET /scans/{ip:ipv4}/history guest ',
+            'GET /scans/{ip:ipv4}/history/{id:int} guest ', 'GET /scans/{ip:ipv4}/history/{id:int}/xml guest ',
+            'GET /scans/{ip:ipv4}/xml guest ', 'GET /scans/{ip:ipv4} guest ',
+            'GET /scans/{file:scanXml} guest ', 'GET /scans/{ip:ipv4}/{id:int} guest ',
+            'GET /scans/{ip:ipv4}/{file:scanIdXml} guest ', 'GET /topology guest ',
+        ];
+        self::assertSame($expected, $actual);
     }
 }

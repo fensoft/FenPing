@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FenPing\Api\Controller;
 
 use FenPing\Api\HttpException;
+use FenPing\Api\Request;
 use FenPing\Api\RequestContext;
 use FenPing\Api\Route;
 use FenPing\Docker\DockerNetworkRefreshGateway;
@@ -19,7 +20,7 @@ final readonly class DockerNetworksController implements Controller
     public function routes(): array
     {
         return [
-            new Route('POST', '/networks/refresh', function (array $params): array {
+            new Route('POST', '/networks/refresh', function (Request $request, array $params): array {
                 if ($_GET !== [] || (RequestContext::body() ?? []) !== []) {
                     throw new HttpException(400, 'Docker network refresh accepts no parameters');
                 }

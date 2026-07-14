@@ -10,7 +10,7 @@ use FenPing\Process\ProcessRunner;
 use FenPing\Support\Clock;
 use Throwable;
 
-final readonly class IpConflictDetector
+final readonly class IpConflictDetector implements IpConflictScanner
 {
     public function __construct(
         private AppConfig $config,

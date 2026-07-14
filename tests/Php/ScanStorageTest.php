@@ -67,4 +67,9 @@ XML;
         self::assertTrue($this->app()->scanJobs()->complete($thirdId, $serviceChange));
         self::assertSame(1, (int) $this->app()->database()->connection()->query("SELECT COUNT(*) FROM scan_port_changes WHERE change_type='changed'")->fetchColumn());
     }
+
+    public function testPortChangeBackfillPrunesWithoutPendingScans(): void
+    {
+        self::assertSame(0, $this->app()->scanPortChanges()->backfill());
+    }
 }

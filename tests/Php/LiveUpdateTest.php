@@ -9,7 +9,6 @@ use FenPing\Application;
 use FenPing\Api\ApiKernel;
 use FenPing\Api\AuthPolicy;
 use FenPing\Api\Controller\Controller;
-use FenPing\Api\Controller\RouteAdapter;
 use FenPing\Api\HttpException;
 use FenPing\Api\JsonResponse;
 use FenPing\Api\Request;
@@ -54,27 +53,19 @@ final class LiveUpdateTest extends IntegrationTestCase
         self::addToAssertionCount(1);
     }
 
-    public function testApiPublishesOnlySuccessfulResponsesIncludingLegacyResponses(): void
+    public function testApiPublishesOnlySuccessfulResponsesIncludingTypedResponses(): void
     {
         $publisher = new RecordingLiveUpdatePublisher();
-        $adapted = (new RouteAdapter())->adapt([[
-            'method' => 'POST',
-            'pattern' => 'legacy',
-            'handler' => static function (array $params): never {
-                throw new ResponseException(new JsonResponse(['queued' => true], 202));
-            },
-            'live' => [LiveUpdateScope::Scans],
-        ]]);
-        $controller = new class($adapted) implements Controller {
-            public function __construct(private array $adapted) {}
-
+        $controller = new class implements Controller {
             public function routes(): array
             {
                 return [
-                    new Route('POST', 'direct', static fn(array $params): array => ['ok' => true], AuthPolicy::Guest, [LiveUpdateScope::Hosts]),
-                    ...$this->adapted,
-                    new Route('POST', 'server-error', static fn(array $params): JsonResponse => new JsonResponse(['error' => 'no'], 500), AuthPolicy::Guest, [LiveUpdateScope::Status]),
-                    new Route('POST', 'exception', static function (array $params): never {
+                    new Route('POST', 'direct', static fn(Request $request, array $params): array => ['ok' => true], AuthPolicy::Guest, [LiveUpdateScope::Hosts]),
+                    new Route('POST', 'accepted', static function (Request $request, array $params): never {
+                        throw new ResponseException(new JsonResponse(['queued' => true], 202));
+                    }, AuthPolicy::Guest, [LiveUpdateScope::Scans]),
+                    new Route('POST', 'server-error', static fn(Request $request, array $params): JsonResponse => new JsonResponse(['error' => 'no'], 500), AuthPolicy::Guest, [LiveUpdateScope::Status]),
+                    new Route('POST', 'exception', static function (Request $request, array $params): never {
                         throw new HttpException(409, 'conflict');
                     }, AuthPolicy::Guest, [LiveUpdateScope::Conflicts]),
                 ];
@@ -83,7 +74,7 @@ final class LiveUpdateTest extends IntegrationTestCase
         $api = new ApiKernel(new AuthService($this->app()->config()), [$controller], $publisher);
 
         self::assertSame(200, $api->handle($this->request('/api/direct'))->status);
-        self::assertSame(202, $api->handle($this->request('/api/legacy'))->status);
+        self::assertSame(202, $api->handle($this->request('/api/accepted'))->status);
         self::assertSame(500, $api->handle($this->request('/api/server-error'))->status);
         self::assertSame(409, $api->handle($this->request('/api/exception'))->status);
         self::assertSame([
@@ -117,9 +108,9 @@ final class LiveUpdateTest extends IntegrationTestCase
         }
 
         $publisher->events = [];
-        $app->backend()->operations->started('live_update_test');
-        $app->backend()->operations->succeeded('live_update_test');
-        $app->backend()->operations->failed('live_update_test', 'expected test failure');
+        $app->operations()->started('live_update_test');
+        $app->operations()->succeeded('live_update_test');
+        $app->operations()->failed('live_update_test', 'expected test failure');
         self::assertSame([
             [LiveUpdateScope::Operations],
             [LiveUpdateScope::Operations],

@@ -4,77 +4,17 @@ declare(strict_types=1);
 
 namespace FenPing\Cli;
 
-use FenPing\Backend\Backend;
-use FenPing\Backup\BackupService;
-use FenPing\Database\DatabaseManager;
-use FenPing\Realtime\LiveUpdatePublisher;
-use FenPing\Realtime\LiveUpdateScope;
-use FenPing\Realtime\NullLiveUpdatePublisher;
-use Throwable;
-
 
 final class CliKernel
 {
-    /** @var array<string, Command> */
-    private array $commands;
-    private readonly LiveUpdatePublisher $liveUpdates;
-
-    public function __construct(
-        private readonly Backend $backend,
-        private readonly DatabaseManager $database,
-        private readonly BackupService $backups,
-        Command $doctor,
-        Command $dockerNetworksRefresh,
-        Command $dockerNetworksWatch,
-        ?LiveUpdatePublisher $liveUpdates = null,
-    )
+    /** @param array<string, Command> $commands */
+    public function __construct(private readonly array $commands, private readonly CliUsage $usage)
     {
-        $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
-        $this->commands = [
-            'doctor' => $doctor,
-            'docker-networks-refresh' => $dockerNetworksRefresh,
-            'docker-networks-watch' => $dockerNetworksWatch,
-            'database' => new CallableCommand(fn(array $args): int => $this->database($args)),
-            'database-check' => new CallableCommand(fn(array $args): int => $this->database($args)),
-            'ping' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
-                '/tmp/ping.lck',
-                'ping scan',
-                fn(): int => $this->tracked('ping', fn(): int => $this->backend->runPingCommand($args)),
-            )),
-            'hosts' => new CallableCommand(fn(array $args): int => $this->backend->runHostsCommand($args)),
-            'inventory' => new CallableCommand(fn(array $args): int => $this->inventory($args)),
-            'scan-port-backfill' => new CallableCommand(fn(array $args): int => $args === []
-                ? $this->backend->runScanPortBackfillCommand()
-                : $this->usage()),
-            'oui-refresh' => new CallableCommand(fn(array $args): int => $this->publishOnSuccess(
-                [LiveUpdateScope::Vendors],
-                fn(): int => $this->backend->runLockedCliCommand(
-                    '/tmp/oui-refresh.lck',
-                    'OUI refresh',
-                    fn(): int => $this->tracked('oui_update', fn(): int => $this->backend->runIeeeOuiRefreshCommand($args)),
-                ),
-            )),
-            'oui-sync' => new CallableCommand(fn(array $args): int => $this->publishOnSuccess(
-                [LiveUpdateScope::Vendors],
-                fn(): int => $this->backend->runIeeeOuiSyncCommand($args),
-            )),
-            'dnsmasq-leases' => new CallableCommand(fn(array $args): int => $this->backend->runLockedCliCommand(
-                '/tmp/dnsmasq-leases.lck',
-                'dnsmasq lease import',
-                fn(): int => $this->tracked('lease_import', fn(): int => $this->backend->runDnsmasqLeasesCommand($args)),
-            )),
-            'notify-restart' => new CallableCommand(fn(array $args): int => $args === []
-                ? $this->backend->runNotificationRestartCommand()
-                : $this->usage()),
-            'discord-restart' => new CallableCommand(fn(array $args): int => $args === []
-                ? $this->backend->runDiscordRestartCommand()
-                : $this->usage()),
-            'backup' => new CallableCommand(fn(array $args): int => $this->backups->backup($args)),
-            'restore' => new CallableCommand(fn(array $args): int => $this->backups->restore($args)),
-            'backup-verify' => new CallableCommand(fn(array $args): int => $this->backups->verify($args)),
-            'backup-maintenance' => new CallableCommand(fn(array $args): int => $this->backups->maintenance($args)),
-            'backup-restore-stage' => new CallableCommand(fn(array $args): int => $this->backups->restoreStage($args)),
-        ];
+        foreach ($commands as $name => $command) {
+            if (!is_string($name) || $name === '' || !$command instanceof Command) {
+                throw new \InvalidArgumentException('invalid CLI command map');
+            }
+        }
     }
 
     public function run(array $argv): int
@@ -82,99 +22,9 @@ final class CliKernel
         $name = (string) ($argv[1] ?? '');
         $command = $this->commands[$name] ?? null;
         if ($command === null) {
-            return $this->usage();
+            return $this->usage->write();
         }
         return $command->run(array_slice($argv, 2));
     }
 
-    private function database(array $arguments): int
-    {
-        if ($arguments !== []) {
-            return $this->usage();
-        }
-        $this->backend->operations->started('database_integrity');
-        try {
-            $this->database->initialize();
-            $errors = $this->database->integrityErrors();
-            if ($errors !== []) {
-                throw new \RuntimeException('database integrity check failed: ' . implode('; ', $errors));
-            }
-            echo 'SQLite database ready: ' . $this->database->connection()
-                ->query('PRAGMA database_list')->fetchColumn(2) . PHP_EOL;
-            $this->backend->operations->succeeded('database_integrity');
-            return 0;
-        } catch (Throwable $error) {
-            $this->backend->operations->failed('database_integrity', $error->getMessage());
-            fwrite(STDERR, $error->getMessage() . PHP_EOL);
-            return 1;
-        }
-    }
-
-    private function inventory(array $arguments): int
-    {
-        if (($arguments[0] ?? '') === '--work') {
-            return $this->backend->runLockedCliCommand(
-                '/tmp/fenping-inventory-worker.lck',
-                'inventory worker',
-                fn(): int => $this->backend->runInventoryCommand($arguments),
-            );
-        }
-        if (($arguments[0] ?? '') === '--run-job') {
-            return $this->backend->runInventoryCommand($arguments);
-        }
-        return $this->backend->runLockedCliCommand(
-            '/tmp/inventory-discovery.lck',
-            'inventory scheduling',
-            fn(): int => $this->backend->runInventoryCommand($arguments),
-        );
-    }
-    private function tracked(string $operation, callable $callback): int
-    {
-        $this->backend->operations->started($operation);
-        try {
-            $code = $callback();
-            if ($code === 0) {
-                $this->backend->operations->succeeded($operation);
-            } else {
-                $this->backend->operations->failed($operation, "command exited with code $code");
-            }
-            return $code;
-        } catch (Throwable $error) {
-            $this->backend->operations->failed($operation, $error->getMessage());
-            throw $error;
-        }
-    }
-
-    /** @param list<LiveUpdateScope> $scopes */
-    private function publishOnSuccess(array $scopes, callable $callback): int
-    {
-        $code = $callback();
-        if ($code === 0) {
-            $this->liveUpdates->publish(...$scopes);
-        }
-        return $code;
-    }
-
-    private function usage(): int
-    {
-        fwrite(STDERR, "Usage: php cli.php doctor [--runtime] [--json]" . PHP_EOL);
-        fwrite(STDERR, "Usage: php cli.php docker-networks-refresh [--api]" . PHP_EOL);
-        fwrite(STDERR, "Usage: php cli.php docker-networks-watch" . PHP_EOL);
-        fwrite(STDERR, "Usage: php cli.php ping [--network IPv4/24] [1-254|DEBUG]" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php database|database-check" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php hosts" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php inventory [--network IPv4/24] [--profile lightweight|standard|deep] [1-254|IPv4] (queue scans)" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php scan-port-backfill" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php oui-refresh" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php oui-sync" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php dnsmasq-leases" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php notify-restart" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php backup-verify <backup.tgz>" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php backup-maintenance <daily|verify>" . PHP_EOL);
-        fwrite(STDERR, "       php cli.php restore <backup.tgz>" . PHP_EOL);
-        return 2;
-    }
 }

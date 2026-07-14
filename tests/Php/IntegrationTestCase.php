@@ -43,6 +43,6 @@ abstract class IntegrationTestCase extends TestCase
             $database->rollback();
             throw $error;
         }
-        $this->app()->backend()->dockerNetworks->replace([], time());
+        $this->app()->dockerNetworks()->replace([], time());
     }
 }

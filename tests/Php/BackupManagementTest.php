@@ -101,7 +101,7 @@ final class BackupManagementTest extends IntegrationTestCase
                 'verification' => ['status' => 'verified'],
             ];
         }
-        $manager = new BackupManager($this->app()->backend(), $this->app()->config(), $this->app()->database());
+        $manager = $this->app()->backupManager();
         $method = new ReflectionMethod($manager, 'retentionRoles');
         $roles = $method->invoke($manager, $records, $now);
         $daily = array_filter($roles, static fn(array $items): bool => in_array('daily', $items, true));

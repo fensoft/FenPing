@@ -39,7 +39,7 @@ final class DoctorApiTest extends IntegrationTestCase
         self::assertSame('GET', $route->method);
         self::assertSame('/doctor', $route->pattern);
         self::assertSame(AuthPolicy::Session, $route->auth);
-        self::assertSame($provider->report, ($route->handler)([]));
+        self::assertSame($provider->report, ($route->handler)($this->request('GET', '/api/doctor'), []));
     }
 
     public function testProviderReturnsFailedReportsFromTheExactPrivilegedCommand(): void

@@ -20,19 +20,25 @@ final readonly class ApiKernel
         $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
     }
 
+    /**  list<Route> */
+    public function routes(): array
+    {
+        return array_merge(...array_map(
+            static fn(Controller $controller): array => $controller->routes(),
+            $this->controllers,
+        ));
+    }
+
     public function handle(Request $request): Response
     {
         RequestContext::set($request);
         try {
-            $router = new Router(array_merge(...array_map(
-                static fn(Controller $controller): array => $controller->routes(),
-                $this->controllers,
-            )));
+            $router = new Router($this->routes());
             $match = $router->match($request);
             $body = $match->route->auth === AuthPolicy::Guest ? [] : $request->body();
             $this->auth->authorize($match->route->auth, $body);
             try {
-                $result = ($match->route->handler)($match->params);
+                $result = ($match->route->handler)($request, $match->params);
                 $response = $result instanceof Response ? $result : new JsonResponse($result);
             } catch (ResponseException $ready) {
                 $response = $ready->response;

@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace FenPing\Health;
 
-use FenPing\Backend\Backend;
+use FenPing\Config\AppConfig;
+use FenPing\Inventory\InventoryService;
+use FenPing\Ipam\IpamService;
+use FenPing\Ipam\IpConflictService;
+use FenPing\Status\NotificationService;
 use FenPing\Database\DatabaseManager;
 use FenPing\Support\Clock;
 use PDO;
@@ -13,7 +17,13 @@ use Throwable;
 final readonly class HealthService
 {
     public function __construct(
-        private Backend $backend,
+        private AppConfig $config,
+        private DatabaseHealthProbe $databaseProbe,
+        private ProcessHealthProbe $processProbe,
+        private IpamService $ipam,
+        private IpConflictService $conflicts,
+        private InventoryService $inventory,
+        private NotificationService $notifications,
         private DatabaseManager $database,
         private OperationTracker $operations,
         private Clock $clock,
@@ -31,9 +41,9 @@ final readonly class HealthService
 
     public function readiness(): array
     {
-        $database = $this->backend->healthDb();
-        $dnsmasq = $this->backend->healthProcess('dnsmasq', '/var/run/dnsmasq.pid');
-        $cron = $this->backend->healthProcess('crond');
+        $database = $this->databaseProbe->healthDb();
+        $dnsmasq = $this->processProbe->healthProcess('dnsmasq', '/var/run/dnsmasq.pid');
+        $cron = $this->processProbe->healthProcess('crond');
         $integrity = $this->integrity($this->operations->statuses());
         $reasons = [];
         if (!$database['ok']) {
@@ -65,35 +75,35 @@ final readonly class HealthService
     {
         $readiness = $this->readiness();
         $statuses = $this->operations->statuses();
-        $recentFailures = $this->operations->recentFailures($this->backend->config->healthFailureWindowHours);
+        $recentFailures = $this->operations->recentFailures($this->config->healthFailureWindowHours);
         $scans = $readiness['db']['ok'] ? $this->scans() : $this->emptyScans();
         $storage = $this->storage();
         $dhcp = $readiness['db']['ok'] ? $this->dhcp() : ['status' => 'unknown'];
-        $lastPing = $readiness['db']['ok'] ? $this->backend->healthLastPingScan() : null;
-        $lastInventory = $readiness['db']['ok'] ? $this->backend->healthLastInventoryScan() : null;
+        $lastPing = $readiness['db']['ok'] ? $this->databaseProbe->healthLastPingScan() : null;
+        $lastInventory = $readiness['db']['ok'] ? $this->databaseProbe->healthLastInventoryScan() : null;
         $jobs = [
             'ping' => $this->job(
                 'ping',
-                $this->backend->config->healthPingMaxAgeMinutes * 60,
+                $this->config->healthPingMaxAgeMinutes * 60,
                 $statuses,
                 $lastPing['time'] ?? null,
             ),
             'discovery' => $this->job(
                 'discovery',
-                $this->backend->config->healthDiscoveryMaxAgeMinutes * 60,
+                $this->config->healthDiscoveryMaxAgeMinutes * 60,
                 $statuses,
                 $lastInventory['time'] ?? null,
             ),
-            'lease_import' => $this->job('lease_import', $this->backend->config->healthLeaseImportMaxAgeMinutes * 60, $statuses),
+            'lease_import' => $this->job('lease_import', $this->config->healthLeaseImportMaxAgeMinutes * 60, $statuses),
             'oui_update' => $this->job(
                 'oui_update',
-                $this->backend->config->healthOuiMaxAgeDays * 86400,
+                $this->config->healthOuiMaxAgeDays * 86400,
                 $statuses,
                 $this->ouiUpdatedAt(),
             ),
             'backup' => $this->job(
                 'backup',
-                $this->backend->config->healthBackupMaxAgeDays * 86400,
+                $this->config->healthBackupMaxAgeDays * 86400,
                 $statuses,
                 $this->latestBackupAt(),
             ),
@@ -104,7 +114,7 @@ final readonly class HealthService
             'important_hosts_down' => null,
         ];
         $conflictDetection = $readiness['db']['ok']
-            ? $this->backend->ipConflictMonitorStatus()
+            ? $this->conflicts->monitorStatus()
             : ['status' => 'unknown', 'monitors' => []];
         $dnsmasqFailures = $recentFailures['dnsmasq_generation'] ?? ['count' => 0, 'last_failure_at' => null];
         $notificationFailures = $recentFailures['notification_delivery'] ?? ['count' => 0, 'last_failure_at' => null];
@@ -119,18 +129,19 @@ final readonly class HealthService
             $statuses,
             $telegramNotificationFailures,
         );
+        $delivery = $this->notifications->delivery();
         $notifications = [
-            'enabled' => $this->backend->discordNotificationsEnabled(),
+            'enabled' => $delivery['discord']['configured'],
             'delivery' => $discordDelivery,
             'discord' => [
-                'configured' => $this->backend->discordNotificationsEnabled(),
-                'mention_target' => $this->backend->discordMentionTarget(),
+                'configured' => $delivery['discord']['configured'],
+                'mention_target' => $delivery['discord']['mention_target'],
                 'delivery' => $discordDelivery,
             ],
             'telegram' => [
-                'configured' => $this->backend->telegramBotConfigured(),
-                'chat_selected' => $this->backend->telegramSelectedChatId() !== null,
-                'enabled' => $this->backend->telegramNotificationsEnabled(),
+                'configured' => $delivery['telegram']['configured'],
+                'chat_selected' => $delivery['telegram']['chat_selected'],
+                'enabled' => ($delivery['telegram']['configured'] && $delivery['telegram']['chat_selected']),
                 'delivery' => $telegramDelivery,
             ],
         ];
@@ -179,7 +190,7 @@ final readonly class HealthService
     private function scans(): array
     {
         try {
-            $hours = $this->backend->config->healthFailureWindowHours;
+            $hours = $this->config->healthFailureWindowHours;
             $row = $this->database->connection()->query("
                 SELECT
                   SUM(CASE WHEN state='queued' THEN 1 ELSE 0 END) AS queued,
@@ -198,7 +209,7 @@ final readonly class HealthService
                 'oldest_queued_at' => $row['oldest_queued_at'] ?? null,
                 'oldest_queued_age_seconds' => $age,
                 'queue_status' => $age !== null
-                    && $age > $this->backend->config->healthScanQueueMaxAgeMinutes * 60
+                    && $age > $this->config->healthScanQueueMaxAgeMinutes * 60
                     ? 'warning' : 'ok',
                 'window_hours' => $hours,
             ];
@@ -213,7 +224,7 @@ final readonly class HealthService
             'queued' => 0, 'running' => 0, 'failed' => 0, 'timed_out' => 0,
             'oldest_queued_at' => null, 'oldest_queued_age_seconds' => null,
             'queue_status' => 'unknown',
-            'window_hours' => $this->backend->config->healthFailureWindowHours,
+            'window_hours' => $this->config->healthFailureWindowHours,
         ];
     }
 
@@ -242,7 +253,7 @@ final readonly class HealthService
             'last_failure_at' => $operation['last_failure_at'] ?? null,
             'last_error' => $operation['last_error'] ?? null,
             'recent_failures' => (int) ($recent['count'] ?? 0),
-            'window_hours' => $this->backend->config->healthFailureWindowHours,
+            'window_hours' => $this->config->healthFailureWindowHours,
         ];
     }
 
@@ -259,22 +270,22 @@ final readonly class HealthService
 
     private function storage(): array
     {
-        $directory = dirname($this->backend->config->databasePath);
+        $directory = dirname($this->config->databasePath);
         $total = @disk_total_space($directory);
         $free = @disk_free_space($directory);
         $usedPercent = is_float($total) && $total > 0 && is_float($free)
             ? round(($total - $free) * 100 / $total, 1) : null;
         $status = $usedPercent === null ? 'unknown' : (
-            $usedPercent >= $this->backend->config->healthDiskCriticalPercent ? 'critical' : (
-                $usedPercent >= $this->backend->config->healthDiskWarningPercent ? 'warning' : 'ok'
+            $usedPercent >= $this->config->healthDiskCriticalPercent ? 'critical' : (
+                $usedPercent >= $this->config->healthDiskWarningPercent ? 'warning' : 'ok'
             )
         );
         return [
             'status' => $status,
-            'sqlite_bytes' => is_file($this->backend->config->databasePath)
-                ? filesize($this->backend->config->databasePath) : null,
-            'wal_bytes' => is_file($this->backend->config->databasePath . '-wal')
-                ? filesize($this->backend->config->databasePath . '-wal') : 0,
+            'sqlite_bytes' => is_file($this->config->databasePath)
+                ? filesize($this->config->databasePath) : null,
+            'wal_bytes' => is_file($this->config->databasePath . '-wal')
+                ? filesize($this->config->databasePath . '-wal') : 0,
             'disk_total_bytes' => is_float($total) ? (int) $total : null,
             'disk_free_bytes' => is_float($free) ? (int) $free : null,
             'disk_used_percent' => $usedPercent,
@@ -284,10 +295,10 @@ final readonly class HealthService
     private function dhcp(): array
     {
         try {
-            $pool = $this->backend->ipamPoolUtilization($this->backend->ipamPoolConfig());
+            $pool = $this->ipam->ipamPoolUtilization($this->ipam->ipamPoolConfig());
             $used = (float) $pool['utilization_percent'];
-            $pool['status'] = $used >= $this->backend->config->healthDhcpCriticalPercent
-                ? 'critical' : ($used >= $this->backend->config->healthDhcpWarningPercent ? 'warning' : 'ok');
+            $pool['status'] = $used >= $this->config->healthDhcpCriticalPercent
+                ? 'critical' : ($used >= $this->config->healthDhcpWarningPercent ? 'warning' : 'ok');
             return $pool;
         } catch (Throwable $error) {
             return ['status' => 'unknown', 'error' => $error->getMessage()];
@@ -297,9 +308,9 @@ final readonly class HealthService
     private function networkExceptions(): array
     {
         try {
-            $pending = count($this->backend->getIpam()['pending'] ?? []);
+            $pending = count($this->ipam->summary()['pending'] ?? []);
             $down = 0;
-            foreach ($this->backend->getInventory($this->backend->config->dhcpNetwork->cidr) as $host) {
+            foreach ($this->inventory->forNetwork($this->config->dhcpNetwork->cidr) as $host) {
                 if ((int) ($host['important'] ?? 0) === 1
                     && !in_array((string) ($host['status'] ?? ''), ['Up', 'arp'], true)) {
                     $down++;
@@ -314,7 +325,7 @@ final readonly class HealthService
     private function ouiUpdatedAt(): ?string
     {
         try {
-            $path = $this->backend->config->stateDir() . '/ieee-oui.json';
+            $path = $this->config->stateDir() . '/ieee-oui.json';
             if (!is_file($path) || !is_readable($path)) {
                 return null;
             }
@@ -331,8 +342,8 @@ final readonly class HealthService
     {
         $latest = null;
         $paths = array_merge(
-            glob($this->backend->config->backupDir() . '/*.tgz') ?: [],
-            glob($this->backend->config->backupDir() . '/*.tar.gz') ?: [],
+            glob($this->config->backupDir() . '/*.tgz') ?: [],
+            glob($this->config->backupDir() . '/*.tar.gz') ?: [],
         );
         foreach ($paths as $path) {
             $metadataPath = $path . '.metadata.json';
@@ -352,7 +363,7 @@ final readonly class HealthService
 
     private function thresholds(): array
     {
-        $config = $this->backend->config;
+        $config = $this->config;
         return [
             'failure_window_hours' => $config->healthFailureWindowHours,
             'ping_max_age_minutes' => $config->healthPingMaxAgeMinutes,

@@ -18,7 +18,7 @@ final class HealthApiTest extends IntegrationTestCase
         $database = $this->app()->database()->connection();
         $hostId = $this->app()->hosts()->create('192.0.2.10', '02:00:00:00:00:10');
         $database->exec("UPDATE ips SET important=1 WHERE id=$hostId");
-        $this->app()->backend()->savePingHosts([
+        $this->app()->pingRepository()->save([
             ['ip' => '192.0.2.10', 'mac' => '02:00:00:00:00:10', 'status' => 'Down'],
         ]);
         $database->exec("
@@ -40,10 +40,10 @@ final class HealthApiTest extends IntegrationTestCase
               ('192.0.2.22', 'standard', 'timeout', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'test timeout')
         ");
 
-        $this->app()->backend()->operations->succeeded('database_integrity');
-        $this->app()->backend()->operations->failed('dnsmasq_generation', 'invalid generated configuration');
-        $this->app()->backend()->operations->failed('notification_delivery', 'HTTP 503');
-        $this->app()->backend()->operations->failed('telegram_notification_delivery', 'HTTP 429');
+        $this->app()->operations()->succeeded('database_integrity');
+        $this->app()->operations()->failed('dnsmasq_generation', 'invalid generated configuration');
+        $this->app()->operations()->failed('notification_delivery', 'HTTP 503');
+        $this->app()->operations()->failed('telegram_notification_delivery', 'HTTP 429');
 
         $response = $this->app()->api()->handle($this->request('/api/health'));
         self::assertSame(200, $response->status);
@@ -73,7 +73,7 @@ final class HealthApiTest extends IntegrationTestCase
 
     public function testLivenessIsIndependentAndReadinessControlsItsStatusCode(): void
     {
-        $this->app()->backend()->operations->succeeded('database_integrity');
+        $this->app()->operations()->succeeded('database_integrity');
 
         $live = $this->app()->api()->handle($this->request('/api/health/live'));
         self::assertSame(200, $live->status);
