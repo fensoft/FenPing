@@ -59,6 +59,7 @@
             @open-history="openHistory"
             @open-scan="openScan"
             @open-edit="openEdit"
+            @open-metadata="openMetadata"
             @open-scan-error="openScanError"
             @open-create="openCreate"
             @reserve-device="openReserve"
@@ -84,6 +85,7 @@
       @close="closeModal"
       @submit-login="submitLogin"
       @submit-edit="submitEdit"
+      @submit-metadata="submitMetadata"
       @delete-host="openDeleteHost(modal.form)"
       @cancel-scan="cancelScan"
       @submit-create="submitCreate"
@@ -96,6 +98,7 @@
       @open-scan="openScan"
       @scan-host="openScanProfile"
       @open-edit="openEdit"
+      @open-metadata="openMetadata"
     />
   </div>
 </template>
@@ -110,6 +113,7 @@ import { provideLiveUpdates } from './composables/useLiveUpdates.js';
 import { providePageController } from './composables/usePageController.js';
 import { formatMac, toFlag } from './lib/formatters.js';
 import { locale, localePreference, setLocale, supportedLocales, t } from './lib/i18n.js';
+import { editableHostTags } from './lib/inventoryFilters.js';
 import { scanProfileLabel } from './lib/scanProfiles.js';
 import { routeNames } from './router.js';
 
@@ -383,7 +387,7 @@ function openRenameCategory(row) {
 }
 function openCreate(host) {
   if (!isAuthenticated.value) return openLogin();
-  clearMessages(); modal.value = { type: 'create', form: { mac: formatMac(host.mac), ip: toShortIp(host.ip || '') } };
+  clearMessages(); modal.value = { type: 'create', source_device: host.device_identity || null, form: { mac: formatMac(host.mac), ip: toShortIp(host.ip || '') } };
 }
 function openReserve(host) {
   if (!isAuthenticated.value) return openLogin();
@@ -392,7 +396,7 @@ function openReserve(host) {
 
 async function openEdit(host) {
   if (!isAuthenticated.value) return openLogin();
-  if (!host?.id) return;
+  if (!host?.id || !toFlag(host.network_is_dhcp)) return;
   clearMessages(); modal.value = { type: 'loading' };
   const signal = modalRequest.nextSignal();
   try {
@@ -407,6 +411,13 @@ async function openEdit(host) {
   } catch (error) {
     if (!isAbortError(error)) { modal.value = null; globalError.value = error.message; }
   }
+}
+
+function openMetadata(host) {
+  if (!isAuthenticated.value) return openLogin();
+  if (!host?.metadata_editable || !host?.device_identity?.network || !host?.device_identity?.container) return;
+  clearMessages();
+  modal.value = { type: 'metadataEdit', form: metadataForm(host) };
 }
 
 function openDeleteHost(form) {
@@ -500,15 +511,28 @@ async function submitCreate() {
   await saveModal(async (signal) => {
     const purpose = modal.value.purpose;
     const form = modal.value.form;
-    const result = await apiJson('/api/hosts', { method: 'POST', body: JSON.stringify({ mac: form.mac, ip: form.ip }), signal });
+    const source_device = modal.value.source_device || undefined;
+    const result = await apiJson('/api/hosts', { method: 'POST', body: JSON.stringify({ mac: form.mac, ip: form.ip, source_device }), signal });
     setNotice(t(purpose === 'reserve' ? 'Reservation created' : 'Created')); await reloadCurrentPage();
-    if (result?.id) await openEdit({ id: result.id }); else closeModal();
+    if (result?.id) await openEdit({ id: result.id, network_is_dhcp: 1 }); else closeModal();
   });
 }
 async function submitEdit() {
   await saveModal(async (signal) => {
     const form = modal.value.form;
-    await apiJson(`/api/hosts/${encodeURIComponent(form.id)}`, { method: 'PUT', signal, body: JSON.stringify({ ip: form.ip, router: form.router, mac: form.mac, name: form.name, important: form.important ? 1 : null, repeater: form.repeater ? 1 : null, dns: form.dns, web: form.web ? 1 : null, netboot_image_id: form.netboot_image_id || null, scan_profile: form.scan_profile, scan_interval_hours: form.scan_interval_hours }) });
+    await apiJson(`/api/hosts/${encodeURIComponent(form.id)}`, { method: 'PUT', signal, body: JSON.stringify({ ip: form.ip, router: form.router, mac: form.mac, name: form.name, display_name: form.display_name, important: form.important ? 1 : null, repeater: form.repeater ? 1 : null, dns: form.dns, web: form.web ? 1 : null, netboot_image_id: form.netboot_image_id || null, scan_profile: form.scan_profile, scan_interval_hours: form.scan_interval_hours, notes: form.notes, location: form.location, owner: form.owner, model: form.model, icon: form.icon || null, tags: form.tags }) });
+    setNotice(t('Saved')); closeModal(); await reloadCurrentPage();
+  });
+}
+async function submitMetadata() {
+  await saveModal(async (signal) => {
+    const form = modal.value.form;
+    const metadata = { display_name: form.display_name, important: form.important ? 1 : null, web: form.web ? 1 : null, scan_profile: form.scan_profile, scan_interval_hours: form.scan_interval_hours, notes: form.notes, location: form.location, owner: form.owner, model: form.model, icon: form.icon || null, tags: form.tags };
+    const endpoint = form.host_id
+      ? '/api/hosts/' + encodeURIComponent(form.host_id) + '/metadata'
+      : '/api/inventory/device-metadata';
+    const body = form.host_id ? metadata : { network: form.network, container: form.container, ...metadata };
+    await apiJson(endpoint, { method: 'PUT', signal, body: JSON.stringify(body) });
     setNotice(t('Saved')); closeModal(); await reloadCurrentPage();
   });
 }
@@ -540,7 +564,50 @@ async function saveModal(action) {
 function closeModal() { modalRequest.abort(); liveModalRequest.abort(); modal.value = null; modalError.value = ''; saving.value = false; }
 function clearMessages() { modalError.value = ''; globalError.value = ''; notice.value = ''; }
 function toShortIp(ip) { const value = String(ip || ''); const prefix = `${network.value}.`; return value.startsWith(prefix) ? value.slice(prefix.length) : value; }
-function hostForm(data) { return { id: data.id, ip: toShortIp(data.ip || ''), router: data.router || '', mac: formatMac(data.mac), name: data.name || '', important: toFlag(data.important), repeater: toFlag(data.repeater), dns: data.dns || '', web: toFlag(data.web), netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : '', scan_profile: data.scan_profile || 'standard', scan_interval_hours: Number(data.scan_interval_hours ?? 24) }; }
+function hostForm(data) {
+  return {
+    id: data.id,
+    ip: toShortIp(data.ip || ''),
+    router: data.router || '',
+    mac: formatMac(data.mac),
+    name: data.name || '',
+    display_name: data.display_name || '',
+    important: toFlag(data.important),
+    repeater: toFlag(data.repeater),
+    dns: data.dns || '',
+    web: toFlag(data.web),
+    netboot_image_id: data.netboot_image_id ? String(data.netboot_image_id) : '',
+    scan_profile: data.scan_profile || 'standard',
+    scan_interval_hours: Number(data.scan_interval_hours ?? 24),
+    notes: data.notes || '',
+    location: data.location || '',
+    owner: data.owner || '',
+    model: data.model || '',
+    icon: data.icon || '',
+    tags: editableHostTags(data)
+  };
+}
+function metadataForm(data) {
+  return {
+    host_id: data.id || null,
+    show_identity: !data.id,
+    network: data.device_identity?.network || '',
+    container: data.device_identity?.container || '',
+    ip: data.ip || '',
+    display_name: data.display_name || (data.id && !toFlag(data.network_is_dhcp) ? data.name || '' : ''),
+    important: toFlag(data.important),
+    web: toFlag(data.web),
+    scan_profile: data.scan_profile || 'lightweight',
+    scan_interval_hours: Number(data.scan_interval_hours ?? 24),
+    notes: data.notes || '',
+    location: data.location || '',
+    owner: data.owner || '',
+    model: data.model || '',
+    icon: data.icon || '',
+    tags: editableHostTags(data)
+  };
+}
+
 
 function toggleDarkMode() { darkMode.value = !darkMode.value; writeCookie('fenping_theme', darkMode.value ? 'dark' : 'light'); applyTheme(); }
 function applyTheme() { const theme = darkMode.value ? 'dark' : 'light'; document.documentElement.dataset.bsTheme = theme; document.documentElement.style.colorScheme = theme; }

@@ -34,8 +34,8 @@ final class DockerNetworkTest extends TestCase
                 'Name' => 'bridge',
                 'IPAM' => ['Config' => [['Subnet' => '172.17.0.0/16', 'Gateway' => '172.17.0.1']]],
                 'Containers' => [
-                    'a' => ['IPv4Address' => '172.17.0.2/16'],
-                    'b' => ['IPv4Address' => '172.17.4.9/16'],
+                    'a' => ['Name' => 'web', 'IPv4Address' => '172.17.0.2/16'],
+                    'b' => ['Name' => 'worker', 'IPv4Address' => '172.17.4.9/16'],
                 ],
             ],
             [
@@ -62,8 +62,22 @@ final class DockerNetworkTest extends TestCase
 
         self::assertSame([
             ['cidr' => '10.20.30.0/24', 'names' => ['empty-24']],
-            ['cidr' => '172.17.0.0/24', 'names' => ['bridge', 'shared']],
-            ['cidr' => '172.17.4.0/24', 'names' => ['bridge']],
+            [
+                'cidr' => '172.17.0.0/24',
+                'names' => ['bridge', 'shared'],
+                'gateways' => [
+                    ['network' => 'bridge', 'ip' => '172.17.0.1'],
+                ],
+                'containers' => [
+                    ['network' => 'bridge', 'container' => 'web', 'ip' => '172.17.0.2'],
+                ],
+            ],
+            [
+                'cidr' => '172.17.4.0/24', 'names' => ['bridge'],
+                'containers' => [
+                    ['network' => 'bridge', 'container' => 'worker', 'ip' => '172.17.4.9'],
+                ],
+            ],
         ], (new DockerNetworkParser())->parse($json));
     }
 
@@ -71,6 +85,46 @@ final class DockerNetworkTest extends TestCase
     {
         $this->expectException(RuntimeException::class);
         (new DockerNetworkParser())->parse('{bad json');
+    }
+
+    public function testCacheExposesContainerIdentitiesAndAcceptsOlderRows(): void
+    {
+        $directory = $this->temporaryDirectory();
+        $cache = new DockerNetworkCache($directory . '/networks.json');
+        $cache->replace([
+            '192.0.2.0/24',
+            [
+                'cidr' => '198.51.100.0/24',
+                'names' => ['app_default'],
+                'gateways' => [
+                    ['network' => 'app_default', 'ip' => '198.51.100.1'],
+                    ['network' => '', 'ip' => '198.51.100.2'],
+                ],
+                'containers' => [
+                    ['network' => 'app_default', 'container' => 'camera', 'ip' => '198.51.100.20'],
+                    ['network' => '', 'container' => 'invalid', 'ip' => '198.51.100.21'],
+                ],
+            ],
+        ], 123);
+
+        self::assertSame([
+            [
+                'cidr' => '198.51.100.0/24',
+                'network' => 'app_default',
+                'container' => 'camera',
+                'ip' => '198.51.100.20',
+            ],
+        ], $cache->containers());
+        self::assertSame([
+            [
+                'cidr' => '198.51.100.0/24',
+                'network' => 'app_default',
+                'ip' => '198.51.100.1',
+            ],
+        ], $cache->gateways());
+        self::assertSame('camera', $cache->container('app_default', 'camera')['container']);
+        self::assertSame([], $cache->containersForIp('192.0.2.0/24', '192.0.2.20'));
+        self::assertNull($cache->container('app_default', 'renamed'));
     }
 
     public function testEngineClientRequiresAUnixSocket(): void
@@ -81,6 +135,49 @@ final class DockerNetworkTest extends TestCase
             '/dev/null',
         );
         self::assertFalse($client->available());
+    }
+
+    public function testEngineClientInspectsEachNetworkThroughTheUnixSocket(): void
+    {
+        $directory = $this->temporaryDirectory();
+        $socketPath = $directory . '/docker.sock';
+        $socket = stream_socket_server('unix://' . $socketPath);
+        self::assertIsResource($socket);
+        $processes = new DockerNetworkTestProcessRunner([
+            new ProcessResult(0, json_encode([[
+                'Id' => 'network-id',
+                'Name' => 'bridge',
+                'IPAM' => ['Config' => [['Subnet' => '172.17.0.0/16', 'Gateway' => '172.17.0.1']]],
+            ]], JSON_THROW_ON_ERROR)),
+            new ProcessResult(0, json_encode([
+                'Id' => 'network-id',
+                'Name' => 'bridge',
+                'IPAM' => ['Config' => [['Subnet' => '172.17.0.0/16', 'Gateway' => '172.17.0.1']]],
+                'Containers' => [
+                    'container-id' => [
+                        'Name' => 'buildx_buildkit_fenping-multiarch0',
+                        'IPv4Address' => '172.17.0.2/16',
+                    ],
+                ],
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+        try {
+            $networks = (new DockerEngineClient(
+                $processes,
+                new DockerNetworkParser(),
+                $socketPath,
+            ))->networks();
+        } finally {
+            fclose($socket);
+        }
+
+        self::assertSame('bridge', $networks[0]['gateways'][0]['network']);
+        self::assertSame(
+            'buildx_buildkit_fenping-multiarch0',
+            $networks[0]['containers'][0]['container'],
+        );
+        self::assertSame('http://localhost/networks', $processes->commands[0][10]);
+        self::assertSame('http://localhost/networks/network-id', $processes->commands[1][10]);
     }
 
     public function testRefreshCacheCoalescesApiCallsAndPreservesSuccessAfterFailure(): void
@@ -132,6 +229,14 @@ final class DockerNetworkTest extends TestCase
         $source->networks = [['cidr' => '172.17.0.0/24', 'names' => ['bridge', 'shared']]];
         $refresh->refresh(true);
         self::assertSame([[LiveUpdateScope::Networks], [LiveUpdateScope::Networks]], $publisher->events);
+
+        $source->networks = [[
+            'cidr' => '172.17.0.0/24',
+            'names' => ['bridge', 'shared'],
+            'gateways' => [['network' => 'bridge', 'ip' => '172.17.0.1']],
+        ]];
+        $refresh->refresh(true);
+        self::assertSame([[LiveUpdateScope::Networks], [LiveUpdateScope::Networks], [LiveUpdateScope::Networks]], $publisher->events);
     }
 
     public function testAppConfigMergesValidCacheWithoutWeakeningManualValidation(): void
@@ -259,10 +364,17 @@ final class DockerNetworkTestGateway implements DockerNetworkRefreshGateway
 final class DockerNetworkTestProcessRunner implements ProcessRunner
 {
     public array $command = [];
-    public function __construct(private ProcessResult $result) {}
+    public array $commands = [];
+    /** @var list<ProcessResult> */
+    private array $results;
+    public function __construct(ProcessResult|array $results)
+    {
+        $this->results = $results instanceof ProcessResult ? [$results] : array_values($results);
+    }
     public function run(array $command, array $environment = [], ?string $stdinFile = null, ?string $stdoutFile = null): ProcessResult
     {
         $this->command = $command;
-        return $this->result;
+        $this->commands[] = $command;
+        return array_shift($this->results) ?? new ProcessResult(1, '', 'unexpected process call');
     }
 }

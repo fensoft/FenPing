@@ -19,7 +19,7 @@ final class DatabaseIntegrationTest extends IntegrationTestCase
     {
         $database = $this->app()->database();
         $pdo = $database->connection();
-        self::assertSame(7, $database->schemaVersion());
+        self::assertSame(9, $database->schemaVersion());
         self::assertSame('wal', strtolower((string) $pdo->query('PRAGMA journal_mode')->fetchColumn()));
         self::assertSame([], $database->integrityErrors());
 
@@ -154,10 +154,11 @@ final class DatabaseIntegrationTest extends IntegrationTestCase
         $runningId = $this->app()->scanJobs()->start('192.0.2.71', 'deep');
         $this->app()->scanJobs()->updateProgress($runningId, 'port_scan', 40);
         $requested = $this->app()->scanJobs()->cancel('192.0.2.71', $runningId);
-        self::assertSame(202, $requested['status']);
-        self::assertSame('running', $requested['metadata']['state']);
+        self::assertSame(200, $requested['status']);
+        self::assertSame('cancelled', $requested['metadata']['state']);
         self::assertTrue($requested['metadata']['cancel_requested']);
-        self::assertSame('cancelling', $requested['metadata']['progress_phase']);
+        self::assertSame('cancelled', $requested['metadata']['progress_phase']);
+        self::assertTrue($this->app()->scanJobs()->cancellationRequested($runningId));
 
         $this->app()->scanJobs()->updateProgress($runningId, 'service_detection', 70);
         $this->app()->scanJobs()->fail($runningId, 'stale worker failure');

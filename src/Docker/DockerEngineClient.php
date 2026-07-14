@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace FenPing\Docker;
 
+use FenPing\Process\ProcessResult;
 use FenPing\Process\ProcessRunner;
+use JsonException;
 use RuntimeException;
 
 final readonly class DockerEngineClient implements DockerNetworkSource
@@ -26,16 +28,62 @@ final readonly class DockerEngineClient implements DockerNetworkSource
         if (!$this->available()) {
             return [];
         }
-        $result = $this->processes->run([
-            'curl', '--fail', '--silent', '--show-error',
-            '--connect-timeout', '2', '--max-time', '10',
-            '--unix-socket', $this->socketPath,
-            'http://localhost/networks',
-        ]);
+        $result = $this->request('/networks');
         if (!$result->successful()) {
             throw new RuntimeException(trim($result->stderr) ?: 'Docker network query failed');
         }
-        return $this->parser->parse($result->stdout);
+        try {
+            $summaries = json_decode($result->stdout, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $error) {
+            throw new RuntimeException('Docker returned invalid network data', previous: $error);
+        }
+        if (!is_array($summaries) || !array_is_list($summaries)) {
+            throw new RuntimeException('Docker returned invalid network data');
+        }
+
+        $networks = [];
+        foreach ($summaries as $summary) {
+            if (!is_array($summary)) {
+                continue;
+            }
+            $id = is_string($summary['Id'] ?? null) ? trim($summary['Id']) : '';
+            if ($id === '') {
+                $id = is_string($summary['Name'] ?? null) ? trim($summary['Name']) : '';
+            }
+            if ($id === '') {
+                $networks[] = $summary;
+                continue;
+            }
+
+            $inspection = $this->request('/networks/' . rawurlencode($id));
+            if (!$inspection->successful()) {
+                $networks[] = $summary;
+                continue;
+            }
+            try {
+                $network = json_decode($inspection->stdout, true, flags: JSON_THROW_ON_ERROR);
+            } catch (JsonException) {
+                $networks[] = $summary;
+                continue;
+            }
+            $networks[] = is_array($network) && !array_is_list($network) ? $network : $summary;
+        }
+
+        try {
+            return $this->parser->parse(json_encode($networks, JSON_THROW_ON_ERROR));
+        } catch (JsonException $error) {
+            throw new RuntimeException('Docker returned invalid network data', previous: $error);
+        }
+    }
+
+    private function request(string $path): ProcessResult
+    {
+        return $this->processes->run([
+            'curl', '--fail', '--silent', '--show-error',
+            '--connect-timeout', '2', '--max-time', '10',
+            '--unix-socket', $this->socketPath,
+            'http://localhost' . $path,
+        ]);
     }
 
     public function eventCommand(): array

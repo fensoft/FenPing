@@ -144,7 +144,7 @@ final class LiveUpdateTest extends IntegrationTestCase
         $app->scanJobs()->fail($id, 'late failure');
         $app->scanJobs()->timeout($id, 'late timeout');
         $app->scanJobs()->markCancelled($id);
-        self::assertCount(4, $publisher->events);
+        self::assertCount(3, $publisher->events);
         foreach ($publisher->events as $event) {
             self::assertSame([LiveUpdateScope::Scans], $event);
         }

@@ -64,13 +64,113 @@ final readonly class DockerNetworkCache
         return $result;
     }
 
+    /** @return list<array{cidr: string, network: string, container: string, ip: string}> */
+    public function containers(): array
+    {
+        $rows = $this->read()['networks'] ?? [];
+        if (!is_array($rows)) {
+            return [];
+        }
+        $containers = [];
+        foreach ($rows as $row) {
+            if (!is_array($row) || !is_string($row['cidr'] ?? null) || !is_array($row['containers'] ?? null)) {
+                continue;
+            }
+            $cidr = trim($row['cidr']);
+            foreach ($row['containers'] as $container) {
+                if (!is_array($container)) {
+                    continue;
+                }
+                $network = is_string($container['network'] ?? null) ? trim($container['network']) : '';
+                $name = is_string($container['container'] ?? null) ? trim($container['container']) : '';
+                $ip = is_string($container['ip'] ?? null) ? trim($container['ip']) : '';
+                if ($cidr === '' || $network === '' || $name === ''
+                    || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                    continue;
+                }
+                $key = $network . "\0" . $name . "\0" . $ip;
+                $containers[$key] = [
+                    'cidr' => $cidr,
+                    'network' => $network,
+                    'container' => $name,
+                    'ip' => $ip,
+                ];
+            }
+        }
+        $containers = array_values($containers);
+        usort($containers, static fn(array $left, array $right): int =>
+            [$left['cidr'], $left['network'], $left['container'], $left['ip']]
+            <=> [$right['cidr'], $right['network'], $right['container'], $right['ip']]
+        );
+        return $containers;
+    }
+
+    /** @return list<array{cidr: string, network: string, ip: string}> */
+    public function gateways(): array
+    {
+        $rows = $this->read()['networks'] ?? [];
+        if (!is_array($rows)) {
+            return [];
+        }
+        $gateways = [];
+        foreach ($rows as $row) {
+            if (!is_array($row) || !is_string($row['cidr'] ?? null) || !is_array($row['gateways'] ?? null)) {
+                continue;
+            }
+            $cidr = trim($row['cidr']);
+            foreach ($row['gateways'] as $gateway) {
+                if (!is_array($gateway)) {
+                    continue;
+                }
+                $network = is_string($gateway['network'] ?? null) ? trim($gateway['network']) : '';
+                $ip = is_string($gateway['ip'] ?? null) ? trim($gateway['ip']) : '';
+                if ($cidr === '' || $network === ''
+                    || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                    continue;
+                }
+                $key = $network . "\0" . $ip;
+                $gateways[$key] = [
+                    'cidr' => $cidr,
+                    'network' => $network,
+                    'ip' => $ip,
+                ];
+            }
+        }
+        $gateways = array_values($gateways);
+        usort($gateways, static fn(array $left, array $right): int =>
+            [$left['cidr'], $left['network'], $left['ip']]
+            <=> [$right['cidr'], $right['network'], $right['ip']]
+        );
+        return $gateways;
+    }
+
+    /** @return list<array{cidr: string, network: string, container: string, ip: string}> */
+    public function containersForIp(string $cidr, string $ip): array
+    {
+        return array_values(array_filter(
+            $this->containers(),
+            static fn(array $container): bool => $container['cidr'] === $cidr && $container['ip'] === $ip,
+        ));
+    }
+
+    /** @return array{cidr: string, network: string, container: string, ip: string}|null */
+    public function container(string $network, string $container): ?array
+    {
+        foreach ($this->containers() as $candidate) {
+            if ($candidate['network'] === $network && $candidate['container'] === $container) {
+                return $candidate;
+            }
+        }
+        return null;
+    }
+
     public function updatedAt(): ?int
     {
         $value = $this->read()['updated_at'] ?? null;
         return is_int($value) && $value >= 0 ? $value : null;
     }
 
-    /** @param list<string|array{cidr: string, names: list<string>}> $networks */
+    /** @param list<string|array{cidr: string, names: list<string>, gateways?: list<array{network: string, ip: string}>, containers?: list<array{network: string, container: string, ip: string}>}> $networks */
     public function replace(array $networks, ?int $updatedAt = null): void
     {
         $directory = dirname($this->path);

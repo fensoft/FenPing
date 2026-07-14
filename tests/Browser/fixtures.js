@@ -20,6 +20,7 @@ function seedHosts() {
       repeater: 1,
       web: 1,
       dhcp_managed: 1,
+      network_is_dhcp: 1,
       router: '',
       dns: 'gateway.lan',
       scan_profile: 'standard',
@@ -39,6 +40,7 @@ function seedHosts() {
       repeater: 0,
       web: 0,
       dhcp_managed: 1,
+      network_is_dhcp: 1,
       router: '',
       dns: 'printer.lan',
       scan_profile: 'lightweight',
@@ -60,6 +62,7 @@ function seedHosts() {
       repeater: 0,
       web: 0,
       dhcp_managed: 0,
+      network_is_dhcp: 1,
       scan: null
     }
   ];
@@ -125,7 +128,8 @@ function createApi() {
     authenticated: false,
     configured: true,
     password: 'correct horse battery staple',
-    hosts: seedHosts()
+    hosts: seedHosts(),
+    nextScanId: 100
   };
   const requests = [];
   const failures = [];
@@ -204,6 +208,33 @@ async function handleApi(route, api) {
     return;
   }
 
+  const scanMatch = path.match(/^\/api\/scans\/(\d+\.\d+\.\d+\.\d+)$/);
+  if (method === 'POST' && scanMatch) {
+    const id = api.state.nextScanId++;
+    await fulfillJson(route, {
+      created: true,
+      metadata: {
+        id,
+        ip: scanMatch[1],
+        mode: body?.profile || 'standard',
+        state: 'queued'
+      }
+    }, 202);
+    return;
+  }
+
+  const scanStatusMatch = path.match(/^\/api\/scans\/(\d+\.\d+\.\d+\.\d+)\/status$/);
+  if (method === 'GET' && scanStatusMatch) {
+    await fulfillJson(route, {
+      id: Number(url.searchParams.get('id') || api.state.nextScanId - 1),
+      ip: scanStatusMatch[1],
+      mode: 'standard',
+      state: 'complete',
+      result_changed: false
+    });
+    return;
+  }
+
   if (method === 'GET' && path === '/api/netboot/images') {
     await fulfillJson(route, { images: [] });
     return;
@@ -224,6 +255,21 @@ async function handleApi(route, api) {
     return;
   }
 
+
+  const hostMetadataMatch = path.match(/^\/api\/hosts\/(\d+)\/metadata$/);
+  if (method === 'PUT' && hostMetadataMatch) {
+    const host = api.state.hosts.find((candidate) => Number(candidate.id) === Number(hostMetadataMatch[1]));
+    if (!host) {
+      await fulfillJson(route, { error: 'Host not found' }, 404);
+      return;
+    }
+    Object.assign(host, clone(body), {
+      important: body?.important || 0,
+      web: body?.web || 0
+    });
+    await fulfillJson(route, { saved: true, host: responseHost(host) });
+    return;
+  }
   const hostMatch = path.match(/^\/api\/hosts\/(\d+)$/);
   if (method === 'GET' && hostMatch) {
     const host = api.state.hosts.find((candidate) => Number(candidate.id) === Number(hostMatch[1]));
@@ -248,6 +294,7 @@ async function handleApi(route, api) {
       repeater: existing?.repeater || 0,
       web: existing?.web || 0,
       dhcp_managed: 1,
+      network_is_dhcp: 1,
       router: '',
       dns: '',
       scan_profile: 'standard',
@@ -271,6 +318,7 @@ async function handleApi(route, api) {
       repeater: body?.repeater || 0,
       web: body?.web || 0,
       dhcp_managed: 1,
+      network_is_dhcp: 1,
       is_new: 0
     });
     await fulfillJson(route, responseHost(host));
@@ -307,6 +355,8 @@ export const test = base.extend({
           this.url = String(url);
           this.readyState = SilentEventSource.OPEN;
           this.withCredentials = false;
+          window.__fenpingEventSources ||= [];
+          window.__fenpingEventSources.push(this);
         }
 
         close() {

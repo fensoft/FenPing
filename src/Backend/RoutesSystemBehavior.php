@@ -18,6 +18,10 @@ public function systemApiRoutes(): array {
   return array(
     $this->apiRoute('GET', '/health', 'handleHealth'),
     $this->apiRoute('GET', '/inventory', 'handleInventory'),
+    $this->apiRoute('PUT', '/inventory/device-metadata', 'handleInventoryDeviceMetadataUpdate', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('POST', '/inventory/saved-filters', 'handleSavedInventoryFilterCreate', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('PUT', '/inventory/saved-filters/{id:int}', 'handleSavedInventoryFilterUpdate', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('DELETE', '/inventory/saved-filters/{id:int}', 'handleSavedInventoryFilterDelete', 'body', array('live' => array(LiveUpdateScope::Hosts))),
     $this->apiRoute('GET', '/notify', 'handleNotify'),
     $this->apiRoute('GET', '/notify/telegram/chats', 'handleTelegramChats', 'session'),
     $this->apiRoute(
@@ -49,8 +53,66 @@ public function handleInventory(array $params): array {
     'selected_network' => $selected->cidr,
     'dhcp_network' => $this->config->dhcpNetwork->cidr,
     'networks' => $this->networks->descriptors(),
-    'hosts' => $this->getInventory($selected->cidr)
+    'hosts' => $this->getInventory($selected->cidr),
+    'available_tags' => $this->inventoryAvailableTags(),
+    'saved_filters' => $this->savedInventoryFilters()
   );
+}
+
+public function handleInventoryDeviceMetadataUpdate(array $params): array {
+  $body = $this->requestBody();
+  try {
+    $network = $this->normalizeInventoryDeviceIdentityPart($body['network'] ?? null, 'network name');
+    $container = $this->normalizeInventoryDeviceIdentityPart($body['container'] ?? null, 'container name');
+  } catch (InvalidArgumentException $error) {
+    $this->jsonError(400, $error->getMessage());
+  }
+  if ($this->dockerContainerIdentity($network, $container) === null)
+    $this->jsonError(409, 'container identity is no longer available');
+  try {
+    return $this->saveInventoryDeviceMetadata($network, $container, $body);
+  } catch (InvalidArgumentException $error) {
+    $this->jsonError(400, $error->getMessage());
+  } catch (PDOException $error) {
+    if ((string)$error->getCode() === '23000')
+      $this->jsonError(409, 'container metadata conflicts with an existing device');
+    throw $error;
+  }
+}
+
+public function handleSavedInventoryFilterCreate(array $params): array {
+  $body = $this->requestBody();
+  try {
+    return $this->createSavedInventoryFilter($body['name'] ?? null, $body['tags'] ?? null);
+  } catch (InvalidArgumentException $error) {
+    $this->jsonError(400, $error->getMessage());
+  } catch (PDOException $error) {
+    if ((string)$error->getCode() === '23000')
+      $this->jsonError(409, 'saved filter name must be unique');
+    throw $error;
+  }
+}
+
+public function handleSavedInventoryFilterUpdate(array $params): array {
+  $body = $this->requestBody();
+  try {
+    $filter = $this->updateSavedInventoryFilter($params['id'], $body['name'] ?? null, $body['tags'] ?? null);
+  } catch (InvalidArgumentException $error) {
+    $this->jsonError(400, $error->getMessage());
+  } catch (PDOException $error) {
+    if ((string)$error->getCode() === '23000')
+      $this->jsonError(409, 'saved filter name must be unique');
+    throw $error;
+  }
+  if ($filter === false)
+    $this->jsonError(404, 'saved filter not found');
+  return $filter;
+}
+
+public function handleSavedInventoryFilterDelete(array $params): array {
+  if (!$this->deleteSavedInventoryFilter($params['id']))
+    $this->jsonError(404, 'saved filter not found');
+  return array('deleted' => true);
 }
 
 public function handleNotify(array $params): array {

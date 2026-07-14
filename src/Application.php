@@ -104,9 +104,10 @@ final class Application
             new DockerNetworkParser(),
             $dockerSocket === false ? '' : trim($dockerSocket),
         );
+        $dockerCache = new DockerNetworkCache(DockerNetworkCache::pathFromEnvironment());
         $this->dockerNetworkRefresh = new DockerNetworkRefreshService(
             $dockerSource,
-            new DockerNetworkCache(DockerNetworkCache::pathFromEnvironment()),
+            $dockerCache,
             liveUpdates: $this->liveUpdates,
         );
         $this->dockerNetworkWatcher = new DockerNetworkWatcher($dockerSource, $this->dockerNetworkRefresh);
@@ -118,6 +119,7 @@ final class Application
             $this->ipConflicts,
             $this->ipConflictDetector,
             $this->operations,
+            dockerNetworks: $dockerCache,
             liveUpdates: $this->liveUpdates,
             httpTransport: $httpTransport,
         );

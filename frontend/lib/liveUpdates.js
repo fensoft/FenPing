@@ -44,8 +44,8 @@ export class LiveUpdateClient {
     url = '/api/events',
     eventSourceFactory = (sourceUrl) => new EventSource(sourceUrl),
     documentRef = typeof document === 'undefined' ? null : document,
-    setTimeoutFn = setTimeout,
-    clearTimeoutFn = clearTimeout,
+    setTimeoutFn = (callback, delay) => globalThis.setTimeout(callback, delay),
+    clearTimeoutFn = (timer) => globalThis.clearTimeout(timer),
     debounceMs = 250
   } = {}) {
     this.url = url;

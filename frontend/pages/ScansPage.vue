@@ -58,7 +58,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
@@ -77,10 +77,21 @@ const loading = ref(false);
 const error = ref('');
 const request = useAbortableTask();
 const now = useNow();
+let pollTimer = null;
 
 usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Scans')), title: computed(() => t('Refresh scans')), disabled: false, refresh: load });
 useLiveRefresh(['hosts', 'status', 'scans', 'vendors'], load);
-onMounted(load);
+onMounted(() => {
+  load();
+  pollTimer = window.setInterval(() => {
+    if (!loading.value && scans.value.some((scan) => scanIsActiveState(scan.state)))
+      load();
+  }, 5000);
+});
+onUnmounted(() => {
+  if (pollTimer !== null)
+    window.clearInterval(pollTimer);
+});
 
 async function load() {
   const signal = request.nextSignal();

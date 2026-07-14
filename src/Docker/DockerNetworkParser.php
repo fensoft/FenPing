@@ -9,7 +9,7 @@ use RuntimeException;
 
 final class DockerNetworkParser
 {
-    /** @return list<array{cidr: string, names: list<string>}> */
+    /** @return list<array{cidr: string, names: list<string>, gateways?: list<array{network: string, ip: string}>, containers?: list<array{network: string, container: string, ip: string}>}> */
     public function parse(string $json): array
     {
         try {
@@ -39,6 +39,7 @@ final class DockerNetworkParser
                 $gateway = $subnet['gateway'];
                 if ($gateway !== null && $this->contains($subnet, $gateway)) {
                     $this->addNetwork($networks, $this->slice24($gateway), $name);
+                    $this->addGateway($networks, $this->slice24($gateway), $name, $gateway);
                 }
             }
 
@@ -50,6 +51,7 @@ final class DockerNetworkParser
                 if (!is_array($container)) {
                     continue;
                 }
+                $containerName = is_string($container['Name'] ?? null) ? trim($container['Name']) : '';
                 $address = $this->ipv4Address($container['IPv4Address'] ?? null);
                 if ($address === null) {
                     continue;
@@ -58,7 +60,7 @@ final class DockerNetworkParser
                     if (!$this->contains($subnet, $address)) {
                         continue;
                     }
-                    $this->addNetwork($networks, $this->slice24($address), $name);
+                    $this->addNetwork($networks, $this->slice24($address), $name, $containerName, $address);
                     break;
                 }
             }
@@ -70,19 +72,67 @@ final class DockerNetworkParser
             (string) inet_pton(explode('/', $right, 2)[0]),
         ));
         return array_map(static function (string $cidr) use ($networks): array {
-            $names = array_keys($networks[$cidr]);
+            $names = array_keys($networks[$cidr]['names']);
             sort($names, SORT_NATURAL | SORT_FLAG_CASE);
-            return ['cidr' => $cidr, 'names' => $names];
+            $row = ['cidr' => $cidr, 'names' => $names];
+            $gateways = array_values($networks[$cidr]['gateways']);
+            usort($gateways, static fn(array $left, array $right): int =>
+                [$left['network'], $left['ip']]
+                <=> [$right['network'], $right['ip']]
+            );
+            if ($gateways !== []) {
+                $row['gateways'] = $gateways;
+            }
+            $containers = array_values($networks[$cidr]['containers']);
+            usort($containers, static fn(array $left, array $right): int =>
+                [$left['network'], $left['container'], $left['ip']]
+                <=> [$right['network'], $right['container'], $right['ip']]
+            );
+            if ($containers !== []) {
+                $row['containers'] = $containers;
+            }
+            return $row;
         }, $result);
     }
 
-    /** @param array<string, array<string, true>> $networks */
-    private function addNetwork(array &$networks, string $cidr, string $name): void
-    {
-        $networks[$cidr] ??= [];
+    /**
+     * @param array<string, array{names: array<string, true>, gateways: array<string, array{network: string, ip: string}>, containers: array<string, array{network: string, container: string, ip: string}>}> $networks
+     */
+    private function addNetwork(
+        array &$networks,
+        string $cidr,
+        string $name,
+        string $containerName = '',
+        string $ip = '',
+    ): void {
+        $networks[$cidr] ??= ['names' => [], 'gateways' => [], 'containers' => []];
         if ($name !== '') {
-            $networks[$cidr][$name] = true;
+            $networks[$cidr]['names'][$name] = true;
         }
+        if ($name !== '' && $containerName !== '' && $ip !== '') {
+            $key = $name . "\0" . $containerName;
+            $networks[$cidr]['containers'][$key] = [
+                'network' => $name,
+                'container' => $containerName,
+                'ip' => $ip,
+            ];
+        }
+    }
+
+    /**
+     * @param array<string, array{names: array<string, true>, gateways: array<string, array{network: string, ip: string}>, containers: array<string, array{network: string, container: string, ip: string}>}> $networks
+     */
+    private function addGateway(array &$networks, string $cidr, string $name, string $ip): void
+    {
+        if ($name === '' || $ip === '') {
+            return;
+        }
+        $this->addNetwork($networks, $cidr, $name);
+        $key = $name . "\0" . $ip;
+        $networks[$cidr]['gateways'][$key] = [
+            'network' => $name,
+            'ip' => $ip,
+        ];
     }
 
     /** @return list<array{network: string, prefix: int, mask: int, gateway: ?string}> */

@@ -107,7 +107,10 @@ SQLite permits concurrent readers and one writer. Mutation paths use immediate w
 
 Important tables:
 
-- `ips`: managed hosts, static IPs, MACs, flags, DNS/router options, netboot assignment, and automatic scan schedule.
+- `ips`: managed hosts, static IPs, MACs, flags, DNS/router options, netboot assignment, automatic scan schedule, free-form notes, location, owner, model, and curated icon slug.
+- `tags` and `host_tags`: case-insensitive tag names and normalized managed-host assignments.
+- `inventory_saved_filters` and `inventory_saved_filter_tags`: appliance-wide named tag views and their normalized tag selections.
+- `inventory_device_metadata` and `inventory_device_tags`: metadata and tag assignments keyed by Docker network/container identity rather than transient IP or MAC address.
 - `ping`: latest ping status per IP.
 - `stats`: status history used for stability and notifications.
 - `range`: category separators keyed by starting IP.
@@ -187,12 +190,16 @@ The authenticated `GET /api/doctor` route invokes the exact `doctor --runtime --
 `DHCP_NETWORK` is a required canonical `/24`. `EXTRA_NETWORKS` optionally lists comma-separated scan-only `/24` networks. FenPing reports whether a connected or static non-default route covers each extra network, but the status is informational and does not disable scanning. Default and partial routes do not count as explicit routes. dnsmasq generation and all DHCP, host, category, and netboot mutations remain restricted to `DHCP_NETWORK`.
 
 When `DOCKER_SOCKET` points to the optional read-only Compose bind, a root-only Docker client reads `/networks` and writes an atomic, PHP-readable runtime cache under `/run/fenping`. `AppConfig` merges that cache on each process construction. A self-reconnecting `/events` listener debounces network create/connect/disconnect/destroy/update/remove bursts and performs full refreshes; boot, hourly cron, and the parameterless guest `POST /api/networks/refresh` route reconcile missed events. The API can invoke only the exact `docker-networks-refresh --api` command through `doas`, and repeated guest calls are coalesced. The socket's read-only mount flag does not restrict Docker API privileges.
+The Docker network cache also retains verified network name, container name, and IPv4 mappings. Discovery metadata is editable only while that exact identity is present; it follows IP changes, while renamed identities leave their old metadata inactive.
+
 
 `INVENTORY_DOWN_RETENTION_DAYS` defaults to 7. Inventory omits unreserved hosts whose current Down status began more than that many days ago. Reserved hosts remain visible, and filtering never deletes status or scan history.
 
 `php cli.php hosts` always validates candidate files with `dnsmasq --test`, atomically replaces the generated files, and reloads/starts local dnsmasq. If replacement or reload fails, it restores the previous files.
 
-Host create, edit, and delete requests hold a shared dnsmasq update lock and an immediate SQLite transaction while generating and testing a candidate configuration. The candidate is applied before the SQL commit; an apply failure rolls back SQL, while a commit failure regenerates dnsmasq from the committed database state. Netboot image deletion uses the same path because it clears per-host boot assignments. Host names, MAC addresses, router octets, DNS server addresses, IP addresses, and netboot filenames are validated before they can be rendered into dnsmasq files.
+Host create, edit, and delete requests hold a shared dnsmasq update lock and an immediate SQLite transaction while generating and testing a candidate configuration. Metadata and complete tag replacement participate in the same host-edit transaction. The candidate is applied before the SQL commit; an apply failure rolls back SQL, while a commit failure regenerates dnsmasq from the committed database state. Netboot image deletion uses the same path because it clears per-host boot assignments. Host names, MAC addresses, router octets, DNS server addresses, IP addresses, netboot filenames, and curated icon slugs are validated before storage or rendering.
+
+Promotion to a DHCP host copies metadata, tags, and scan cadence and removes the matching discovery record inside the dnsmasq-coordinated transaction, so an apply failure restores the source metadata as well.
 
 Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_images`. Browser downloads are streamed through `/api/netboot/images/{id}/file`; nginx denies the entire legacy `/netboot` URL path and never maps the storage directory into the document root, so uploaded PHP-like files cannot execute.
 
@@ -220,7 +227,7 @@ Important files:
 
 Each route component owns and cancels its loader when it is replaced, preventing stale responses from updating another view. Scan and notification pages use a one-second reactive clock only for running durations and relative times; data invalidation uses the application-level EventSource. Modal dialogs expose dialog semantics, trap Tab focus, close on Escape or backdrop interaction, mark the background inert, and restore focus to the opening control.
 
-Inventory filters use persisted three-way status, importance, and new-device choices. Stored checkbox-era preferences are normalized into the current string-valued filter document on load, while search and all filter dimensions combine with AND semantics.
+Inventory filters use persisted three-way status, importance, and new-device choices plus a tag selection. Stored checkbox-era preferences are normalized into the current filter document on load. Search includes host and Docker-device metadata and tags; selected tags use AND semantics. Named appliance-wide tag views are guest-readable, while authenticated users can create, rename, update, and delete them.
 
 The IPAM route lists every configured subnet and combines their pending devices, approved dynamic devices, and active conflicts. Each device row identifies its subnet. Pool capacity and fixed reservations remain specific to `DHCP_NETWORK`; Reserve is therefore offered only for devices observed there. Approve/unapprove actions are reversible across configured subnets. The Services route reads `/api/services` and lists open ports from each IP's newest usable scan. A newest deep result is used directly; a newest lightweight or standard result is merged with its preceding deep snapshot so deep-only ports and version details remain available with per-port source labels.
 

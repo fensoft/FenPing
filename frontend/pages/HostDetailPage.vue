@@ -4,7 +4,7 @@
     <RouterLink v-if="!embedded" class="btn btn-link btn-sm p-0 mb-1" to="/"><AppIcon name="arrow-left" class="me-1" />{{ t('Inventory') }}</RouterLink>
     <div class="page-header host-detail-header">
       <div class="host-detail-title">
-        <h2>{{ title }}</h2>
+        <h2><AppIcon v-if="hostIconName(host.icon)" :name="hostIconName(host.icon)" class="text-primary me-2 host-detail-custom-icon" />{{ title }}</h2>
         <div class="host-detail-meta">
           <span class="host-detail-status"><span :class="statusClass(host.status)" :title="statusTitle(host.status)" class="status-pill"><AppIcon :name="statusIcon(host.status)" /></span>{{ statusLabel(host.status) }}</span>
           <span class="host-detail-vendor" :title="host.vendor || t('Unknown vendor')">{{ host.vendor || t('Unknown vendor') }}</span>
@@ -15,7 +15,8 @@
         <button v-if="host.ip" class="btn btn-outline-secondary btn-sm" type="button" :title="t('Scan history')" :aria-label="t('Scan history')" :disabled="!viewScan" @click="$emit('open-scan', host.ip, viewScan?.id)"><AppIcon name="history" class="me-1" />{{ t('Scan history') }}</button>
         <button v-if="isAuthenticated && host.ip" class="btn btn-outline-primary btn-sm" type="button" :disabled="isScanning || scanIsActiveState(latestScan?.state)" @click="$emit('scan-host', host)"><AppIcon :name="isScanning ? 'loader-2' : 'search'" class="me-1" :class="{ 'is-spinning': isScanning }" />{{ t('Scan') }}</button>
         <button v-if="isAuthenticated && scanIsActiveState(latestScan?.state)" class="btn btn-outline-danger btn-sm" type="button" :disabled="!scanCanCancel(latestScan) || isCancelling" @click="$emit('cancel-scan', latestScan)"><AppIcon :name="latestScan.cancel_requested || isCancelling ? 'loader-2' : 'x'" class="me-1" :class="{ 'is-spinning': latestScan.cancel_requested || isCancelling }" />{{ t(latestScan.cancel_requested ? 'Cancelling' : 'Cancel scan') }}</button>
-        <button v-if="isAuthenticated && host.id && host.dhcp_managed" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><AppIcon name="edit" class="me-1" />{{ t('Edit') }}</button>
+        <button v-if="isAuthenticated && host.id && toFlag(host.network_is_dhcp)" class="btn btn-primary btn-sm" type="button" @click="$emit('open-edit', host)"><AppIcon name="edit" class="me-1" />{{ t('Edit') }}</button>
+        <button v-else-if="isAuthenticated && host.metadata_editable" class="btn btn-primary btn-sm" type="button" @click="$emit('open-metadata', host)"><AppIcon name="edit" class="me-1" />{{ t('Edit metadata') }}</button>
       </div>
     </div>
     <div v-if="loading" class="table-wrap detail-empty"><div class="text-secondary text-center py-4">{{ t('Loading') }}</div></div>
@@ -37,13 +38,20 @@
           <h3>{{ t('Configuration') }}</h3>
           <dl class="detail-compact-list detail-configuration-list">
             <div><dt>{{ t('Management') }}</dt><dd>{{ managementLabel }}</dd></div>
-            <div><dt>{{ t('Name') }}</dt><dd>{{ host.name || '-' }}</dd></div>
+            <div v-if="!isNamedExtraHost"><dt>{{ t('Name') }}</dt><dd>{{ host.name || '-' }}</dd></div>
+            <div v-if="detailDisplayName"><dt>{{ t('Display name') }}</dt><dd>{{ detailDisplayName }}</dd></div>
+            <div v-if="host.location"><dt>{{ t('Location') }}</dt><dd>{{ host.location }}</dd></div>
+            <div v-if="host.owner"><dt>{{ t('Owner') }}</dt><dd>{{ host.owner }}</dd></div>
+            <div v-if="host.model"><dt>{{ t('Model') }}</dt><dd>{{ host.model }}</dd></div>
+            <div v-if="showDeviceIdentity"><dt>{{ t('Network') }}</dt><dd>{{ host.device_identity.network }}</dd></div>
+            <div v-if="showDeviceIdentity"><dt>{{ t('Container') }}</dt><dd>{{ host.device_identity.container }}</dd></div>
             <div><dt>IP</dt><dd class="font-monospace">{{ host.ip || '-' }}</dd></div>
             <div><dt>MAC</dt><dd class="font-monospace">{{ formatMac(host.mac) || '-' }}</dd></div>
-            <div><dt>{{ t('Router') }}</dt><dd>{{ host.router || '-' }}</dd></div>
-            <div><dt>DNS</dt><dd>{{ host.dns || '-' }}</dd></div>
-            <div><dt>{{ t('Netboot') }}</dt><dd>{{ netbootName }}</dd></div>
+            <div v-if="isDhcpHost"><dt>{{ t('Router') }}</dt><dd>{{ host.router || '-' }}</dd></div>
+            <div v-if="isDhcpHost"><dt>DNS</dt><dd>{{ host.dns || '-' }}</dd></div>
+            <div v-if="isDhcpHost"><dt>{{ t('Netboot') }}</dt><dd>{{ netbootName }}</dd></div>
             <div><dt>{{ t('Scheduled scan') }}</dt><dd>{{ scanSchedule }}</dd></div>
+            <div v-if="host.tags?.length"><dt>{{ t('Tags') }}</dt><dd><span v-for="tag in host.tags" :key="tag.toLowerCase()" class="badge bg-blue-lt text-blue me-1">{{ tag }}</span></dd></div>
             <div><dt>{{ t('Flags') }}</dt><dd><span v-if="toFlag(host.important)" class="badge bg-red-lt text-red me-1">{{ t('Important') }}</span><span v-if="toFlag(host.repeater)" class="badge bg-blue-lt text-blue me-1">{{ t('Router/repeater') }}</span><span v-if="toFlag(host.web)" class="badge bg-green-lt text-green me-1">{{ t('Web') }}</span><span v-if="!toFlag(host.important) && !toFlag(host.repeater) && !toFlag(host.web)">-</span></dd></div>
           </dl>
         </div>
@@ -63,6 +71,10 @@
             <label><span>{{ t('Hostnames') }}</span><select v-model.number="selectedHostnameIndex" class="form-select form-select-sm" :disabled="hostnameOptions.length < 2"><option v-if="hostnameOptions.length === 0" :value="-1">{{ t('No hostnames detected') }}</option><option v-for="(hostname, index) in hostnameOptions" :key="`${hostname.name}-${hostname.type}-${index}`" :value="index">{{ hostnameOptionLabel(hostname) }}</option></select></label>
             <label><span>OS</span><select v-model.number="selectedOsIndex" class="form-select form-select-sm" :disabled="osOptions.length < 2"><option v-if="osOptions.length === 0" :value="-1">{{ t('No OS match detected') }}</option><option v-for="(os, index) in osOptions" :key="`${os.name}-${os.accuracy}-${index}`" :value="index">{{ osOptionLabel(os) }}</option></select></label>
           </div>
+        </div>
+        <div v-if="host.notes" class="detail-compact-group detail-host-notes">
+          <h3>{{ t('Notes') }}</h3>
+          <p>{{ host.notes }}</p>
         </div>
       </section>
 
@@ -98,12 +110,13 @@ import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { usePageController } from '../composables/usePageController.js';
 import { filterHistoryRows } from '../lib/historyFilters.js';
 import { formatDuration, formatMac, formatScanDate, formatServerDate, historyRowClass, scanCanCancel, scanIsActiveState, scanProgressLabel, scanRunStateLabel, scanStateClass, scanStateLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
+import { hostIconName } from '../lib/hostIcons.js';
 import { t } from '../lib/i18n.js';
 import { scanCadenceLabel, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({ device: { type: Object, default: null }, embedded: Boolean, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true }, cancellingScans: { type: Object, required: true } });
-defineEmits(['cancel-scan', 'open-edit', 'open-scan', 'scan-host']);
+defineEmits(['cancel-scan', 'open-edit', 'open-metadata', 'open-scan', 'scan-host']);
 const route = useRoute();
 const detail = ref(null);
 const loading = ref(false);
@@ -122,10 +135,14 @@ const historyRows = computed(() => detail.value?.history?.rows || []);
 const filteredHistoryRows = computed(() => filterHistoryRows(historyRows.value, historyRangeHours.value));
 const hostnameOptions = computed(() => scanResult.value?.hostnames || []);
 const osOptions = computed(() => [...(scanResult.value?.os || [])].sort((left, right) => Number(right.accuracy || 0) - Number(left.accuracy || 0)));
-const title = computed(() => host.value.name || host.value.ip || t('Host detail'));
+const isDhcpHost = computed(() => Boolean(host.value.id && toFlag(host.value.network_is_dhcp)));
+const isNamedExtraHost = computed(() => Boolean(host.value.id && host.value.metadata_editable && !toFlag(host.value.network_is_dhcp)));
+const detailDisplayName = computed(() => host.value.display_name || (isNamedExtraHost.value ? host.value.name : ''));
+const showDeviceIdentity = computed(() => Boolean(host.value.device_identity && !isNamedExtraHost.value));
+const title = computed(() => detailDisplayName.value || host.value.name || host.value.device_identity?.container || host.value.ip || t('Host detail'));
 const netbootName = computed(() => detail.value?.netboot_image?.name || detail.value?.netboot_image?.filename || '-');
-const managementLabel = computed(() => host.value.id ? t('Managed') : t('Not managed'));
-const scanSchedule = computed(() => host.value.id ? `${scanProfileLabel(host.value.scan_profile)} · ${scanCadenceLabel(host.value.scan_interval_hours)}` : t('Not managed'));
+const managementLabel = computed(() => host.value.id ? t('Managed') : host.value.device_identity ? t('Docker container') : t('Not managed'));
+const scanSchedule = computed(() => host.value.id || host.value.metadata_editable ? `${scanProfileLabel(host.value.scan_profile)} · ${scanCadenceLabel(host.value.scan_interval_hours)}` : t('Not managed'));
 const isScanning = computed(() => props.scanningHosts.has(String(host.value?.ip || host.value?.id || host.value?.mac || '')));
 const isCancelling = computed(() => props.cancellingScans.has(Number(latestScan.value?.id || 0)));
 const portScanMeta = computed(() => {
@@ -142,7 +159,7 @@ const portScanMeta = computed(() => {
 if (!props.embedded)
   usePageController({ loading, label: computed(() => loading.value ? t('Loading') : t('Device')), title: computed(() => t('Refresh host')), disabled: false, refresh: load });
 useLiveRefresh(['hosts', 'status', 'scans', 'netboot', 'vendors'], load);
-watch(() => props.embedded ? `${props.device?.id || ''}|${props.device?.ip || ''}` : route.fullPath, load, { immediate: true });
+watch(() => props.embedded ? `${props.device?.id || ''}|${props.device?.ip || ''}|${props.device?.device_identity?.network || ''}|${props.device?.device_identity?.container || ''}` : route.fullPath, load, { immediate: true });
 
 async function load() {
   const id = Number((props.embedded ? props.device?.id : route.params.id) || 0);
@@ -157,7 +174,11 @@ async function load() {
   selectedOsIndex.value = -1;
   historyRangeHours.value = 24;
   try {
-    const endpoint = id ? `/api/hosts/${encodeURIComponent(id)}/detail` : `/api/hosts/by-ip/${encodeURIComponent(ip)}/detail`;
+    const identity = props.embedded ? props.device?.device_identity : { network: route.query.network, container: route.query.container };
+    const identityQuery = identity?.network && identity?.container
+      ? `?network=${encodeURIComponent(identity.network)}&container=${encodeURIComponent(identity.container)}`
+      : '';
+    const endpoint = id ? `/api/hosts/${encodeURIComponent(id)}/detail` : `/api/hosts/by-ip/${encodeURIComponent(ip)}/detail${identityQuery}`;
     const data = await apiJson(endpoint, { signal });
     if (!request.isCurrent(signal)) return;
     detail.value = data;

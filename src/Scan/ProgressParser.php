@@ -8,11 +8,27 @@ final class ProgressParser
 {
     public static function parse(string $line): ?array
     {
-        if (!preg_match('/^(.+?)\s+Timing:\s+About\s+([0-9]+(?:\.[0-9]+)?)%\s+done/i', trim($line), $matches)) {
+        $line = trim($line);
+        $isMilestone = false;
+        if (preg_match('/^(.+?)\s+Timing:\s+About\s+([0-9]+(?:\.[0-9]+)?)%\s+done/i', $line, $matches)) {
+            $label = $matches[1];
+            $phasePercent = (float) $matches[2];
+        } elseif (preg_match('/^NSE:\s+Script\s+(scanning\b.*|Post-scanning\.?)$/i', $line, $matches)) {
+            $label = 'script';
+            $phasePercent = str_starts_with(strtolower($matches[1]), 'post') ? 100.0 : 0.0;
+            $isMilestone = true;
+        } elseif (preg_match('/^(Initiating|Completed)\s+(.+?)(?:\s+at\s+\d{1,2}:\d{2}.*)?$/i', $line, $matches)) {
+            $label = $matches[2];
+            if (strtolower(trim($label)) === 'nse') {
+                return null;
+            }
+            $phasePercent = strtolower($matches[1]) === 'completed' ? 100.0 : 0.0;
+            $isMilestone = true;
+        } else {
             return null;
         }
 
-        $label = strtolower(trim($matches[1]));
+        $label = strtolower(trim($label));
         $phase = match (true) {
             str_contains($label, 'ping'), str_contains($label, 'host discovery') => 'host_discovery',
             str_contains($label, 'service') => 'service_detection',
@@ -22,10 +38,13 @@ final class ProgressParser
             str_contains($label, 'scan') || str_contains($label, 'port') => 'port_scan',
             default => 'running',
         };
+        if ($isMilestone && $phase === 'running') {
+            return null;
+        }
 
         return [
             'phase' => $phase,
-            'phase_percent' => max(0.0, min(100.0, (float) $matches[2])),
+            'phase_percent' => max(0.0, min(100.0, $phasePercent)),
         ];
     }
 

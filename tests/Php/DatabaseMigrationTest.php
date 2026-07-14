@@ -15,7 +15,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 {
     public function testUnversionedAndIncorrectlyStampedVersionSixSchemasAreRecovered(): void
     {
-        foreach ([0, 7] as $reportedVersion) {
+        foreach ([0, 7, 8, 9] as $reportedVersion) {
             $path = tempnam(sys_get_temp_dir(), 'fenping-legacy-schema-');
             self::assertIsString($path);
             try {
@@ -58,7 +58,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
                 $manager = new DatabaseManager($config);
                 $manager->initialize();
 
-                self::assertSame(7, $manager->schemaVersion());
+                self::assertSame(9, $manager->schemaVersion());
                 $row = $manager->connection()->query(
                     "SELECT network, request_source, progress_percent, progress_phase FROM scans",
                 )->fetch(PDO::FETCH_ASSOC);
@@ -103,7 +103,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         ");
 
         $this->app()->backend()->databaseApplyMigrations($database, \FenPing\Backend\Backend::DATABASE_SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
-        self::assertSame(7, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
         $existing = $database->query("SELECT scan_profile, scan_interval_hours FROM ips WHERE ip='192.0.2.40'")->fetch(PDO::FETCH_ASSOC);
         self::assertSame('deep', $existing['scan_profile']);
         self::assertSame(1, (int) $existing['scan_interval_hours']);
@@ -116,7 +116,8 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         foreach ([
             'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',
             'operation_status', 'operation_failures', 'notification_delivery_settings',
-            'telegram_known_chats',
+            'telegram_known_chats', 'tags', 'host_tags', 'inventory_saved_filters',
+            'inventory_saved_filter_tags', 'inventory_device_metadata', 'inventory_device_tags',
         ] as $table) {
             $exists = $database->prepare(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:table",
@@ -128,9 +129,134 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         self::assertContains('queued_at', array_column($scanColumns, 'name'));
 
         $this->app()->backend()->databaseApplyMigrations(
-            $database, 7, $this->app()->config()->projectDir . '/migrations',
+            $database, 9, $this->app()->config()->projectDir . '/migrations',
         );
-        self::assertSame(7, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    public function testVersionEightGainsDockerDeviceMetadataAndDisplayNames(): void
+    {
+        $database = $this->memoryDatabase();
+        $database->exec("
+          CREATE TABLE ips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT COLLATE NOCASE UNIQUE,
+            mac TEXT COLLATE NOCASE UNIQUE,
+            ip TEXT UNIQUE,
+            notes TEXT,
+            location TEXT,
+            owner TEXT,
+            model TEXT,
+            icon TEXT
+          );
+          CREATE TABLE tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT COLLATE NOCASE NOT NULL UNIQUE
+          );
+          INSERT INTO ips (name, mac, ip)
+          VALUES ('Existing host', '02:00:00:00:00:42', '192.0.2.42');
+          PRAGMA user_version=8;
+        ");
+
+        $this->app()->backend()->databaseApplyMigrations(
+            $database,
+            9,
+            $this->app()->config()->projectDir . '/migrations',
+        );
+
+        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        $columns = array_column(
+            $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
+            'name',
+        );
+        self::assertContains('display_name', $columns);
+        self::assertNull($database->query(
+            "SELECT display_name FROM ips WHERE ip='192.0.2.42'",
+        )->fetchColumn());
+
+        $database->exec("
+          INSERT INTO inventory_device_metadata (
+            network_name, container_name, display_name, scan_profile, scan_interval_hours
+          ) VALUES ('app_default', 'camera', 'Front camera', 'standard', 6);
+          INSERT INTO tags (name) VALUES ('Camera');
+          INSERT INTO inventory_device_tags (device_id, tag_id) VALUES (1, 1);
+        ");
+        self::assertSame(1, (int) $database->query(
+            'SELECT COUNT(*) FROM inventory_device_tags',
+        )->fetchColumn());
+        $database->exec('DELETE FROM inventory_device_metadata WHERE id=1');
+        self::assertSame(0, (int) $database->query(
+            'SELECT COUNT(*) FROM inventory_device_tags',
+        )->fetchColumn());
+        self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    public function testVersionSevenHostsGainMetadataTagsAndSavedFilters(): void
+    {
+        $database = $this->memoryDatabase();
+        $database->exec("
+          CREATE TABLE ips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT COLLATE NOCASE UNIQUE,
+            mac TEXT COLLATE NOCASE UNIQUE,
+            ip TEXT UNIQUE
+          );
+          INSERT INTO ips (name, mac, ip)
+          VALUES ('Existing host', '02:00:00:00:00:42', '192.0.2.42');
+          PRAGMA user_version=7;
+        ");
+
+        $this->app()->backend()->databaseApplyMigrations(
+            $database,
+            9,
+            $this->app()->config()->projectDir . '/migrations',
+        );
+
+        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
+        $columns = array_column(
+            $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
+            'name',
+        );
+        foreach (['notes', 'location', 'owner', 'model', 'icon'] as $column) {
+            self::assertContains($column, $columns);
+        }
+        $host = $database->query(
+            "SELECT notes, location, owner, model, icon FROM ips WHERE ip='192.0.2.42'",
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame(
+            ['notes' => null, 'location' => null, 'owner' => null, 'model' => null, 'icon' => null],
+            $host,
+        );
+
+        foreach ([
+            'tags', 'host_tags', 'inventory_saved_filters', 'inventory_saved_filter_tags',
+        ] as $table) {
+            $exists = $database->prepare(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:table",
+            );
+            $exists->execute(['table' => $table]);
+            self::assertSame(1, (int) $exists->fetchColumn());
+        }
+        $indexes = array_column(
+            $database->query('PRAGMA index_list(host_tags)')->fetchAll(PDO::FETCH_ASSOC),
+            'name',
+        );
+        self::assertContains('host_tags_tag_id', $indexes);
+
+        $database->exec("
+          INSERT INTO tags (name) VALUES ('Server');
+          INSERT INTO host_tags (host_id, tag_id) VALUES (1, 1);
+          INSERT INTO inventory_saved_filters (name) VALUES ('Infrastructure');
+          INSERT INTO inventory_saved_filter_tags (filter_id, tag_id) VALUES (1, 1);
+          DELETE FROM ips WHERE id=1;
+        ");
+        self::assertSame(0, (int) $database->query('SELECT COUNT(*) FROM host_tags')->fetchColumn());
+        $database->exec('DELETE FROM tags WHERE id=1');
+        self::assertSame(
+            0,
+            (int) $database->query('SELECT COUNT(*) FROM inventory_saved_filter_tags')->fetchColumn(),
+        );
         self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
     }
 
@@ -138,6 +264,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
     {
         $database = $this->memoryDatabase();
         $database->exec("
+          CREATE TABLE ips (id INTEGER PRIMARY KEY AUTOINCREMENT);
           CREATE TABLE scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ip TEXT NOT NULL,
@@ -156,11 +283,11 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         $this->app()->backend()->databaseApplyMigrations(
             $database,
-            7,
+            9,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(7, $this->app()->backend()->databaseSchemaVersion($database));
+        self::assertSame(9, $this->app()->backend()->databaseSchemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(scans)')->fetchAll(PDO::FETCH_ASSOC),
             'name',

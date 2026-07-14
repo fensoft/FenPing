@@ -21,9 +21,34 @@
             </template>
           </div>
         </fieldset>
+        <details v-if="tagOptions.length" class="inventory-tag-filter">
+          <summary class="btn btn-outline-secondary btn-sm">{{ t('Tags') }}<span v-if="filters.tags.length" class="badge bg-blue-lt text-blue ms-1">{{ filters.tags.length }}</span></summary>
+          <div class="inventory-tag-menu" @click.stop>
+            <label v-for="tag in tagOptions" :key="tag.toLowerCase()" class="form-check">
+              <input class="form-check-input" type="checkbox" :checked="tagSelected(tag)" @change="toggleTag(tag)" />
+              <span class="form-check-label">{{ tag }}</span>
+            </label>
+          </div>
+        </details>
+        <label class="inventory-saved-filter">
+          <span class="visually-hidden">{{ t('Saved views') }}</span>
+          <select class="form-select form-select-sm" :value="selectedSavedFilterValue" :aria-label="t('Saved views')" @change="applySavedFilter($event.target.value)">
+            <option value="">{{ t(filters.tags.length ? 'Custom tags' : 'Saved views') }}</option>
+            <option v-for="filter in savedFilters" :key="filter.id" :value="String(filter.id)">{{ filter.name }}</option>
+          </select>
+        </label>
+        <button v-if="isAuthenticated && filters.tags.length" class="btn btn-outline-primary btn-sm" type="button" @click="beginSavedFilterCreate">{{ t('Save view') }}</button>
+        <button v-if="isAuthenticated && matchingSavedFilter" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Rename saved view')" :aria-label="t('Rename saved view')" @click="beginSavedFilterEdit"><AppIcon name="pencil" /></button>
+        <button v-if="isAuthenticated && matchingSavedFilter" class="btn btn-outline-danger btn-sm icon-btn" type="button" :title="t('Delete saved view')" :aria-label="t('Delete saved view')" @click="deleteSavedFilter"><AppIcon name="trash" /></button>
         <button v-if="hasActiveFilters" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Clear filters')" @click="resetFilters"><AppIcon name="filter-x" /></button>
         <div class="inventory-summary" aria-live="polite"><strong>{{ inventorySummary.devices }}</strong> {{ t('devices') }} <span aria-hidden="true">·</span> <span class="inventory-summary-online">{{ inventorySummary.online }} {{ t('online') }}</span> <span v-if="inventorySummary.newDevices > 0" aria-hidden="true">·</span> <span v-if="inventorySummary.newDevices > 0" class="inventory-summary-new">{{ inventorySummary.newDevices }} {{ t('new') }}</span></div>
       </div>
+      <form v-if="savedFilterEditor" class="saved-filter-editor" @submit.prevent="submitSavedFilter">
+        <label class="form-label mb-0">{{ t('View name') }}<input v-model.trim="savedFilterEditor.name" class="form-control form-control-sm" type="text" required autofocus /></label>
+        <span class="text-secondary small">{{ filters.tags.join(', ') }}</span>
+        <button class="btn btn-primary btn-sm" type="submit" :disabled="savingFilter">{{ t(savedFilterEditor.id ? 'Update view' : 'Save view') }}</button>
+        <button class="btn btn-link btn-sm" type="button" :disabled="savingFilter" @click="savedFilterEditor = null">{{ t('Cancel') }}</button>
+      </form>
       <table class="table table-sm inventory-table">
         <colgroup><col class="col-status" /><col class="col-device" /><col class="col-ip" /><col class="col-vendor" /><col class="col-activity" /><col class="col-services" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
         <thead><tr>
@@ -50,7 +75,11 @@
                 <span :class="statusClass(row.host.status)" :title="statusTitle(row.host.status)" :aria-label="statusTitle(row.host.status)" class="status-pill" role="img"><AppIcon :name="statusIcon(row.host.status)" /></span>
               </div></td>
               <td class="inventory-device-cell text-truncate-cell" :title="deviceTitle(row.host)">
-                <span class="host-name-value">{{ row.host.name || row.host.ip || formatMac(row.host.mac) }}</span>
+                <AppIcon v-if="hostIconName(row.host.icon)" :name="hostIconName(row.host.icon)" class="text-primary host-custom-icon" />
+                <span class="host-name-value">{{ deviceName(row.host) }}</span>
+                <span v-if="row.host.tags?.length" class="inventory-host-tags">
+                  <span v-for="tag in row.host.tags" :key="tag.toLowerCase()" class="badge bg-blue-lt text-blue">{{ tag }}</span>
+                </span>
                 <AppIcon v-if="toFlag(row.host.is_new)" name="alert-triangle" class="text-warning host-role-icon" :title="t('New device — approve it in IPAM')" />
                 <AppIcon v-if="toFlag(row.host.repeater)" name="wifi" class="text-secondary host-role-icon" :title="t('Router/repeater')" />
                 <AppIcon v-if="row.host.via" name="antenna-bars-5" class="text-secondary host-role-icon" :title="row.host.via" />
@@ -65,8 +94,9 @@
                 <div class="inventory-actions">
                   <button v-if="row.host.ip" class="btn btn-sm inventory-action-btn inventory-scan-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><AppIcon :name="isScanRunning(row.host) ? 'loader-2' : 'search'" /><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
                   <button v-if="scanIsActiveState(row.host?.scan?.state)" class="btn btn-outline-danger btn-sm icon-btn" type="button" :disabled="!scanCanCancel(row.host.scan) || isCancelling(row.host.scan)" :title="t(row.host.scan.cancel_requested ? 'Cancelling' : 'Cancel scan')" :aria-label="t(row.host.scan.cancel_requested ? 'Cancelling' : 'Cancel scan')" @click="$emit('cancel-scan', row.host.scan)"><AppIcon :name="row.host.scan.cancel_requested || isCancelling(row.host.scan) ? 'loader-2' : 'x'" :class="{ 'is-spinning': row.host.scan.cancel_requested || isCancelling(row.host.scan) }" /></button>
-                  <button v-if="isAuthenticated && isDhcpSelected && row.host.id" class="btn btn-outline-warning btn-sm icon-btn" type="button" :title="t('Edit host')" :aria-label="t('Edit host')" @click="$emit('open-edit', row.host)"><AppIcon name="edit" /></button>
-                  <button v-else-if="isAuthenticated && isDhcpSelected && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Create host')" :aria-label="t('Create host')" @click="$emit('open-create', row.host)"><AppIcon name="plus" /></button>
+                  <button v-if="isAuthenticated && row.host.id && toFlag(row.host.network_is_dhcp)" class="btn btn-outline-warning btn-sm icon-btn" type="button" :title="t('Edit host')" :aria-label="t('Edit host')" @click="$emit('open-edit', row.host)"><AppIcon name="edit" /></button>
+                  <button v-if="isAuthenticated && !toFlag(row.host.network_is_dhcp) && row.host.metadata_editable" class="btn btn-outline-warning btn-sm icon-btn" type="button" :title="t('Edit metadata')" :aria-label="t('Edit metadata')" @click="$emit('open-metadata', row.host)"><AppIcon name="edit" /></button>
+                  <button v-if="isAuthenticated && isDhcpSelected && !row.host.id && row.host.mac" class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Create host')" :aria-label="t('Create host')" @click="$emit('open-create', row.host)"><AppIcon name="plus" /></button>
                 </div>
               </td>
             </template>
@@ -80,7 +110,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { apiJson, isAbortError } from '../lib/api.js';
-import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, normalizeInventoryFilters } from '../lib/inventoryFilters.js';
+import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, matchingSavedInventoryFilter, normalizeInventoryFilters, normalizeTags } from '../lib/inventoryFilters.js';
+import { hostIconName } from '../lib/hostIcons.js';
 import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkLabel, inventoryNetworkUrl } from '../lib/inventoryNetworks.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
@@ -97,9 +128,13 @@ const props = defineProps({
   scanningHosts: { type: Object, required: true },
   cancellingScans: { type: Object, required: true }
 });
-const emit = defineEmits(['add-category', 'cancel-scan', 'delete-category', 'host-detail', 'network', 'selected-network', 'open-create', 'open-edit', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
+const emit = defineEmits(['add-category', 'cancel-scan', 'delete-category', 'host-detail', 'network', 'selected-network', 'open-create', 'open-edit', 'open-metadata', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
 const hosts = ref([]);
 const networks = ref([]);
+const availableTags = ref([]);
+const savedFilters = ref([]);
+const savedFilterEditor = ref(null);
+const savingFilter = ref(false);
 const selectedCidr = ref(readStorage('fenping_selected_network', ''));
 const dhcpCidr = ref('');
 const loading = ref(false);
@@ -116,6 +151,13 @@ writeStorage('fenping_filters', filters.value);
 const collapsed = ref(new Set(readStorage('fenping_collapsed_categories', [])));
 const hasActiveFilters = computed(() => inventoryFiltersActive(filters.value));
 const isDhcpSelected = computed(() => inventoryNetworkIsDhcp(selectedCidr.value, dhcpCidr.value));
+const matchingSavedFilter = computed(() => matchingSavedInventoryFilter(filters.value.tags, savedFilters.value));
+const selectedSavedFilterValue = computed(() => matchingSavedFilter.value ? String(matchingSavedFilter.value.id) : '');
+const tagOptions = computed(() => normalizeTags([
+  ...availableTags.value,
+  ...filters.value.tags,
+  ...savedFilters.value.flatMap((filter) => filter.tags || [])
+]));
 const categorizedHosts = computed(() => {
   const rows = []; let category = null;
   for (const host of hosts.value) {
@@ -152,7 +194,7 @@ const tableRows = computed(() => {
       current = category.key;
       rows.push({ type: 'category', key: current, categoryKey: current, name: category.name, categoryIp: category.ip, collapsed: collapsed.value.has(current), ...(categorySummaries.value.get(current) || { total: 0, online: 0 }) });
     }
-    rows.push({ type: 'host', key: `host-${host.id || host.ip || host.mac}`, host, collapsed: current !== '' && collapsed.value.has(current) });
+    rows.push({ type: 'host', key: `host-${host.id || ''}-${host.device_identity?.network || ''}-${host.device_identity?.container || ''}-${host.ip || host.mac || ''}`, host, collapsed: current !== '' && collapsed.value.has(current) });
   }
   return rows;
 });
@@ -182,6 +224,8 @@ async function load() {
     emit('network', data.network || '');
     emit('selected-network', selectedCidr.value);
     hosts.value = data.hosts || [];
+    availableTags.value = normalizeTags(data.available_tags);
+    savedFilters.value = Array.isArray(data.saved_filters) ? data.saved_filters : [];
   } catch (loadError) {
     if (!isAbortError(loadError) && request.isCurrent(signal) && selectedCidr.value) {
       selectedCidr.value = '';
@@ -201,7 +245,68 @@ function selectNetwork() {
 
 function readStorage(name, fallback) { try { const value = localStorage.getItem(name); return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
 function writeStorage(name, value) { try { localStorage.setItem(name, JSON.stringify(value)); } catch {} }
-function resetFilters() { filters.value = { ...inventoryFilterDefaults }; }
+function resetFilters() { filters.value = { ...inventoryFilterDefaults, tags: [] }; savedFilterEditor.value = null; }
+function tagSelected(tag) { return filters.value.tags.some((item) => item.toLowerCase() === tag.toLowerCase()); }
+function toggleTag(tag) {
+  filters.value = {
+    ...filters.value,
+    tags: tagSelected(tag)
+      ? filters.value.tags.filter((item) => item.toLowerCase() !== tag.toLowerCase())
+      : normalizeTags([...filters.value.tags, tag])
+  };
+}
+function applySavedFilter(value) {
+  const filter = savedFilters.value.find((item) => String(item.id) === String(value));
+  if (filter)
+    filters.value = { ...filters.value, tags: normalizeTags(filter.tags) };
+}
+function beginSavedFilterCreate() {
+  if (!filters.value.tags.length) return;
+  savedFilterEditor.value = { id: null, name: '' };
+}
+function beginSavedFilterEdit() {
+  if (!matchingSavedFilter.value) return;
+  savedFilterEditor.value = { id: matchingSavedFilter.value.id, name: matchingSavedFilter.value.name };
+}
+async function submitSavedFilter() {
+  const editor = savedFilterEditor.value;
+  if (!editor || !filters.value.tags.length) return;
+  savingFilter.value = true;
+  error.value = '';
+  try {
+    const id = editor.id;
+    const filter = await apiJson(id ? `/api/inventory/saved-filters/${encodeURIComponent(id)}` : '/api/inventory/saved-filters', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify({ name: editor.name, tags: filters.value.tags })
+    });
+    savedFilters.value = id
+      ? savedFilters.value.map((item) => item.id === filter.id ? filter : item)
+      : [...savedFilters.value, filter];
+    savedFilters.value.sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+    availableTags.value = normalizeTags([...availableTags.value, ...filter.tags]);
+    filters.value = { ...filters.value, tags: normalizeTags(filter.tags) };
+    savedFilterEditor.value = null;
+  } catch (saveError) {
+    error.value = saveError.message;
+  } finally {
+    savingFilter.value = false;
+  }
+}
+async function deleteSavedFilter() {
+  const filter = matchingSavedFilter.value;
+  if (!filter || !window.confirm(t('Delete saved view {name}?', { name: filter.name }))) return;
+  savingFilter.value = true;
+  error.value = '';
+  try {
+    await apiJson(`/api/inventory/saved-filters/${encodeURIComponent(filter.id)}`, { method: 'DELETE' });
+    savedFilters.value = savedFilters.value.filter((item) => item.id !== filter.id);
+    savedFilterEditor.value = null;
+  } catch (deleteError) {
+    error.value = deleteError.message;
+  } finally {
+    savingFilter.value = false;
+  }
+}
 function categoryKey(host) { return `category-${host.category_ip || host.category}`; }
 function toggleCategory(key) { const next = new Set(collapsed.value); next.has(key) ? next.delete(key) : next.add(key); collapsed.value = next; }
 function toggleAllCategories() { collapsed.value = allCategoriesCollapsed.value ? new Set() : new Set(categoryKeys.value); }
@@ -255,8 +360,12 @@ function serviceTitle(host) {
   const last = host.scan.date_end || host.scan.date_begin;
   return `${serviceLabel(host)}${last ? ` | ${t('Last scan {date}', { date: formatServerDate(last) })}` : ''}`;
 }
+function deviceName(host) {
+  return host?.display_name || host?.name || host?.device_identity?.container || host?.ip || formatMac(host?.mac);
+}
+
 function deviceTitle(host) {
-  return [host?.name, formatMac(host?.mac), host?.vendor].filter(Boolean).join(' | ');
+  return [deviceName(host), host?.name, host?.device_identity?.network, host?.device_identity?.container, formatMac(host?.mac), host?.vendor].filter(Boolean).join(' | ');
 }
 function mobileMeta(host) {
   return [host?.vendor || t('Unknown vendor'), formatMac(host?.mac), activityLabel(host), serviceLabel(host)].filter(Boolean).join(' · ');
@@ -264,7 +373,7 @@ function mobileMeta(host) {
 function rowClass(row) { return row.type === 'category' ? 'category-row' : row.host.important == 1 && row.host.status !== 'Up' ? 'important-down' : ''; }
 function rowAriaLabel(row) {
   if (row.type === 'category') return t(row.collapsed ? 'Open category {name}' : 'Close category {name}', { name: row.name });
-  return !row.collapsed && (row.host?.id || row.host?.ip) ? t('Details for {name}', { name: row.host.name || row.host.ip || row.host.mac }) : undefined;
+  return !row.collapsed && (row.host?.id || row.host?.ip) ? t('Details for {name}', { name: deviceName(row.host) }) : undefined;
 }
 function activateRow(row, event) {
   if (event.target !== event.currentTarget && event.target.closest('a, button, input, select, textarea, label')) return;

@@ -48,6 +48,8 @@ final readonly class DockerNetworkRefreshService
             $previousState = [
                 'networks' => $this->cache->networks(),
                 'names' => $this->cache->networkNames(),
+                'gateways' => $this->cache->gateways(),
+                'containers' => $this->cache->containers(),
             ];
             if (!$force && $updatedAt !== null && $updatedAt >= time() - $this->apiFreshnessSeconds) {
                 return ['status' => 'unchanged', 'networks' => count($this->cache->networks()), 'updated_at' => $updatedAt];
@@ -65,6 +67,8 @@ final readonly class DockerNetworkRefreshService
             $currentState = [
                 'networks' => $this->cache->networks(),
                 'names' => $this->cache->networkNames(),
+                'gateways' => $this->cache->gateways(),
+                'containers' => $this->cache->containers(),
             ];
             if ($previousState !== $currentState) {
                 $this->liveUpdates->publish(LiveUpdateScope::Networks);

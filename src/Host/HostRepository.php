@@ -34,7 +34,14 @@ final readonly class HostRepository
         ?int $netbootImageId,
         string $profile = ProfileCatalog::MANAGED_DEFAULT,
         int $intervalHours = ProfileCatalog::MANAGED_INTERVAL_HOURS,
+        string $notes = '',
+        string $location = '',
+        string $owner = '',
+        string $model = '',
+        ?string $icon = null,
+        array $tags = [],
+        string $displayName = '',
     ): int {
-        return $this->backend->edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId, $profile, $intervalHours);
+        return $this->backend->edit($id, $ip, $mac, $name, $repeater, $important, $web, $router, $dns, $netbootImageId, $profile, $intervalHours, $notes, $location, $owner, $model, $icon, $tags, $displayName);
     }
 }

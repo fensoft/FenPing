@@ -29,10 +29,26 @@
               <label class="form-label">{{ t('Router') }}<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.router" class="form-control" name="router" type="text" /></div></label>
               <label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" /></label>
               <label class="form-label">{{ t('Name') }}<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label>
+              <label class="form-label">{{ t('Display name') }}<input v-model.trim="modal.form.display_name" class="form-control" name="display_name" type="text" /></label>
               <label class="form-label">{{ t('Scheduled scan profile') }}<select v-model="modal.form.scan_profile" class="form-select" name="scan_profile"><option v-for="profile in scanProfiles" :key="profile.id" :value="profile.id">{{ t(profile.name) }}</option></select></label>
               <label class="form-label">{{ t('Scan cadence') }}<div class="input-group"><input v-model.number="modal.form.scan_interval_hours" class="form-control" name="scan_interval_hours" type="number" min="0" max="8760" list="scan-cadence-options" required /><span class="input-group-text">{{ t('hours') }}</span></div><small class="form-hint">{{ t('Use 0 to disable scheduled scans.') }}</small><datalist id="scan-cadence-options"><option v-for="cadence in scanCadenceOptions" :key="cadence.hours" :value="cadence.hours">{{ t(cadence.name) }}</option></datalist></label>
+              <label class="form-label">{{ t('Location') }}<input v-model.trim="modal.form.location" class="form-control" name="location" type="text" /></label>
+              <label class="form-label">{{ t('Owner') }}<input v-model.trim="modal.form.owner" class="form-control" name="owner" type="text" /></label>
+              <label class="form-label">{{ t('Model') }}<input v-model.trim="modal.form.model" class="form-control" name="model" type="text" /></label>
               <label class="form-label field-wide">DNS<input v-model.trim="modal.form.dns" class="form-control" name="dns" type="text" /></label>
               <label class="form-label field-wide">{{ t('Netboot image') }}<select v-model="modal.form.netboot_image_id" class="form-select" name="netboot_image_id"><option value="">{{ t('None') }}</option><option v-for="image in netbootImages" :key="image.id" :value="String(image.id)">{{ image.name }} ({{ image.filename }})</option></select></label>
+              <div class="field-wide">
+                <span class="form-label">{{ t('Tags') }}</span>
+                <HostTagsInput v-model="modal.form.tags" />
+              </div>
+              <div class="field-wide">
+                <span class="form-label">{{ t('Icon') }}</span>
+                <div class="host-icon-picker" role="radiogroup" :aria-label="t('Icon')">
+                  <button class="host-icon-option" :class="{ active: !modal.form.icon }" type="button" role="radio" :aria-checked="!modal.form.icon" @click="modal.form.icon = ''"><AppIcon name="x" /><span>{{ t('None') }}</span></button>
+                  <button v-for="option in hostIconOptions" :key="option.value" class="host-icon-option" :class="{ active: modal.form.icon === option.value }" type="button" role="radio" :aria-checked="modal.form.icon === option.value" @click="modal.form.icon = option.value"><AppIcon :name="option.icon" /><span>{{ t(option.label) }}</span></button>
+                </div>
+              </div>
+              <label class="form-label field-wide">{{ t('Notes') }}<textarea v-model="modal.form.notes" class="form-control" name="notes" rows="4"></textarea></label>
               <div class="modal-switch-grid field-wide">
                 <label class="form-check form-switch"><input v-model="modal.form.important" class="form-check-input" type="checkbox" /><span class="form-check-label">{{ t('Important') }}</span></label>
                 <label class="form-check form-switch"><input v-model="modal.form.repeater" class="form-check-input" type="checkbox" /><span class="form-check-label">{{ t('Router/repeater') }}</span></label>
@@ -41,6 +57,40 @@
             </div>
           </div>
           <div class="modal-footer justify-content-between"><button class="btn btn-outline-danger" type="button" :disabled="saving" @click="$emit('delete-host')"><AppIcon name="trash" class="me-1" />{{ t('Delete') }}</button><div><button class="btn btn-link" type="button" :disabled="saving" @click="requestClose">{{ t('Cancel') }}</button><button class="btn btn-primary" type="submit" :disabled="saving"><AppIcon name="device-floppy" class="me-1" />{{ t('Save') }}</button></div></div>
+        </form>
+
+        <form v-else-if="modal.type === 'metadataEdit'" @submit.prevent="$emit('submit-metadata')">
+          <div class="modal-body">
+            <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>
+            <div class="modal-body-grid">
+              <label v-if="modal.form.show_identity" class="form-label">{{ t('Network') }}<input :value="modal.form.network" class="form-control" type="text" disabled /></label>
+              <label v-if="modal.form.show_identity" class="form-label">{{ t('Container') }}<input :value="modal.form.container" class="form-control" type="text" disabled /></label>
+              <label class="form-label">IP<input :value="modal.form.ip" class="form-control font-monospace" type="text" disabled /></label>
+              <label class="form-label">{{ t('Display name') }}<input v-model.trim="modal.form.display_name" class="form-control" name="display_name" type="text" /></label>
+              <label class="form-label">{{ t('Scheduled scan profile') }}<select v-model="modal.form.scan_profile" class="form-select" name="scan_profile"><option v-for="profile in scanProfiles" :key="profile.id" :value="profile.id">{{ t(profile.name) }}</option></select></label>
+              <label class="form-label">{{ t('Scan cadence') }}<div class="input-group"><input v-model.number="modal.form.scan_interval_hours" class="form-control" name="scan_interval_hours" type="number" min="0" max="8760" list="metadata-scan-cadence-options" required /><span class="input-group-text">{{ t('hours') }}</span></div><small class="form-hint">{{ t('Use 0 to disable scheduled scans.') }}</small><datalist id="metadata-scan-cadence-options"><option v-for="cadence in scanCadenceOptions" :key="cadence.hours" :value="cadence.hours">{{ t(cadence.name) }}</option></datalist></label>
+              <label class="form-label">{{ t('Location') }}<input v-model.trim="modal.form.location" class="form-control" name="location" type="text" /></label>
+              <label class="form-label">{{ t('Owner') }}<input v-model.trim="modal.form.owner" class="form-control" name="owner" type="text" /></label>
+              <label class="form-label">{{ t('Model') }}<input v-model.trim="modal.form.model" class="form-control" name="model" type="text" /></label>
+              <div class="field-wide">
+                <span class="form-label">{{ t('Tags') }}</span>
+                <HostTagsInput v-model="modal.form.tags" />
+              </div>
+              <div class="field-wide">
+                <span class="form-label">{{ t('Icon') }}</span>
+                <div class="host-icon-picker" role="radiogroup" :aria-label="t('Icon')">
+                  <button class="host-icon-option" :class="{ active: !modal.form.icon }" type="button" role="radio" :aria-checked="!modal.form.icon" @click="modal.form.icon = ''"><AppIcon name="x" /><span>{{ t('None') }}</span></button>
+                  <button v-for="option in hostIconOptions" :key="option.value" class="host-icon-option" :class="{ active: modal.form.icon === option.value }" type="button" role="radio" :aria-checked="modal.form.icon === option.value" @click="modal.form.icon = option.value"><AppIcon :name="option.icon" /><span>{{ t(option.label) }}</span></button>
+                </div>
+              </div>
+              <label class="form-label field-wide">{{ t('Notes') }}<textarea v-model="modal.form.notes" class="form-control" name="notes" rows="4"></textarea></label>
+              <div class="modal-switch-grid field-wide">
+                <label class="form-check form-switch"><input v-model="modal.form.important" class="form-check-input" type="checkbox" /><span class="form-check-label">{{ t('Important') }}</span></label>
+                <label class="form-check form-switch"><input v-model="modal.form.web" class="form-check-input" type="checkbox" /><span class="form-check-label">{{ t('Web') }}</span></label>
+              </div>
+            </div>
+          </div>
+          <ModalFooter :saving="saving" :submit-label="t('Save')" submit-icon="device-floppy" @close="requestClose" />
         </form>
 
         <form v-else-if="modal.type === 'create'" @submit.prevent="$emit('submit-create')">
@@ -113,6 +163,7 @@
               @open-scan="forwardOpenScan"
               @scan-host="$emit('scan-host', $event)"
               @open-edit="$emit('open-edit', $event)"
+              @open-metadata="$emit('open-metadata', $event)"
             />
           </div>
           <div class="modal-footer"><button class="btn btn-primary" type="button" @click="requestClose">{{ t('Close') }}</button></div>
@@ -146,19 +197,21 @@
 <script setup>
 import { computed } from 'vue';
 import HostDetailPage from '../pages/HostDetailPage.vue';
+import HostTagsInput from './HostTagsInput.vue';
 import ModalFooter from './ModalFooter.vue';
 import ScanSimpleSection from './ScanSimpleSection.vue';
 import { useAccessibleModal } from '../composables/useAccessibleModal.js';
 import { formatDuration, formatMac, formatPercent, formatScanDate, formatScanDuration, formatServerDate, historyRowClass, scanRunStateLabel, scanStateClass, scanStateLabel, statusClass, statusIcon, statusLabel, statusTitle } from '../lib/formatters.js';
+import { hostIconOptions } from '../lib/hostIcons.js';
 import { t } from '../lib/i18n.js';
 import { scanCadenceOptions, scanProfileLabel, scanProfiles } from '../lib/scanProfiles.js';
 
 const props = defineProps({ modal: { type: Object, required: true }, error: { type: String, default: '' }, saving: Boolean, network: { type: String, default: '' }, netbootImages: { type: Array, default: () => [] }, isAuthenticated: Boolean, scanningHosts: { type: Object, required: true }, cancellingScans: { type: Object, required: true } });
-const emit = defineEmits(['cancel-scan', 'close', 'delete-host', 'open-edit', 'open-scan', 'scan-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-rename-category', 'submit-scan-profile']);
+const emit = defineEmits(['cancel-scan', 'close', 'delete-host', 'open-edit', 'open-metadata', 'open-scan', 'scan-host', 'select-scan', 'submit-category', 'submit-create', 'submit-delete-category', 'submit-delete-host', 'submit-edit', 'submit-login', 'submit-metadata', 'submit-rename-category', 'submit-scan-profile']);
 const titleId = `fenping-modal-title-${Math.random().toString(36).slice(2)}`;
 const title = computed(() => props.modal.type === 'create' && props.modal.purpose === 'reserve'
   ? t('Reserve address')
-  : t(({ login: 'Login', edit: 'Edit host', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', scanError: 'Error', history: 'History {ip}', hostDetail: 'Host details', scan: 'Scan {ip}', loading: 'Loading' })[props.modal.type] || 'Dialog', { ip: props.modal.ip || '' }));
+  : t(({ login: 'Login', edit: 'Edit host', metadataEdit: 'Edit metadata', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', scanError: 'Error', history: 'History {ip}', hostDetail: 'Host details', scan: 'Scan {ip}', loading: 'Loading' })[props.modal.type] || 'Dialog', { ip: props.modal.ip || '' }));
 const dialogClass = computed(() => props.modal.type === 'login' ? 'modal-sm' : ['scan', 'hostDetail'].includes(props.modal.type) ? 'modal-xl scan-modal-dialog' : 'modal-lg');
 const modalRoot = useAccessibleModal(() => props.modal.type, requestClose);
 

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace FenPing\Backend;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use InvalidArgumentException;
 use JsonException;
 use OutOfBoundsException;
@@ -46,55 +44,30 @@ public function getDb() {
   return $this->db();
 }
 
-public function normalizeCategoryIp($ip) {
-  $ip = trim((string)$ip);
-  if ($ip != "" && strpos($ip, ".") === false)
-    return $this->config->network . "." . $ip;
-  return $ip;
-}
-
-public function normalizeInventoryRow($data, $ip = null) {
-  $defaults = array(
-    "id" => null,
-    "name" => "",
-    "ip" => $ip,
-    "mac" => "",
-    "status" => "",
-    "date" => null,
-    "important" => 0,
-    "web" => null,
-    "repeater" => null
-  );
-  $row = array_merge($defaults, $data);
-  $row["name"] = $row["name"] === null ? "" : $row["name"];
-  $row["ip"] = $row["ip"] === null ? "" : $row["ip"];
-  $row["mac"] = $row["mac"] === null ? "" : $row["mac"];
-  $row["important"] = $row["important"] === null ? 0 : $row["important"];
-  return $row;
-}
-
-public function inventoryHostIsVisible(array $data, bool $reserved, ?DateTimeImmutable $now = null): bool {
-  if ($reserved || strcasecmp(trim((string)($data['status'] ?? '')), 'Down') !== 0)
-    return true;
-
-  $date = trim((string)($data['date'] ?? ''));
-  if ($date === '')
-    return true;
-  try {
-    $downSince = new DateTimeImmutable($date, new DateTimeZone('UTC'));
-  } catch (Throwable) {
-    return true;
-  }
-  $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
-  $cutoff = $now->modify('-' . $this->config->inventoryDownRetentionDays . ' days');
-  return $downSince >= $cutoff;
-}
 
 public function getInventory(?string $networkCidr = null) {
   $selectedNetwork = $this->networks->forCidr($networkCidr, false);
   $dhcpNetwork = $selectedNetwork->cidr === $this->config->dhcpNetwork->cidr;
   $db = $this->getDb();
+  $managedMetadata = $this->managedHostMetadataMap();
+  $deviceMetadata = $this->inventoryDeviceMetadataMap();
+  $dockerContainers = $this->dockerNetworks->containers();
   $latestScans = $this->getLatestScans();
+  $dockerGatewayTagsByIp = array();
+  foreach ($this->dockerNetworks->gateways() as $gateway) {
+    if ($gateway['cidr'] === $selectedNetwork->cidr)
+      $dockerGatewayTagsByIp[$gateway['ip']][] =
+        'gateway';
+  }
+  $dockerContainersByIp = array();
+  $dockerContainerTagsByIp = array();
+  foreach ($dockerContainers as $container) {
+    if ($container['cidr'] === $selectedNetwork->cidr) {
+      $dockerContainersByIp[$container['ip']][] = $container;
+      $dockerContainerTagsByIp[$container['ip']][] =
+        $this->dockerAutomaticInventoryTag($container['network'], $container['container']);
+    }
+  }
   $approvedDevices = array();
   $approvalStmt = $db->query("SELECT mac FROM device_approvals");
   while ($approvedMac = $approvalStmt->fetchColumn()) {
@@ -191,13 +164,70 @@ public function getInventory(?string $networkCidr = null) {
   }
   $sorted_ips = array();
   foreach ($ips as $key => $data) {
-    $data = $this->normalizeInventoryRow($data, $key);
-    $ipLong = ip2long($data["ip"]);
-    if ($ipLong === false)
+    $hostId = isset($data['id']) ? (int)$data['id'] : 0;
+    if ($hostId > 0 && isset($managedMetadata[$hostId])) {
+      $data = array_merge($data, $managedMetadata[$hostId]);
+      $identity = $this->namedNonDhcpHostIdentity($data);
+      if (!$dhcpNetwork && $identity !== null) {
+        $data['device_identity'] = $identity;
+        $data['metadata_editable'] = 1;
+      }
+      $data = $this->withAutomaticInventoryTags($data, array_merge(
+        $dockerGatewayTagsByIp[(string)$key] ?? array(),
+        $dockerContainerTagsByIp[(string)$key] ?? array()
+      ));
+      $sorted_ips[] = $this->normalizeInventoryRow($data, $key);
       continue;
-    $sorted_ips[$ipLong] = $data;
+    }
+
+    $identities = $dockerContainersByIp[(string)$key] ?? array();
+    if ($identities === array()) {
+      $data = $this->withAutomaticInventoryTags(
+        $data,
+        $dockerGatewayTagsByIp[(string)$key] ?? array()
+      );
+      $sorted_ips[] = $this->normalizeInventoryRow($data, $key);
+      continue;
+    }
+
+    foreach ($identities as $identity) {
+      $row = $data;
+      $row['device_identity'] = array(
+        'network' => $identity['network'],
+        'container' => $identity['container']
+      );
+      $row['metadata_editable'] = 1;
+      $row['scan_profile'] = self::SCAN_UNMANAGED_DEFAULT_PROFILE;
+      $row['scan_interval_hours'] = self::SCAN_UNMANAGED_DEFAULT_INTERVAL_HOURS;
+      $metadataKey = $this->inventoryDeviceMetadataKey($identity['network'], $identity['container']);
+      if (isset($deviceMetadata[$metadataKey])) {
+        $metadata = $deviceMetadata[$metadataKey];
+        foreach (array(
+          'display_name', 'important', 'web', 'scan_profile', 'scan_interval_hours',
+          'notes', 'location', 'owner', 'model', 'icon', 'tags'
+        ) as $field)
+          $row[$field] = $metadata[$field];
+      }
+      $row = $this->withAutomaticInventoryTags($row, array_merge(
+        $dockerGatewayTagsByIp[(string)$key] ?? array(),
+        array($this->dockerAutomaticInventoryTag($identity['network'], $identity['container']))
+      ));
+      $sorted_ips[] = $this->normalizeInventoryRow($row, $key);
+    }
   }
-  ksort($sorted_ips);
+  $sorted_ips = array_values(array_filter($sorted_ips, static fn(array $row): bool =>
+    ip2long((string)$row['ip']) !== false
+  ));
+  usort($sorted_ips, function(array $left, array $right): int {
+    $ipOrder = ((int)sprintf('%u', ip2long((string)$left['ip'])))
+      <=> ((int)sprintf('%u', ip2long((string)$right['ip'])));
+    if ($ipOrder !== 0)
+      return $ipOrder;
+    return strcmp(
+      $this->inventoryDeviceMetadataKey((string)($left['device_identity']['network'] ?? ''), (string)($left['device_identity']['container'] ?? '')),
+      $this->inventoryDeviceMetadataKey((string)($right['device_identity']['network'] ?? ''), (string)($right['device_identity']['container'] ?? ''))
+    );
+  });
   $old_ip = null;
   $old_network = null;
   $res = array();
@@ -207,13 +237,14 @@ public function getInventory(?string $networkCidr = null) {
     if (!$selectedNetwork->contains($ip))
       continue;
     $mac = trim((string)$data["mac"]);
-    if ($mac == "" && $dhcpNetwork)
+    if ($mac === '' && $dhcpNetwork && $data['device_identity'] === null)
       continue;
     $normalizedMac = strtolower($mac);
     $managed = isset($data['id']) && $data['id'] !== null;
     if (!$this->inventoryHostIsVisible($data, $managed))
       continue;
-    $data['dhcp_managed'] = $dhcpNetwork ? 1 : 0;
+    $data['dhcp_managed'] = $managed ? 1 : 0;
+    $data['network_is_dhcp'] = $dhcpNetwork ? 1 : 0;
     $data['approved'] = $mac !== '' && ($managed || isset($approvedDevices[$normalizedMac])) ? 1 : 0;
     $data['is_new'] = $mac !== '' && !$managed && !isset($approvedDevices[$normalizedMac]) ? 1 : 0;
     $categoryNetwork = substr($ip, 0, strrpos($ip, '.'));

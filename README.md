@@ -8,6 +8,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 
 - Live inventory table for known and newly discovered devices.
 - Persistent tri-state inventory filters for status, importance, and new-device state.
+- Notes, location, owner, model, tags, curated icons, and scan cadence for managed hosts and named Docker containers, plus shared tag-based Inventory views.
 - Status tracking with `Up`, `Down`, `arp`, and `arp-down` states.
 - Stability, host history, and a 24-hour notify view.
 - Static DHCP/DNS host management through dnsmasq.
@@ -292,7 +293,7 @@ The converter parses mysqldump and nmap XML data directly, migrates legacy lease
 
 The UI starts in guest mode. Guests can view inventory, IPAM utilization, services, history, scans, health, and notifications, but cannot approve devices or change DHCP/DNS/netboot state.
 
-After login, admins can create/edit hosts, add/rename/delete categories, trigger ping refreshes and choose lightweight, standard, or deep host scans, upload/delete netboot images, and assign netboot images to hosts.
+After login, admins can create/edit hosts, edit metadata for discovered Docker devices with a verified network/container identity, manage shared tag views, add/rename/delete categories, trigger ping refreshes and choose lightweight, standard, or deep host scans, upload/delete netboot images, and assign netboot images to hosts.
 
 Netboot uploads accept UEFI applications (`.efi`), iPXE/PXE loaders (`.kpxe`, `.kkpxe`, `.kkkpxe`, `.pxe`, `.lkrn`), PXELINUX loaders (`.0`), and iPXE scripts (`.ipxe`). FenPing validates both the filename extension and the file content. PHP execution is disabled in the netboot directory.
 
@@ -308,7 +309,11 @@ Useful endpoints:
 | `GET` | `/api/health/live` | Process liveness; succeeds while the PHP application can answer. |
 | `GET` | `/api/health/ready` | Traffic readiness; returns HTTP `503` until SQLite, dnsmasq, cron, and integrity status are ready. |
 | `GET` | `/api/doctor` | Admin-only live network, storage, service-listener, and competing-DHCP diagnostics. |
-| `GET` | `/api/inventory` | Network inventory. |
+| `GET` | `/api/inventory` | Network inventory with host metadata, available tags, and shared saved filters. |
+| `PUT` | `/api/inventory/device-metadata` | Admin-only metadata and scan-schedule update for a currently verified Docker network/container identity. |
+| `POST` | `/api/inventory/saved-filters` | Admin-only creation of an appliance-wide tag view. |
+| `PUT` | `/api/inventory/saved-filters/{id}` | Admin-only rename or tag replacement for a saved view. |
+| `DELETE` | `/api/inventory/saved-filters/{id}` | Admin-only deletion of a saved view. |
 | `GET` | `/api/ipam` | All configured subnets, their pending and approved dynamic devices, active conflicts, and DHCP pool utilization. |
 | `PUT` | `/api/ipam/devices/{mac}/approval` | Acknowledge a new device without changing DHCP behavior. |
 | `DELETE` | `/api/ipam/devices/{mac}/approval` | Mark an acknowledged dynamic device as new again. |

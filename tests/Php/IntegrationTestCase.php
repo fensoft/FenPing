@@ -32,6 +32,8 @@ abstract class IntegrationTestCase extends TestCase
                 'ip_conflict_devices', 'ip_conflicts', 'ip_conflict_monitor',
                 'telegram_known_chats',
                 'notification_delivery_settings',
+                'inventory_device_tags', 'inventory_saved_filter_tags', 'host_tags',
+                'inventory_device_metadata', 'inventory_saved_filters', 'tags',
                 'stats', 'ping', 'ips', 'range', 'netboot_images',
             ] as $table) {
                 $pdo->exec('DELETE FROM ' . $table);
@@ -41,5 +43,6 @@ abstract class IntegrationTestCase extends TestCase
             $database->rollback();
             throw $error;
         }
+        $this->app()->backend()->dockerNetworks->replace([], time());
     }
 }

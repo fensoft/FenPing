@@ -11,7 +11,7 @@ use Throwable;
 
 final class DatabaseManager
 {
-    public const SCHEMA_VERSION = 7;
+    public const SCHEMA_VERSION = 9;
     private const BUSY_TIMEOUT_MS = 30000;
 
     private ?PDO $connection = null;
@@ -58,12 +58,26 @@ final class DatabaseManager
             } else {
                 $this->setSchemaVersion($legacyVersion);
             }
-        } elseif ($version === self::SCHEMA_VERSION
-            && $this->detectLegacySchemaVersion() === self::SCHEMA_VERSION - 1
+        } elseif ($version >= 7
+            && $this->detectLegacySchemaVersion() === 6
             && count($this->missingScanControlColumns()) === count($this->scanControlColumns())) {
             // Older unversioned databases were once stamped by the idempotent base
             // schema even though CREATE TABLE IF NOT EXISTS could not add columns.
-            $this->setSchemaVersion(self::SCHEMA_VERSION - 1);
+            $this->setSchemaVersion(6);
+        }
+        if ($this->schemaVersion() === 8
+            && count($this->missingHostMetadataColumns()) === count($this->hostMetadataColumns())
+            && count($this->missingHostMetadataTables()) === count($this->hostMetadataTables())) {
+            // A version-7 database could likewise be stamped by a newer
+            // idempotent base schema without ALTER TABLE adding metadata.
+            $this->setSchemaVersion(7);
+        }
+        if ($this->schemaVersion() === 9
+            && !$this->hostDisplayNameColumnExists()
+            && count($this->missingInventoryDeviceMetadataTables()) === count($this->inventoryDeviceMetadataTables())) {
+            // A version-8 database could be stamped by the idempotent base
+            // schema without ALTER TABLE adding discovery metadata support.
+            $this->setSchemaVersion(8);
         }
         if ($this->schemaVersion() < self::SCHEMA_VERSION) {
             $this->applyMigrations(self::SCHEMA_VERSION);
@@ -74,7 +88,22 @@ final class DatabaseManager
         }
         $missing = $this->missingScanControlColumns();
         if ($missing !== []) {
-            throw new RuntimeException('database schema version 7 is missing scans columns: ' . implode(', ', $missing));
+            throw new RuntimeException('database schema version 9 is missing scans columns: ' . implode(', ', $missing));
+        }
+        $missingMetadata = $this->missingHostMetadataColumns();
+        if ($missingMetadata !== []) {
+            throw new RuntimeException('database schema version 9 is missing ips columns: ' . implode(', ', $missingMetadata));
+        }
+        $missingMetadataTables = $this->missingHostMetadataTables();
+        if ($missingMetadataTables !== []) {
+            throw new RuntimeException('database schema version 9 is missing tables: ' . implode(', ', $missingMetadataTables));
+        }
+        if (!$this->hostDisplayNameColumnExists()) {
+            throw new RuntimeException('database schema version 9 is missing ips column: display_name');
+        }
+        $missingInventoryMetadata = $this->missingInventoryDeviceMetadataTables();
+        if ($missingInventoryMetadata !== []) {
+            throw new RuntimeException('database schema version 9 is missing tables: ' . implode(', ', $missingInventoryMetadata));
         }
     }
 
@@ -232,6 +261,51 @@ final class DatabaseManager
         return array_values(array_filter(
             $this->scanControlColumns(),
             static fn(string $column): bool => !isset($columns[$column]),
+        ));
+    }
+
+    private function hostMetadataColumns(): array
+    {
+        return ['notes', 'location', 'owner', 'model', 'icon'];
+    }
+
+    private function missingHostMetadataColumns(): array
+    {
+        $columns = $this->tableColumns('ips');
+        return array_values(array_filter(
+            $this->hostMetadataColumns(),
+            static fn(string $column): bool => !isset($columns[$column]),
+        ));
+    }
+
+    private function hostMetadataTables(): array
+    {
+        return ['tags', 'host_tags', 'inventory_saved_filters', 'inventory_saved_filter_tags'];
+    }
+
+    private function missingHostMetadataTables(): array
+    {
+        return array_values(array_filter(
+            $this->hostMetadataTables(),
+            fn(string $table): bool => !$this->tableExists($table),
+        ));
+    }
+
+    private function hostDisplayNameColumnExists(): bool
+    {
+        return isset($this->tableColumns('ips')['display_name']);
+    }
+
+    private function inventoryDeviceMetadataTables(): array
+    {
+        return ['inventory_device_metadata', 'inventory_device_tags'];
+    }
+
+    private function missingInventoryDeviceMetadataTables(): array
+    {
+        return array_values(array_filter(
+            $this->inventoryDeviceMetadataTables(),
+            fn(string $table): bool => !$this->tableExists($table),
         ));
     }
 

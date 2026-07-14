@@ -66,10 +66,10 @@ public function scanNetworkCidrForIp(string $ip): string {
 }
 
 public function scanMetadataCancellationRequested(int $id): bool {
-  $stmt = $this->db()->prepare("SELECT cancel_requested_at FROM scans WHERE id=:id AND state='running'");
+  $stmt = $this->db()->prepare("SELECT state, cancel_requested_at FROM scans WHERE id=:id AND state IN ('running', 'cancelled')");
   $stmt->execute(array('id' => $id));
-  $value = $stmt->fetchColumn();
-  return $value !== false && $value !== null;
+  $row = $stmt->fetch(PDO::FETCH_ASSOC);
+  return $row !== false && ($row['state'] === 'cancelled' || $row['cancel_requested_at'] !== null);
 }
 
 public function scanMetadataRequestCancel(string $ip, int $id): array {
@@ -95,11 +95,15 @@ public function scanMetadataRequestCancel(string $ip, int $id): array {
       $status = 200;
     } else {
       $stmt = $database->prepare("
-        UPDATE scans SET cancel_requested_at=COALESCE(cancel_requested_at, CURRENT_TIMESTAMP),
-          progress_phase='cancelling', progress_updated_at=CURRENT_TIMESTAMP
+        UPDATE scans SET state='cancelled',
+          cancel_requested_at=COALESCE(cancel_requested_at, CURRENT_TIMESTAMP),
+          date_end=CURRENT_TIMESTAMP,
+          duration=CASE WHEN date_begin IS NULL THEN NULL ELSE MAX(0, unixepoch(CURRENT_TIMESTAMP)-unixepoch(date_begin)) END,
+          progress_phase='cancelled', progress_updated_at=CURRENT_TIMESTAMP,
+          error=COALESCE(NULLIF(error, ''), 'cancelled by operator')
         WHERE id=:id AND state='running'
       ");
-      $status = 202;
+      $status = 200;
     }
     $stmt->execute(array('id' => $id));
     $metadata = $this->scanMetadataRawById($id, true);

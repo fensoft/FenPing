@@ -53,7 +53,7 @@ public function runInventoryCommand(array $args): int {
 
     if ($automatic) {
       echo "discovered " . count($targets) . " hosts" . PHP_EOL;
-      $queueTargets = $this->inventoryScheduledTargets($targets);
+      $queueTargets = $this->inventoryScheduledTargets($targets, null, $selectedNetwork->cidr);
       echo "due " . count($queueTargets) . " scans" . PHP_EOL;
     } else {
       $queueTargets = array_map(fn($ip) => array('ip' => $ip, 'profile' => $options['profile']), $targets);
@@ -263,7 +263,7 @@ public function inventoryExcludeAutomaticTargets(array $hosts): array {
   return array_values(array_diff($hosts, $excluded));
 }
 
-public function inventoryScheduledTargets(array $hosts, ?int $now = null): array {
+public function inventoryScheduledTargets(array $hosts, ?int $now = null, ?string $networkCidr = null): array {
   $now ??= time();
   $settings = array();
   $stmt = $this->db()->query("
@@ -271,8 +271,42 @@ public function inventoryScheduledTargets(array $hosts, ?int $now = null): array
     FROM ips
     WHERE ip IS NOT NULL AND ip<>''
   ");
-  while ($row = $stmt->fetch(PDO::FETCH_ASSOC))
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $row['managed'] = true;
     $settings[(string)$row['ip']] = $row;
+  }
+
+  $deviceMetadata = $this->inventoryDeviceMetadataMap();
+  $profileDepth = array('lightweight' => 1, 'standard' => 2, 'deep' => 3);
+  foreach ($this->dockerNetworks->containers() as $container) {
+    if ($networkCidr !== null && $container['cidr'] !== $networkCidr)
+      continue;
+    $ip = $container['ip'];
+    if (isset($settings[$ip]['managed']))
+      continue;
+    $key = $this->inventoryDeviceMetadataKey($container['network'], $container['container']);
+    if (!isset($deviceMetadata[$key]))
+      continue;
+    $metadata = $deviceMetadata[$key];
+    $candidate = array(
+      'ip' => $ip,
+      'scan_profile' => $metadata['scan_profile'],
+      'scan_interval_hours' => $metadata['scan_interval_hours'],
+      'device' => true
+    );
+    if (!isset($settings[$ip])) {
+      $settings[$ip] = $candidate;
+      continue;
+    }
+    $current = $settings[$ip];
+    if (($profileDepth[$candidate['scan_profile']] ?? 0) > ($profileDepth[$current['scan_profile']] ?? 0))
+      $current['scan_profile'] = $candidate['scan_profile'];
+    $currentHours = (int)$current['scan_interval_hours'];
+    $candidateHours = (int)$candidate['scan_interval_hours'];
+    if ($currentHours <= 0 || ($candidateHours > 0 && $candidateHours < $currentHours))
+      $current['scan_interval_hours'] = $candidateHours;
+    $settings[$ip] = $current;
+  }
 
   $lastScans = array();
   $stmt = $this->db()->query("

@@ -21,6 +21,7 @@ public function hostsApiRoutes(): array {
     $this->apiRoute('GET', '/hosts/by-ip/{ip:ipv4}/detail', 'handleHostDetailByIp'),
     $this->apiRoute('GET', '/hosts/{id:int}', 'handleHostGet'),
     $this->apiRoute('POST', '/hosts', 'handleHostCreate', 'body', array('live' => array(LiveUpdateScope::Hosts))),
+    $this->apiRoute('PUT', '/hosts/{id:int}/metadata', 'handleNamedNonDhcpHostMetadataEdit', 'body', array('live' => array(LiveUpdateScope::Hosts))),
     $this->apiRoute('PUT', '/hosts/{id:int}', 'handleHostEdit', 'body', array('live' => array(LiveUpdateScope::Hosts))),
     $this->apiRoute('DELETE', '/hosts/{id:int}', 'handleHostDelete', 'body', array('live' => array(LiveUpdateScope::Hosts))),
     $this->apiRoute('POST', '/categories', 'handleCategoryCreate', 'body', array('live' => array(LiveUpdateScope::Hosts))),
@@ -50,6 +51,19 @@ public function handleHostDetail(array $params): array {
 
 public function handleHostDetailByIp(array $params): array {
   $ip = $params['ip'];
+  $identity = null;
+  $requestedNetwork = $_GET['network'] ?? null;
+  $requestedContainer = $_GET['container'] ?? null;
+  if ($requestedNetwork !== null || $requestedContainer !== null) {
+    try {
+      $identity = array(
+        'network' => $this->normalizeInventoryDeviceIdentityPart($requestedNetwork, 'network name'),
+        'container' => $this->normalizeInventoryDeviceIdentityPart($requestedContainer, 'container name')
+      );
+    } catch (InvalidArgumentException $error) {
+      $this->jsonError(400, $error->getMessage());
+    }
+  }
   try {
     $network = $this->networks->forIp($ip, false);
   } catch (NetworkPolicyException $error) {
@@ -57,10 +71,15 @@ public function handleHostDetailByIp(array $params): array {
   }
   $inventoryHost = null;
   foreach ($this->getInventory($network->cidr) as $candidate) {
-    if (($candidate['ip'] ?? '') === $ip) {
-      $inventoryHost = $candidate;
-      break;
-    }
+    if (($candidate['ip'] ?? '') !== $ip)
+      continue;
+    if ($identity !== null && (
+      ($candidate['device_identity']['network'] ?? null) !== $identity['network']
+      || ($candidate['device_identity']['container'] ?? null) !== $identity['container']
+    ))
+      continue;
+    $inventoryHost = $candidate;
+    break;
   }
 
   if ($inventoryHost === null)
@@ -108,9 +127,29 @@ public function handleHostCreate(array $params): array {
   } catch (InvalidArgumentException $e) {
     $this->jsonError(400, $e->getMessage());
   }
+  $source = null;
+  if (array_key_exists('source_device', $body)) {
+    if (!is_array($body['source_device']))
+      $this->jsonError(400, 'source device must be an object');
+    try {
+      $source = array(
+        'network' => $this->normalizeInventoryDeviceIdentityPart($body['source_device']['network'] ?? null, 'network name'),
+        'container' => $this->normalizeInventoryDeviceIdentityPart($body['source_device']['container'] ?? null, 'container name')
+      );
+    } catch (InvalidArgumentException $e) {
+      $this->jsonError(400, $e->getMessage());
+    }
+    if ($this->dockerContainerIdentity($source['network'], $source['container'], (string)$values['ip']) === null)
+      $this->jsonError(409, 'source container identity is no longer available at this IP');
+  }
 
   try {
-    $change = $this->commitDhcpMutation(fn() => $this->create($values['ip'], $values['mac']));
+    $change = $this->commitDhcpMutation(function () use ($values, $source) {
+      $id = (int)$this->create($values['ip'], $values['mac']);
+      if ($source !== null)
+        $this->transferInventoryDeviceMetadataToHost($source['network'], $source['container'], $id);
+      return $id;
+    });
   } catch (PDOException $e) {
     $this->handleHostConstraintError($e);
   }
@@ -142,12 +181,23 @@ public function handleHostEdit(array $params): array {
     );
     $scanProfile = $this->normalizeScheduledScanProfile($body['scan_profile'] ?? $existing['scan_profile'] ?? self::SCAN_MANAGED_DEFAULT_PROFILE);
     $scanIntervalHours = $this->normalizeScanIntervalHours($body['scan_interval_hours'] ?? $existing['scan_interval_hours'] ?? self::SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
+    $displayName = $this->normalizeHostMetadataText(
+      $body['display_name'] ?? $existing['display_name'] ?? '', 'display name'
+    );
+    $notes = $this->normalizeHostNotes($body['notes'] ?? $existing['notes'] ?? '');
+    $location = $this->normalizeHostMetadataText($body['location'] ?? $existing['location'] ?? '', 'location');
+    $owner = $this->normalizeHostMetadataText($body['owner'] ?? $existing['owner'] ?? '', 'owner');
+    $model = $this->normalizeHostMetadataText($body['model'] ?? $existing['model'] ?? '', 'model');
+    $icon = $this->normalizeHostIcon(array_key_exists('icon', $body) ? $body['icon'] : ($existing['icon'] ?? null));
+    $tags = array_key_exists('tags', $body)
+      ? $this->normalizeHostTags($body['tags'])
+      : $this->normalizeHostTags($existing['tags'] ?? array());
   } catch (InvalidArgumentException $e) {
     $this->jsonError(400, $e->getMessage());
   }
 
   try {
-    $change = $this->commitDhcpMutation(function () use ($id, $values, $body, $netbootImageId, $scanProfile, $scanIntervalHours) {
+    $change = $this->commitDhcpMutation(function () use ($id, $values, $body, $netbootImageId, $scanProfile, $scanIntervalHours, $displayName, $notes, $location, $owner, $model, $icon, $tags) {
       if ($this->getId($id) === false)
         throw new DhcpHostNotFoundException('host not found');
       if ($netbootImageId !== null && !$this->netboot_image_exists($netbootImageId))
@@ -165,7 +215,14 @@ public function handleHostEdit(array $params): array {
         $values['dns'],
         $netbootImageId,
         $scanProfile,
-        $scanIntervalHours
+        $scanIntervalHours,
+        $notes,
+        $location,
+        $owner,
+        $model,
+        $icon,
+        $tags,
+        $displayName
       );
       return true;
     });
@@ -261,10 +318,18 @@ public function normalizeHostDetail(array $host): array {
   $host['scan_interval_hours'] = $this->normalizeScanIntervalHours($host['scan_interval_hours'] ?? self::SCAN_MANAGED_DEFAULT_INTERVAL_HOURS);
   $host['mac'] = strtolower((string)($host['mac'] ?? ''));
   $host['vendor'] = $this->hostVendorFromCache($host['mac']);
-  $host['dhcp_managed'] = $this->config->dhcpNetwork->contains((string)($host['ip'] ?? '')) ? 1 : 0;
+  $host['dhcp_managed'] = 1;
+  $host['network_is_dhcp'] = $this->config->dhcpNetwork->contains((string)($host['ip'] ?? '')) ? 1 : 0;
+  $identity = $this->namedNonDhcpHostIdentity($host);
+  $host['device_identity'] = $identity;
+  $host['metadata_editable'] = $identity === null ? 0 : 1;
   $ping = $this->hostPingState($host);
   $host['status'] = $ping['status'];
   $host['date'] = $ping['date'];
+  $host = $this->withAutomaticInventoryTags(
+    $host,
+    $this->dockerAutomaticInventoryTagsForIp((string)($host['ip'] ?? ''))
+  );
   return $host;
 }
 
@@ -280,10 +345,9 @@ public function normalizeUnmanagedHostDetail(array $host): array {
   $host['vendor'] = (string)($host['vendor'] ?? $this->getVendor($host['mac']));
   $host['router'] = '';
   $host['dns'] = '';
-  $host['scan_profile'] = null;
-  $host['scan_interval_hours'] = 0;
   $host['netboot_image_id'] = null;
-  $host['dhcp_managed'] = $this->config->dhcpNetwork->contains((string)($host['ip'] ?? '')) ? 1 : 0;
+  $host['dhcp_managed'] = 0;
+  $host['network_is_dhcp'] = $this->config->dhcpNetwork->contains((string)($host['ip'] ?? '')) ? 1 : 0;
   return $host;
 }
 

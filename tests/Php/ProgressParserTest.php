@@ -42,6 +42,33 @@ final class ProgressParserTest extends TestCase
         self::assertNull(ProgressParser::parse('malformed status output'));
     }
 
+    public function testLifecycleMilestonesAdvanceStandardScansWithoutTimingPercentages(): void
+    {
+        $milestones = [
+            ['Completed SYN Stealth Scan at 02:00, 0.02s elapsed (1000 total ports)', 'port_scan', 100.0, 55],
+            ['Initiating Service scan at 02:00', 'service_detection', 0.0, 55],
+            ['Completed Service scan at 02:00, 6.03s elapsed (4 services on 1 host)', 'service_detection', 100.0, 75],
+            ['Initiating OS detection (try #1) against localhost (127.0.0.1)', 'os_detection', 0.0, 90],
+            ['NSE: Script scanning 127.0.0.1.', 'script_scan', 0.0, 90],
+            ['NSE: Script Post-scanning.', 'script_scan', 100.0, 90],
+            ['Initiating Traceroute at 02:01', 'traceroute', 0.0, 96],
+            ['Completed Traceroute at 02:01, 0.01s elapsed', 'traceroute', 100.0, 99],
+        ];
+
+        $progress = 1;
+        foreach ($milestones as [$line, $phase, $phasePercent, $expectedProgress]) {
+            $parsed = ProgressParser::parse($line);
+            self::assertSame($phase, $parsed['phase']);
+            self::assertSame($phasePercent, $parsed['phase_percent']);
+            $progress = ProgressParser::overall('standard', $parsed['phase'], $parsed['phase_percent'], $progress);
+            self::assertSame($expectedProgress, $progress);
+        }
+
+        self::assertNull(ProgressParser::parse('NSE: Script Pre-scanning.'));
+        self::assertNull(ProgressParser::parse('Initiating NSE at 02:00'));
+        self::assertNull(ProgressParser::parse('Initiating Future Nmap Task at 02:00'));
+    }
+
     public function testOverallMappingIsProfileAwareAndMonotonic(): void
     {
         self::assertSame(3, ProgressParser::overall('standard', 'host_discovery', 50));

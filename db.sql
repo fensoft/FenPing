@@ -21,7 +21,64 @@ CREATE TABLE IF NOT EXISTS ips (
   dns TEXT,
   netboot_image_id INTEGER,
   scan_profile TEXT NOT NULL DEFAULT 'standard',
-  scan_interval_hours INTEGER NOT NULL DEFAULT 24
+  scan_interval_hours INTEGER NOT NULL DEFAULT 24,
+  display_name TEXT,
+  notes TEXT,
+  location TEXT,
+  owner TEXT,
+  model TEXT,
+  icon TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT COLLATE NOCASE NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS host_tags (
+  host_id INTEGER NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (host_id, tag_id),
+  FOREIGN KEY (host_id) REFERENCES ips (id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS inventory_saved_filters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT COLLATE NOCASE NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS inventory_saved_filter_tags (
+  filter_id INTEGER NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (filter_id, tag_id),
+  FOREIGN KEY (filter_id) REFERENCES inventory_saved_filters (id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS inventory_device_metadata (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  network_name TEXT NOT NULL,
+  container_name TEXT NOT NULL,
+  display_name TEXT,
+  important INTEGER,
+  web INTEGER,
+  scan_profile TEXT NOT NULL DEFAULT 'lightweight',
+  scan_interval_hours INTEGER NOT NULL DEFAULT 24,
+  notes TEXT,
+  location TEXT,
+  owner TEXT,
+  model TEXT,
+  icon TEXT,
+  UNIQUE (network_name, container_name)
+);
+
+CREATE TABLE IF NOT EXISTS inventory_device_tags (
+  device_id INTEGER NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (device_id, tag_id),
+  FOREIGN KEY (device_id) REFERENCES inventory_device_metadata (id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS leases (
@@ -358,6 +415,9 @@ CREATE TABLE IF NOT EXISTS oui_vendors (
 );
 
 CREATE INDEX IF NOT EXISTS ips_netboot_image_id ON ips (netboot_image_id);
+CREATE INDEX IF NOT EXISTS host_tags_tag_id ON host_tags (tag_id, host_id);
+CREATE INDEX IF NOT EXISTS inventory_saved_filter_tags_tag_id ON inventory_saved_filter_tags (tag_id, filter_id);
+CREATE INDEX IF NOT EXISTS inventory_device_tags_tag_id ON inventory_device_tags (tag_id, device_id);
 CREATE INDEX IF NOT EXISTS leases_ip ON leases (ip);
 CREATE INDEX IF NOT EXISTS leases_ends ON leases (ends);
 CREATE INDEX IF NOT EXISTS leases_active_last_seen ON leases (active, last_seen);
@@ -392,4 +452,4 @@ CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scrip
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
 CREATE INDEX IF NOT EXISTS operation_failures_operation_time ON operation_failures (operation, failed_at);
 
-PRAGMA user_version = 7;
+PRAGMA user_version = 9;

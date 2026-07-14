@@ -50,6 +50,8 @@ final class ApiKernelTest extends IntegrationTestCase
         self::assertSame('192.0.2.0/24', $body['selected_network']);
         self::assertSame('192.0.2.0/24', $body['dhcp_network']);
         self::assertTrue($body['networks'][0]['selectable']);
+        self::assertSame([], $body['available_tags']);
+        self::assertSame([], $body['saved_filters']);
 
         $request = new Request('GET', '/api/inventory?network=203.0.113.0%2F24', ['network' => '203.0.113.0/24'], [], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/api/inventory'], []);
         $unknown = $this->app()->api()->handle($request);
@@ -137,6 +139,84 @@ final class ApiKernelTest extends IntegrationTestCase
         self::assertCount(2, $body['conflict_monitor']['monitors']);
     }
 
+    public function testSavedInventoryFilterCrudRequiresAuthenticationAndRemainsGuestReadable(): void
+    {
+        $guest = $this->app()->api()->handle($this->request(
+            'POST',
+            '/api/inventory/saved-filters',
+            ['name' => 'Infrastructure', 'tags' => ['Server']],
+        ));
+        self::assertSame(403, $guest->status);
+
+        self::assertTrue($this->app()->auth()->login(''));
+        $invalid = $this->app()->api()->handle($this->request(
+            'POST',
+            '/api/inventory/saved-filters',
+            ['name' => 'Empty', 'tags' => []],
+        ));
+        self::assertSame(400, $invalid->status);
+
+        $created = $this->app()->api()->handle($this->request(
+            'POST',
+            '/api/inventory/saved-filters',
+            ['name' => 'Infrastructure', 'tags' => [' Server ', 'server', 'Core']],
+        ));
+        self::assertSame(200, $created->status);
+        $filter = json_decode($created->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('Infrastructure', $filter['name']);
+        self::assertSame(['Core', 'Server'], $filter['tags']);
+
+        $duplicate = $this->app()->api()->handle($this->request(
+            'POST',
+            '/api/inventory/saved-filters',
+            ['name' => 'infrastructure', 'tags' => ['Printer']],
+        ));
+        self::assertSame(409, $duplicate->status);
+
+        $updated = $this->app()->api()->handle($this->request(
+            'PUT',
+            '/api/inventory/saved-filters/' . $filter['id'],
+            ['name' => 'Critical systems', 'tags' => ['Printer', 'SERVER']],
+        ));
+        self::assertSame(200, $updated->status);
+        $updatedFilter = json_decode($updated->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('Critical systems', $updatedFilter['name']);
+        self::assertSame(['Printer', 'Server'], $updatedFilter['tags']);
+
+        $missing = $this->app()->api()->handle($this->request(
+            'PUT',
+            '/api/inventory/saved-filters/999999',
+            ['name' => 'Missing', 'tags' => ['Server']],
+        ));
+        self::assertSame(404, $missing->status);
+
+        $this->app()->auth()->logout();
+        $inventory = $this->app()->api()->handle($this->request('GET', '/api/inventory'));
+        self::assertSame(200, $inventory->status);
+        $inventoryBody = json_decode($inventory->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame(['Printer', 'Server'], $inventoryBody['available_tags']);
+        self::assertSame([$updatedFilter], $inventoryBody['saved_filters']);
+
+        $guestDelete = $this->app()->api()->handle($this->request(
+            'DELETE',
+            '/api/inventory/saved-filters/' . $filter['id'],
+        ));
+        self::assertSame(403, $guestDelete->status);
+
+        self::assertTrue($this->app()->auth()->login(''));
+        $deleted = $this->app()->api()->handle($this->request(
+            'DELETE',
+            '/api/inventory/saved-filters/' . $filter['id'],
+        ));
+        self::assertSame(200, $deleted->status);
+        self::assertSame(['deleted' => true], json_decode($deleted->body, true));
+
+        $missingDelete = $this->app()->api()->handle(
+            $this->request('DELETE', '/api/inventory/saved-filters/999999'),
+        );
+        self::assertSame(404, $missingDelete->status);
+    }
+
     public function testScanCancellationRequiresLoginAndReturnsNormalizedPolicyPayloads(): void
     {
         $queued = $this->app()->scanJobs()->enqueue('192.0.2.80', 'standard');
@@ -173,9 +253,10 @@ final class ApiKernelTest extends IntegrationTestCase
         $accepted = $this->app()->api()->handle(
             $this->request('POST', "/api/scans/192.0.2.82/$running/cancel"),
         );
-        self::assertSame(202, $accepted->status);
+        self::assertSame(200, $accepted->status);
         $acceptedBody = json_decode($accepted->body, true, flags: JSON_THROW_ON_ERROR);
-        self::assertFalse($acceptedBody['cancelled']);
+        self::assertTrue($acceptedBody['cancelled']);
+        self::assertSame('cancelled', $acceptedBody['metadata']['state']);
         self::assertTrue($acceptedBody['metadata']['cancel_requested']);
 
         $missing = $this->app()->api()->handle(
@@ -190,9 +271,18 @@ final class ApiKernelTest extends IntegrationTestCase
         self::assertSame(409, $conflict->status);
     }
 
-    private function request(string $method, string $uri): Request
+    private function request(string $method, string $uri, ?array $body = null): Request
     {
-        return new Request($method, $uri, [], [], [], ['REQUEST_METHOD' => $method, 'REQUEST_URI' => $uri], []);
+        return new Request(
+            $method,
+            $uri,
+            [],
+            [],
+            [],
+            ['REQUEST_METHOD' => $method, 'REQUEST_URI' => $uri],
+            [],
+            $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR),
+        );
     }
 
     private function inventoryHost(string $ip): array
