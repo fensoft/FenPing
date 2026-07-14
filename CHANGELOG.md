@@ -2,11 +2,32 @@
 
 All notable FenPing changes are documented here. This file was reconstructed from the complete Git history, from the initial commit on 2019-02-20 through the `1.6` release on 2026-07-14.
 
-Release dates use the corresponding Git tag dates. Application and Docker development now target version 1.7, while the forward-compatible portable backup contract remains version 1.6. The history contains one merge-only commit (`b1b6c8f`) with no distinct feature to list separately.
+Release dates use the corresponding Git tag dates. The current application and Docker release is version 1.7, while the forward-compatible portable backup contract remains version 1.6. The history contains one merge-only commit with no distinct feature to list separately.
 
-## [Unreleased] - 1.7 development
+## [Unreleased]
 
-Development after the `1.6` tag.
+No changes yet.
+
+## [1.7] - 2026-07-14
+
+Development after the 1.6 tag through 2026-07-14.
+
+### Added
+
+- Added cancellable queued and running scans with persisted live progress, timeout phases, and responsive frontend controls.
+- Added a Playwright browser suite covering authentication, accessibility, inventory mutations, responsive and RTL layouts, live updates, and topology.
+- Added rich metadata, tags, curated icons, scan cadence, and shared saved views for managed hosts and verified Docker containers.
+- Added an observed network-topology workspace built from retained traceroute evidence, with filtering, focus, keyboard inspection, and responsive layout.
+
+### Changed
+
+- Updated PHP and frontend dependencies and retained strict Composer, Node, and browser verification.
+- Finished backend modularization by replacing the Backend trait facade and route adapter with native controllers, typed CLI commands, and focused services and repositories.
+
+### Fixed
+
+- Fixed effective service counts when recent partial scans inherit open ports from earlier deep results.
+- Fixed the ping CLI conflict scan using an undeclared property after backend modularization.
 
 ## [1.6] - 2026-07-14
 
@@ -265,7 +286,8 @@ The `1.2` tag includes the original 2019-2020 application, its Docker conversion
 - Marked the 1.2 release in `restart.sh` and refreshed installation documentation.
 - Added the missing bundled `res/xsl/nmap.xsl` report stylesheet before the final tag.
 
-[Unreleased]: https://github.com/fensoft/FenPing/compare/1.6...HEAD
+[Unreleased]: https://github.com/fensoft/FenPing/compare/1.7...HEAD
+[1.7]: https://github.com/fensoft/FenPing/compare/1.6...1.7
 [1.6]: https://github.com/fensoft/FenPing/compare/1.5...1.6
 [1.5]: https://github.com/fensoft/FenPing/compare/1.4...1.5
 [1.4]: https://github.com/fensoft/FenPing/compare/1.3...1.4
