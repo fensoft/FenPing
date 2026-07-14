@@ -1,6 +1,8 @@
 FROM composer:2 AS composer
 
 FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
+ARG FENPING_VERSION=dev
+ENV VITE_FENPING_VERSION=$FENPING_VERSION
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -9,6 +11,8 @@ COPY frontend ./frontend
 RUN npm run build
 
 FROM mcr.microsoft.com/playwright:v1.61.1-noble AS frontend-test
+ARG FENPING_VERSION=dev
+ENV VITE_FENPING_VERSION=$FENPING_VERSION
 WORKDIR /app
 ENV CI=1
 COPY package.json package-lock.json ./

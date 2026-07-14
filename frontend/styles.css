@@ -204,8 +204,10 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
 
 .app-brand-icon {
   display: block;
+  flex: 1 1 auto;
   max-height: 2.5rem;
   max-width: 100%;
+  min-width: 0;
   object-fit: contain;
   object-position: left center;
   width: auto;
@@ -213,6 +215,20 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
 
 .app-brand-favicon {
   display: none;
+}
+
+.app-brand-version {
+  background: #eef2f6;
+  border: 1px solid #d7dee7;
+  border-radius: 999px;
+  color: #667085;
+  flex: 0 0 auto;
+  font-family: var(--tblr-font-monospace, monospace);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-inline-start: 0.4rem;
+  padding: 0.2rem 0.35rem;
 }
 
 .table-wrap {
@@ -1895,6 +1911,12 @@ html[data-bs-theme='dark'] .app-brand {
   border-bottom-color: #34404d;
 }
 
+html[data-bs-theme='dark'] .app-brand-version {
+  background: #253241;
+  border-color: #3b4a5b;
+  color: #b8c4d3;
+}
+
 html[data-bs-theme='dark'] .app-sidebar-tools {
   border-top-color: #34404d;
 }
@@ -2314,6 +2336,10 @@ html[data-bs-theme='dark'] .scan-state-filtered {
     height: 2.35rem;
     object-fit: contain;
     width: 2.35rem;
+  }
+
+  .app-brand-version {
+    display: none;
   }
 
   .app-nav {

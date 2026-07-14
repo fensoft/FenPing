@@ -5,6 +5,7 @@
         <div class="app-brand">
           <img class="app-brand-icon" :src="'/icon.webp'" alt="FenPing" />
           <img class="app-brand-favicon" :src="'/favicon-32x32.png'" alt="FenPing" />
+          <span class="app-brand-version" :aria-label="'FenPing ' + appVersion">{{ appVersion }}</span>
         </div>
         <nav class="app-nav" :aria-label="t('Primary navigation')">
           <div class="app-nav-group">
@@ -120,6 +121,7 @@ import { routeNames } from './router.js';
 
 const router = useRouter();
 const route = useRoute();
+const appVersion = import.meta.env.VITE_FENPING_VERSION || 'dev';
 const pageController = providePageController();
 const liveUpdates = provideLiveUpdates();
 const network = ref('');

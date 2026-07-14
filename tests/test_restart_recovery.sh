@@ -53,7 +53,7 @@ CONTAINER_RUNNING=false
 run_restart "dev"
 
 ! grep -q '^start fenping$' "$EVENTS"
-grep -q '^build --pull --tag example/fenping:new \.$' "$EVENTS"
+grep -q '^build --pull --build-arg FENPING_VERSION=dev --tag example/fenping:new \.$' "$EVENTS"
 grep -q '^run --rm --env-file .env .* php /opt/fenping/cli.php backup ' "$EVENTS"
 ! grep -q '^exec fenping php /opt/fenping/cli.php backup ' "$EVENTS"
 

@@ -1,5 +1,7 @@
 import { expect, test } from './fixtures.js';
 
+const expectedVersion = process.env.VITE_FENPING_VERSION || 'dev';
+
 async function expectNoHorizontalOverflow(page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 }
@@ -9,6 +11,8 @@ test('shows the full desktop inventory layout without overflow', async ({ page }
 
   await expect(page.locator('.app-brand-icon')).toBeVisible();
   await expect(page.locator('.app-brand-favicon')).toBeHidden();
+  await expect(page.locator('.app-brand-version')).toHaveText(expectedVersion);
+  await expect(page.locator('.app-brand-version')).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Vendor' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Activity' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Services' })).toBeVisible();
@@ -23,6 +27,7 @@ test('uses the compact mobile inventory and single-column modal layout', async (
 
   await expect(page.locator('.app-brand-icon')).toBeHidden();
   await expect(page.locator('.app-brand-favicon')).toBeVisible();
+  await expect(page.locator('.app-brand-version')).toBeHidden();
   await expect(page.getByRole('columnheader', { name: 'Vendor' })).toBeHidden();
   await expect(page.getByRole('columnheader', { name: 'Activity' })).toBeHidden();
   await expect(page.getByRole('columnheader', { name: 'Services' })).toBeHidden();

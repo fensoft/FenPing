@@ -54,6 +54,7 @@ fi
 echo "publishing $IMAGE:$VERSION for $PLATFORMS"
 docker buildx build \
   --platform "$PLATFORMS" \
+  --build-arg "FENPING_VERSION=$VERSION" \
   --pull \
   --push \
   --provenance=mode=max \

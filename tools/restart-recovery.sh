@@ -241,7 +241,7 @@ run_restart() {
     target_ref=$(resolved_compose_image)
     [ -n "$target_ref" ] || { echo "could not resolve the app image from docker-compose.yml" >&2; return 1; }
     echo "building $target_ref for the current platform"
-    docker build --pull --tag "$target_ref" .
+    docker build --pull --build-arg FENPING_VERSION=dev --tag "$target_ref" .
   else
     docker compose pull app
     target_ref=$(resolved_compose_image)
