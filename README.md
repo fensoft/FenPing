@@ -69,7 +69,7 @@ FenPing runs through Docker Compose with one container:
 
 - `fenping` uses host networking and runs nginx/PHP-FPM, dnsmasq, BusyBox cron, nmap, ping/ARP tools, and the application CLI on Alpine Linux.
 
-Application data is stored in the local SQLite database at `data/database/fenping.sqlite3`. `boot.sh` applies the idempotent schema and verifies database integrity before nginx and PHP-FPM start.
+Application data is stored in the local SQLite database at `data/database/fenping.sqlite3`. `boot` applies the idempotent schema and verifies database integrity before nginx and PHP-FPM start.
 
 ## Install
 
@@ -84,7 +84,7 @@ Application data is stored in the local SQLite database at `data/database/fenpin
 3. Pull and start the published image:
 
    ```bash
-   ./restart.sh
+   ./fenping.sh restart
    ```
 
 4. Open FenPing:
@@ -92,6 +92,22 @@ Application data is stored in the local SQLite database at `data/database/fenpin
    ```text
    http://<FENPING_IP>/
    ```
+
+## Lifecycle Commands
+
+`fenping.sh` is the single host-side entrypoint:
+
+| Command | Purpose |
+| --- | --- |
+| `./fenping.sh` or `./fenping.sh restart` | Pull and deploy the configured published image. |
+| `./fenping.sh start` | Start or recreate FenPing from the configured image already present locally, without pulling or creating an upgrade backup. |
+| `./fenping.sh destroy` | Remove the FenPing Compose container while preserving persistent data and local images. |
+| `./fenping.sh dev` | Build the current platform as the local `dev` image and deploy it. |
+| `./fenping.sh demo` | Rebuild and restore the synthetic screenshot environment. |
+| `./fenping.sh rollback` | Restore the newest pre-upgrade checkpoint and its recorded image. |
+| `./fenping.sh publish [version]` | Publish the three supported platforms; the version defaults to `FENPING_VERSION` or `1.7`. |
+
+Set `PUBLISH_LATEST=0` when publishing if the shared `latest` tag must remain unchanged.
 
 ## Configuration
 
@@ -101,9 +117,9 @@ Important `.env` values:
 | --- | --- |
 | `IP` | FenPing LAN address. |
 | `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
-| `FENPING_IMAGE` | Docker Hub repository pulled by `restart.sh`. Defaults to `fensoft/fenping`. |
-| `FENPING_VERSION` | Published image tag pulled by `restart.sh`. Defaults to `1.7`. |
-| `DOCKER_SOCKET` | Optional host Docker Unix socket. `restart.sh` auto-detects `/var/run/docker.sock` when this is empty; set another local socket path to override it. |
+| `FENPING_IMAGE` | Docker Hub repository pulled by `./fenping.sh restart`. Defaults to `fensoft/fenping`. |
+| `FENPING_VERSION` | Published image tag pulled by `./fenping.sh restart`. Defaults to `1.7`. |
+| `DOCKER_SOCKET` | Optional host Docker Unix socket. `fenping.sh` auto-detects `/var/run/docker.sock` when this is empty; set another local socket path to override it. |
 | `DATABASE_PATH` | SQLite file inside the container. Defaults to `/var/lib/fenping/database/fenping.sqlite3`. |
 | `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. dnsmasq, reservations, categories, and netboot assignments remain restricted to this network; IPAM displays it alongside every configured extra network. |
 | `EXTRA_NETWORKS` | Optional comma-separated canonical `/24` networks available for scanning, for example `192.168.0.0/24,172.16.20.0/24`. FenPing reports whether an explicit route exists but never adds routes. |
@@ -132,7 +148,7 @@ Managed hosts require a valid IPv4 address and six-octet MAC address. Host names
 
 Before SQLite or any daemon starts, FenPing checks the selected interface and `/24`, verifies that a configured router is on-link and answers ARP, validates the dynamic pool, tests the DNS/DHCP/TFTP/HTTP sockets, exercises persistent-directory and SQLite WAL writes, and broadcasts a DHCP discovery request. When `DHCP_DEFAULT_ROUTER` is omitted, the router reachability check passes as not configured and dnsmasq suppresses the DHCP router option. The complete check runs on every startup. Any failed check—including any DHCP offer from another server—blocks nginx, PHP-FPM, cron, and authoritative dnsmasq startup; there is no bypass for a competing DHCP server.
 
-`restart.sh` stops a failed replacement's restart loop and prints its doctor report. To run the same pre-start check manually, stop the service and use a one-off host-networked container:
+`./fenping.sh restart` stops a failed replacement's restart loop and prints its doctor report. To run the same pre-start check manually, stop the service and use a one-off host-networked container:
 
 ```bash
 docker compose stop app
@@ -158,20 +174,20 @@ Log in to Docker Hub, then publish the versioned multi-architecture image:
 
 ```bash
 docker login
-./publish.sh 1.7
+./fenping.sh publish 1.7
 ```
 
 The targets are exactly `linux/arm64`, `linux/amd64`, and `linux/arm/v7`. The script automatically runs `tonistiigi/binfmt --install all`, so publishing requires permission to start a privileged Docker container. Set `PUBLISH_LATEST=0` to omit the `latest` tag, or set `FENPING_IMAGE` to publish another Docker Hub repository. The script uses a reusable `fenping-multiarch` Buildx container builder, pushes the version and `latest` manifests, attaches provenance and an SBOM, and inspects the published result.
 
-By default, `restart.sh` never builds the application image. It pulls `FENPING_IMAGE:FENPING_VERSION` before stopping the current app, so a missing or inaccessible tag leaves the running deployment untouched.
+By default, `./fenping.sh restart` never builds the application image. It pulls `FENPING_IMAGE:FENPING_VERSION` before stopping the current app, so a missing or inaccessible tag leaves the running deployment untouched.
 
 To build the current checkout for the Docker host's platform, tag it as `FENPING_IMAGE:dev`, and restart with that local image:
 
 ```bash
-./restart.sh dev
+./fenping.sh dev
 ```
 
-Development mode builds before stopping the running app and prevents Compose from pulling over the local `dev` tag. A later normal `./restart.sh` returns to the version configured by `FENPING_VERSION` in `.env`.
+Development mode builds before stopping the running app and prevents Compose from pulling over the local `dev` tag. A later `./fenping.sh restart` returns to the version configured by `FENPING_VERSION` in `.env`.
 
 ## Persistent Data
 
@@ -254,14 +270,14 @@ SQLite starts with a fresh database and does not automatically import `data/db`.
 The versioned `demo/` source contains a synthetic network with inventory, IPAM, history, notifications, services, scans, and netboot examples. To rebuild its backup, preserve the current state, and restore the demo:
 
 ```bash
-./restart.sh demo
+./fenping.sh demo
 ```
 
 The generated archive is `data/backups/fenping-demo.tgz`. Before restoring it, the command creates a timestamped `data/backups/fenping-before-demo-*.tgz` containing the current database and netboot files. Demo timestamps shift to the restore time so recent activity remains suitable for screenshots.
 
 Normal, development, and demo restarts create a pre-upgrade archive while the old container is still running. The archive is checksum-validated and fully restored into temporary database and netboot paths with the exact target image before the old container is stopped. The previous image ID, repository digest, local rollback tag, archive checksum, and outcome are journaled under data/state/upgrades.
 
-If the replacement fails its health check, it remains available for inspection. Run ./restart.sh rollback to restore the newest checkpoint. Rollback first creates and verifies a rescue archive of the post-upgrade state, then restores the pre-upgrade archive with the recorded previous image. The configured image in .env is not changed.
+If the replacement fails its health check, it remains available for inspection. Run `./fenping.sh rollback` to restore the newest checkpoint. Rollback first creates and verifies a rescue archive of the post-upgrade state, then restores the pre-upgrade archive with the recorded previous image. The configured image in `.env` is not changed.
 
 Managed backups retain seven daily recovery points, four ISO-week recovery points, and two pre-upgrade checkpoints. Manual, imported, demo, and rollback-rescue archives are never pruned. Verification status and authenticated downloads are available on the Backups page.
 
@@ -353,7 +369,7 @@ npx playwright install chromium
 Useful checks before committing:
 
 ```bash
-bash -n boot.sh restart.sh tests/test.sh
+bash -n boot fenping.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .
@@ -411,5 +427,5 @@ docker exec fenping php /opt/fenping/cli.php inventory --work
 The Dockerfile uses an npm cache mount and conservative retry settings. Build and push through the release script so Buildx can reuse its container cache:
 
 ```bash
-./publish.sh 1.7
+./fenping.sh publish 1.7
 ```

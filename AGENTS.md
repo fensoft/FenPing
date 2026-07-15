@@ -17,10 +17,10 @@ Main stack:
 
 This repo uses Docker Compose with one application service.
 
-- `restart.sh` normally pulls published images and starts the Compose project. `./restart.sh dev` explicitly builds the current platform as the local `dev` tag.
+- `./fenping.sh restart` normally pulls published images and starts the Compose project. `./fenping.sh dev` explicitly builds the current platform as the local `dev` tag.
 - `fenping` uses host networking for DHCP/DNS/TFTP and the web UI.
 - `fenping` owns the SQLite database at `/var/lib/fenping/database/fenping.sqlite3`, mounted from `data/database`.
-- `boot.sh` runs the blocking network doctor, initializes and checks SQLite, backfills service-change notifications, refreshes the IEEE vendor registry into persistent state and SQL, renders dnsmasq config, starts BusyBox cron, sends the restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
+- `boot` runs the blocking network doctor, initializes and checks SQLite, backfills service-change notifications, refreshes the IEEE vendor registry into persistent state and SQL, renders dnsmasq config, starts BusyBox cron, sends the restart notification, regenerates host files, starts PHP-FPM, and runs nginx in the foreground.
 - Cron inside the container runs ping, hourly inventory discovery, the four-concurrent-scan queue worker, and lease import jobs.
 
 Do not add a separate database service or split dnsmasq into another container unless the user explicitly asks.
@@ -29,9 +29,9 @@ Do not add a separate database service or split dnsmasq into another container u
 
 - `docker-compose.yml`: single application service, mounts, capabilities, and logging limits.
 - `Dockerfile`: Composer/PHPUnit, Vite, and Alpine runtime stages with nginx/PHP-FPM, SQLite, dnsmasq, cron, and networking tools.
-- `restart.sh`, `publish.sh`: local lifecycle and multi-architecture publishing.
+- `fenping.sh`: start, destroy, restart, development, demo, rollback, and multi-architecture publishing commands.
 - `demo/`: versioned synthetic screenshot database, netboot files, and backup metadata.
-- `boot.sh`: application-service bootstrap and database schema application.
+- `boot`: application-service bootstrap and database schema application.
 - `composer.json`, `composer.lock`: PHP 8.4 requirements, PSR-4 autoloading, and locked test dependencies.
 - `api.php`, `cli.php`, `public/api.php`: thin stable executable entrypoints.
 - `src/Application.php`: typed composition root; only this layer wires concrete services.
@@ -98,8 +98,8 @@ Host and netboot mutations that affect dnsmasq must go through `FenPing\Dhcp\Mut
 Use the applicable subset:
 
 ```bash
-bash -n boot.sh restart.sh tests/test.sh
-! ./publish.sh 'invalid version!' # validation-only negative check
+bash -n boot fenping.sh tests/test.sh
+! ./fenping.sh publish 'invalid version!' # validation-only negative check
 docker compose config --quiet
 docker build --check .
 docker build --target backend-test -t fenping-backend-test .
@@ -114,14 +114,14 @@ npm test
 npm run test:browser
 ```
 
-After implementation work, run `./restart.sh` as the final deployment check. Use `./restart.sh demo` only when the user explicitly requests replacing the active data with the synthetic screenshot environment.
+After implementation work, run `./fenping.sh restart` as the final deployment check. Use `./fenping.sh demo` only when the user explicitly requests replacing the active data with the synthetic screenshot environment.
 
 If PHP or Node is unavailable on the host, run syntax checks inside the container/image.
 
 ## Gotchas
 
 - Never commit `.env`, cookies, DB dumps, webhook URLs, or machine-specific private values.
-- Do not add a Compose `build:` section. Release images are built and pushed only through `publish.sh`; the explicit `./restart.sh dev` path is limited to a current-platform local image.
+- Do not add a Compose `build:` section. Release images are built and pushed only through `./fenping.sh publish`; the explicit `./fenping.sh dev` path is limited to a current-platform local image.
 - Keep `FenPing\Config\AppConfig` generic and environment-driven; do not hardcode local secrets or host-specific values.
 - Do not revert unrelated dirty work.
 - `data/` is live state.

@@ -9,7 +9,7 @@ This directory is the versioned source for the synthetic screenshot environment.
 Build, deploy, and restore the demo with:
 
 ```bash
-./restart.sh demo
+./fenping.sh demo
 ```
 
 The command writes `data/backups/fenping-demo.tgz`, first saves the current installation as a timestamped `fenping-before-demo-*.tgz`, then restores the demo archive. Restoring changes the active SQLite data, netboot files, and generated dnsmasq host configuration.

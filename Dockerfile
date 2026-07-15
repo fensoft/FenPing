@@ -134,7 +134,7 @@ RUN install -d -o www-data -g www-data /var/lib/fenping/netboot \
       > /etc/doas.conf \
     && chmod 0400 /etc/doas.conf \
     && doas -C /etc/doas.conf
-COPY boot.sh /.boot
+COPY --chmod=0755 boot /.boot
 ENV FENPING_DATA_DIR=/var/lib/fenping
 EXPOSE 80
 CMD ["/.boot"]

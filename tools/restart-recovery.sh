@@ -277,7 +277,7 @@ run_restart() {
   docker compose ps
   if ! wait_for_fenping; then
     [ -n "$journal" ] && update_journal_status "$journal" failed-health
-    echo "upgrade failed health checks; run ./restart.sh rollback to restore the previous checkpoint" >&2
+    echo "upgrade failed health checks; run ./fenping.sh rollback to restore the previous checkpoint" >&2
     return 1
   fi
   [ -n "$journal" ] && update_journal_status "$journal" active

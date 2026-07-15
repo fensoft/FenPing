@@ -42,13 +42,13 @@ If `.env` already exists, edit it in place. Do not copy the template over an exi
 After changing a provider variable, apply it with the normal deployment command:
 
 ```bash
-./restart.sh
+./fenping.sh restart
 ```
 
 When testing an unpublished source checkout, use:
 
 ```bash
-./restart.sh dev
+./fenping.sh dev
 ```
 
 FenPing sends the restart event during startup when the restart rule is enabled. You can also test every ready provider later without restarting:

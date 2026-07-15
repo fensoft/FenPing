@@ -6,12 +6,12 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 
 ## High-Level Flow
 
-1. `restart.sh` creates persistent directories under `data/`.
-2. restart.sh records the running image digest, pulls or builds and pins the target image, then creates and restore-tests a pre-upgrade archive before stopping the current app. Upgrade outcomes are journaled for rollback.
+1. `fenping.sh` creates persistent directories under `data/` for lifecycle commands.
+2. `./fenping.sh restart`, `dev`, and `demo` record the running image digest, pull or build and pin the target image, then create and restore-test a pre-upgrade archive before stopping the current app. Upgrade outcomes are journaled for rollback.
 3. Compose starts `fenping` with host networking, reduced capabilities, and persistent mounts including `data/database`.
-4. `boot.sh` runs the blocking startup doctor before opening SQLite or starting any daemon.
-5. `boot.sh` creates or upgrades the SQLite schema, verifies integrity, downloads the IEEE vendor registries, and synchronizes changed assignments into SQLite.
-6. `boot.sh` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
+4. `boot` runs the blocking startup doctor before opening SQLite or starting any daemon.
+5. `boot` creates or upgrades the SQLite schema, verifies integrity, downloads the IEEE vendor registries, and synchronizes changed assignments into SQLite.
+6. `boot` renders dnsmasq config, creates cron jobs, sends the optional restart notification, regenerates host files, validates nginx and PHP-FPM, and starts the services.
 7. nginx runs in the foreground, serves the static Vue app from `/var/www/public`, sends JSON `/api/...` requests to PHP-FPM through a Unix socket, and serves the Nchan-backed `/api/events` SSE stream directly. The public `api.php` entrypoint loads private application code from `/opt/fenping`.
 
 ## Docker Build
@@ -23,9 +23,11 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 
 The image contains no database server or SQL client process. SQLite is embedded through PDO and persists its database and WAL files on the application bind mount.
 
-Normal runtime deployment never builds locally. `publish.sh` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.7`.
+Normal runtime deployment never builds locally. `./fenping.sh publish [version]` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.7`.
 
-`./restart.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev` and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next normal restart uses the configured published version again.
+The other explicit subcommands are `restart`, `start`, `destroy`, `dev`, `demo`, and `rollback`; invoking `fenping.sh` without a subcommand remains an alias for `restart`. Lifecycle modes accept no positional arguments, while `publish` accepts at most one optional version. `start` uses only the configured image already available locally and does not create an upgrade checkpoint. `destroy` removes the Compose container without deleting bind-mounted data or local images.
+
+`./fenping.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev` and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next `./fenping.sh restart` uses the configured published version again.
 
 `FenPing\Config\AppConfig` loads the committed environment contract at runtime. Values should come from `.env`/container environment variables; do not hardcode machine-specific secrets.
 
@@ -180,10 +182,10 @@ The DHCP services under `src/Dhcp/` generate:
 - `/etc/dnsmasq.d/fenping.dhcp-opts`
 - `/etc/dnsmasq.d/fenping.hosts`
 
-`boot.sh` renders `/etc/dnsmasq.d/fenping.conf` from `dnsmasq.conf.template`.
+`boot` renders `/etc/dnsmasq.d/fenping.conf` from `dnsmasq.conf.template`.
 The required `IFACE` environment variable selects the host network interface that dnsmasq binds to for DHCP, DNS, and TFTP. Startup fails if it is unset.
 
-`FenPing\Doctor\DoctorService` runs on every startup before database initialization. It aggregates interface/address/routing, configured-router ARP reachability, pool endpoint overlap, TCP/UDP bind availability, persistent-write/SQLite-WAL, and active DHCP-discovery results. When `DHCP_DEFAULT_ROUTER` is absent, router reachability is reported as not configured and the rendered dnsmasq configuration explicitly suppresses DHCP option 3. DNS TCP/UDP 53, interface-bound DHCP UDP 67, TFTP UDP 69, and wildcard HTTP TCP 80 must all be available. Nmap's retained `broadcast-dhcp-discover` script is restricted to `IFACE` and uses its fixed client MAC with a five-second response timeout. Any offer or inability to complete the safety probe blocks all services; `restart.sh` stops the resulting restart loop and retains the failed replacement for logs or rollback.
+`FenPing\Doctor\DoctorService` runs on every startup before database initialization. It aggregates interface/address/routing, configured-router ARP reachability, pool endpoint overlap, TCP/UDP bind availability, persistent-write/SQLite-WAL, and active DHCP-discovery results. When `DHCP_DEFAULT_ROUTER` is absent, router reachability is reported as not configured and the rendered dnsmasq configuration explicitly suppresses DHCP option 3. DNS TCP/UDP 53, interface-bound DHCP UDP 67, TFTP UDP 69, and wildcard HTTP TCP 80 must all be available. Nmap's retained `broadcast-dhcp-discover` script is restricted to `IFACE` and uses its fixed client MAC with a five-second response timeout. Any offer or inability to complete the safety probe blocks all services; `./fenping.sh restart` stops the resulting restart loop and retains the failed replacement for logs or rollback.
 
 The authenticated `GET /api/doctor` route invokes the exact `doctor --runtime --json` CLI command as root through the constrained `doas` policy. Runtime mode uses `ss` to inspect DNS, DHCP, TFTP, and HTTP listeners. It accepts direct process metadata when available and, under the reduced capability set where dnsmasq file-descriptor ownership is intentionally hidden, requires the expected dnsmasq or nginx process to be live. DHCP discovery removes only a response whose server identifier is FenPing's configured appliance address. The admin-only Vue Operations page displays the exception-first health dashboard plus the complete Doctor report and remediation text; PHP-FPM never receives a general-purpose privileged command capability.
 
@@ -261,7 +263,7 @@ The 1.x JSON contract is forward-compatible with future FenPing backups: later 1
 
 ## Cron
 
-`boot.sh` writes the BusyBox root crontab at `/etc/crontabs/root`:
+`boot` writes the BusyBox root crontab at `/etc/crontabs/root`:
 
 - Ping scan every 15 minutes.
 - Inventory discovery and enqueueing every hour.
@@ -292,7 +294,7 @@ Docker Compose uses readiness for container health. The full health document may
 Typical checks:
 
 ```bash
-bash -n boot.sh restart.sh tests/test.sh
+bash -n boot fenping.sh tests/test.sh
 docker compose config --quiet
 docker build --check .
 docker build -t fenping-check .

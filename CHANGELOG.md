@@ -6,7 +6,9 @@ Release dates use the corresponding Git tag dates. The current application and D
 
 ## [Unreleased]
 
-No changes yet.
+### Changed
+
+- Consolidated start, destroy, restart, development, demo, rollback, and publishing operations under `fenping.sh` subcommands; destroy preserves persistent data, and the non-executable `boot` source receives its runtime mode from the Dockerfile.
 
 ## [1.7] - 2026-07-14
 
