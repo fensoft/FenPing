@@ -6,13 +6,11 @@ Release dates use the corresponding Git tag dates. The current application and D
 
 ## [Unreleased]
 
-### Changed
+No changes yet.
 
-- Consolidated start, destroy, restart, development, demo, rollback, and publishing operations under `fenping.sh` subcommands; destroy preserves persistent data, and the non-executable `boot` source receives its runtime mode from the Dockerfile.
+## [1.7] - 2026-07-16
 
-## [1.7] - 2026-07-14
-
-Development after the 1.6 tag through 2026-07-14.
+Development after the 1.6 tag through 2026-07-16.
 
 ### Added
 
@@ -20,11 +18,13 @@ Development after the 1.6 tag through 2026-07-14.
 - Added a Playwright browser suite covering authentication, accessibility, inventory mutations, responsive and RTL layouts, live updates, and topology.
 - Added rich metadata, tags, curated icons, scan cadence, and shared saved views for managed hosts and verified Docker containers.
 - Added an observed network-topology workspace built from retained traceroute evidence, with filtering, focus, keyboard inspection, and responsive layout.
+- Added the running FenPing version beside the application logo so deployed images identify their release.
 
 ### Changed
 
 - Updated PHP and frontend dependencies and retained strict Composer, Node, and browser verification.
 - Finished backend modularization by replacing the Backend trait facade and route adapter with native controllers, typed CLI commands, and focused services and repositories.
+- Consolidated start, destroy, restart, development, demo, rollback, and publishing operations under `fenping.sh` subcommands; destroy preserves persistent data, and the non-executable `boot` source receives its runtime mode from the Dockerfile.
 
 ### Fixed
 
