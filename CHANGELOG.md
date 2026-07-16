@@ -2,11 +2,11 @@
 
 All notable FenPing changes are documented here. This file was reconstructed from the complete Git history, from the initial commit on 2019-02-20 through the `1.6` release on 2026-07-14.
 
-Release dates use the corresponding Git tag dates. The current application and Docker release is version 1.7, while the forward-compatible portable backup contract remains version 1.6. The history contains one merge-only commit with no distinct feature to list separately.
+Release dates use the corresponding Git tag dates. Application and Docker development now target version 1.8, while the forward-compatible portable backup contract remains version 1.6. The history contains one merge-only commit with no distinct feature to list separately.
 
-## [Unreleased]
+## [Unreleased] - 1.8 development
 
-No changes yet.
+Development after the 1.7 tag.
 
 ## [1.7] - 2026-07-16
 

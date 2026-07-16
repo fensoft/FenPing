@@ -2,7 +2,7 @@ name: fenping
 
 services:
   app:
-    image: ${FENPING_IMAGE:-fensoft/fenping}:${FENPING_VERSION:-1.7}
+    image: ${FENPING_IMAGE:-fensoft/fenping}:${FENPING_VERSION:-1.8}
     container_name: fenping
     hostname: fenping
     restart: unless-stopped

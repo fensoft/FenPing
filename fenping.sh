@@ -26,7 +26,7 @@ run_publish() (
   fi
 
   IMAGE=${FENPING_IMAGE:-fensoft/fenping}
-  VERSION=${1:-${FENPING_VERSION:-1.7}}
+  VERSION=${1:-${FENPING_VERSION:-1.8}}
   PLATFORMS=linux/arm64,linux/amd64,linux/arm/v7
   BUILDER=${BUILDX_BUILDER:-fenping-multiarch}
   PUBLISH_LATEST=${PUBLISH_LATEST:-1}

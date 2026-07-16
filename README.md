@@ -105,7 +105,7 @@ Application data is stored in the local SQLite database at `data/database/fenpin
 | `./fenping.sh dev` | Build the current platform as the local `dev` image and deploy it. |
 | `./fenping.sh demo` | Rebuild and restore the synthetic screenshot environment. |
 | `./fenping.sh rollback` | Restore the newest pre-upgrade checkpoint and its recorded image. |
-| `./fenping.sh publish [version]` | Publish the three supported platforms; the version defaults to `FENPING_VERSION` or `1.7`. |
+| `./fenping.sh publish [version]` | Publish the three supported platforms; the version defaults to `FENPING_VERSION` or `1.8`. |
 
 Set `PUBLISH_LATEST=0` when publishing if the shared `latest` tag must remain unchanged.
 
@@ -118,7 +118,7 @@ Important `.env` values:
 | `IP` | FenPing LAN address. |
 | `IFACE` | Required host network interface that dnsmasq binds to for DHCP, DNS, and TFTP, for example `eth0`. |
 | `FENPING_IMAGE` | Docker Hub repository pulled by `./fenping.sh restart`. Defaults to `fensoft/fenping`. |
-| `FENPING_VERSION` | Published image tag pulled by `./fenping.sh restart`. Defaults to `1.7`. |
+| `FENPING_VERSION` | Published image tag pulled by `./fenping.sh restart`. Defaults to `1.8`. |
 | `DOCKER_SOCKET` | Optional host Docker Unix socket. `fenping.sh` auto-detects `/var/run/docker.sock` when this is empty; set another local socket path to override it. |
 | `DATABASE_PATH` | SQLite file inside the container. Defaults to `/var/lib/fenping/database/fenping.sqlite3`. |
 | `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. dnsmasq, reservations, categories, and netboot assignments remain restricted to this network; IPAM displays it alongside every configured extra network. |
@@ -174,7 +174,7 @@ Log in to Docker Hub, then publish the versioned multi-architecture image:
 
 ```bash
 docker login
-./fenping.sh publish 1.7
+./fenping.sh publish 1.8
 ```
 
 The targets are exactly `linux/arm64`, `linux/amd64`, and `linux/arm/v7`. The script automatically runs `tonistiigi/binfmt --install all`, so publishing requires permission to start a privileged Docker container. Set `PUBLISH_LATEST=0` to omit the `latest` tag, or set `FENPING_IMAGE` to publish another Docker Hub repository. The script uses a reusable `fenping-multiarch` Buildx container builder, pushes the version and `latest` manifests, attaches provenance and an SBOM, and inspects the published result.
@@ -427,5 +427,5 @@ docker exec fenping php /opt/fenping/cli.php inventory --work
 The Dockerfile uses an npm cache mount and conservative retry settings. Build and push through the release script so Buildx can reuse its container cache:
 
 ```bash
-./fenping.sh publish 1.7
+./fenping.sh publish 1.8
 ```

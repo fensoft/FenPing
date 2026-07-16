@@ -23,7 +23,7 @@ The runtime is managed by Docker Compose. One host-networked Alpine `fenping` co
 
 The image contains no database server or SQL client process. SQLite is embedded through PDO and persists its database and WAL files on the application bind mount.
 
-Normal runtime deployment never builds locally. `./fenping.sh publish [version]` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.7`.
+Normal runtime deployment never builds locally. `./fenping.sh publish [version]` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.8`.
 
 The other explicit subcommands are `restart`, `start`, `destroy`, `dev`, `demo`, and `rollback`; invoking `fenping.sh` without a subcommand remains an alias for `restart`. Lifecycle modes accept no positional arguments, while `publish` accepts at most one optional version. `start` uses only the configured image already available locally and does not create an upgrade checkpoint. `destroy` removes the Compose container without deleting bind-mounted data or local images.
 
