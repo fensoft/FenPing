@@ -25,9 +25,9 @@ The image contains no database server or SQL client process. SQLite is embedded 
 
 Normal runtime deployment never builds locally. `./fenping.sh publish [version]` automatically installs binfmt emulators, then uses a Docker-container Buildx builder to build and push `linux/arm64`, `linux/amd64`, and `linux/arm/v7` manifests with provenance and SBOM attestations. Compose pulls `FENPING_IMAGE:FENPING_VERSION`; the defaults are `fensoft/fenping:1.8`.
 
-The other explicit subcommands are `restart`, `start`, `destroy`, `dev`, `demo`, and `rollback`; invoking `fenping.sh` without a subcommand remains an alias for `restart`. Lifecycle modes accept no positional arguments, while `publish` accepts at most one optional version. `start` uses only the configured image already available locally and does not create an upgrade checkpoint. `destroy` removes the Compose container without deleting bind-mounted data or local images.
+The other explicit subcommands are `restart`, `start`, `destroy`, `dev`, `demo`, and `rollback`; invoking `fenping.sh` without a subcommand remains an alias for `restart`. Lifecycle modes accept no positional arguments except the dev-only `--no-backup` flag, while `publish` accepts at most one optional version. `start` uses only the configured image already available locally and does not create an upgrade checkpoint. `destroy` removes the Compose container without deleting bind-mounted data or local images.
 
-`./fenping.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev` and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next `./fenping.sh restart` uses the configured published version again.
+`./fenping.sh dev` is the explicit local-development exception. It builds the current checkout for the Docker host platform as `FENPING_IMAGE:dev` and starts Compose with image pulling disabled for that run. The override exists only in the script process, so the next `./fenping.sh restart` uses the configured published version again. Its optional `--no-backup` flag also skips pre-upgrade archive creation, restore verification, rollback tagging, and upgrade journaling; a failed replacement from that invocation has no new rollback checkpoint.
 
 `FenPing\Config\AppConfig` loads the committed environment contract at runtime. Values should come from `.env`/container environment variables; do not hardcode machine-specific secrets.
 
@@ -46,7 +46,7 @@ The container filesystem is disposable. Runtime state lives under `data/`.
 | `data/backups` | `/var/lib/fenping/backups` | backup archives and imported dumps |
 | `data/state` | `/var/lib/fenping/state` | refreshed IEEE vendor registry and optional state files |
 
-Startup does not change the owner or mode of the database directory or SQLite files. Instead, the `www-data` worker adopts the bind mount's numeric owner and group before database initialization.
+Startup repairs a root-owned database bind mount by assigning its real directories and regular files to the image's unprivileged `www-data` identity, using modes `2770` and `0660` respectively. The repair does not follow symlinks or descend into nested mounts. For a mount already owned by a non-root host user, startup preserves non-root entries and modes, repairs only residual root-owned entries to the directory owner, and makes the `www-data` worker adopt that numeric owner and group before database initialization.
 
 The web root contains only the built frontend, static scan stylesheet assets, favicons, and the public API entrypoint. PHP modules, CLI code, templates, schema files, `.env` in development, and all persistent state remain outside the web root. nginx also explicitly denies dotfiles, source/config extensions, and legacy runtime URL paths.
 

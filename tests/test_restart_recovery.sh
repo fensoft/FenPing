@@ -57,4 +57,15 @@ grep -q '^build --pull --build-arg FENPING_VERSION=dev --tag example/fenping:new
 grep -q '^run --rm --env-file .env .* php /opt/fenping/cli.php backup ' "$EVENTS"
 ! grep -q '^exec fenping php /opt/fenping/cli.php backup ' "$EVENTS"
 
+: > "$EVENTS"
+CONTAINER_RUNNING=true
+JOURNAL_COUNT=$(find data/state/upgrades -name '*.json' -type f | wc -l)
+run_restart "dev" true
+
+grep -q '^build --pull --build-arg FENPING_VERSION=dev --tag example/fenping:new \.$' "$EVENTS"
+! grep -q '^image tag sha256:old fenping-rollback:' "$EVENTS"
+! grep -q 'php /opt/fenping/cli.php backup ' "$EVENTS"
+! grep -q 'backup-verify ' "$EVENTS"
+test "$(find data/state/upgrades -name '*.json' -type f | wc -l)" -eq "$JOURNAL_COUNT"
+
 echo "restart recovery shell tests passed"

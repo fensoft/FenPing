@@ -7,7 +7,7 @@ usage() {
     "  $0 [restart]" \
     "  $0 start" \
     "  $0 destroy" \
-    "  $0 dev" \
+    "  $0 dev [--no-backup]" \
     "  $0 demo" \
     "  $0 restore <backup.tgz>" \
     "  $0 rollback" \
@@ -96,7 +96,18 @@ case "$COMMAND" in
     ACTION="restart"
     MODE=""
     ;;
-  dev|demo|rollback)
+  dev)
+    if [ "$#" -eq 0 ]; then
+      SKIP_BACKUP=false
+    elif [ "$#" -eq 1 ] && [ "$1" = "--no-backup" ]; then
+      SKIP_BACKUP=true
+    else
+      usage_error
+    fi
+    ACTION="restart"
+    MODE="$COMMAND"
+    ;;
+  demo|rollback)
     [ "$#" -eq 0 ] || usage_error
     ACTION="restart"
     MODE="$COMMAND"
@@ -253,5 +264,5 @@ if [ "$ACTION" = "start" ]; then
   echo "FenPing started from the configured local image"
 else
   source "$(dirname "$0")/tools/restart-recovery.sh"
-  run_restart "$MODE"
+  run_restart "$MODE" "${SKIP_BACKUP:-false}"
 fi

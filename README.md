@@ -102,7 +102,7 @@ Application data is stored in the local SQLite database at `data/database/fenpin
 | `./fenping.sh` or `./fenping.sh restart` | Pull and deploy the configured published image. |
 | `./fenping.sh start` | Start or recreate FenPing from the configured image already present locally, without pulling or creating an upgrade backup. |
 | `./fenping.sh destroy` | Remove the FenPing Compose container while preserving persistent data and local images. |
-| `./fenping.sh dev` | Build the current platform as the local `dev` image and deploy it. |
+| `./fenping.sh dev [--no-backup]` | Build the current platform as the local `dev` image and deploy it. `--no-backup` skips the pre-upgrade backup, restore verification, and rollback checkpoint. |
 | `./fenping.sh demo` | Rebuild and restore the synthetic screenshot environment. |
 | `./fenping.sh rollback` | Restore the newest pre-upgrade checkpoint and its recorded image. |
 | `./fenping.sh publish [version]` | Publish the three supported platforms; the version defaults to `FENPING_VERSION` or `1.8`. |
@@ -202,7 +202,7 @@ Do not delete `data/` casually. It is the appliance state.
 | `data/backups` | `/var/lib/fenping/backups` | Backup archives and imported dumps. |
 | `data/state` | `/var/lib/fenping/state` | Refreshed IEEE vendor registry and optional state/health files. |
 
-FenPing preserves the existing owner and mode of `data/database` and its SQLite files. The container maps its unprivileged application worker to the directory's numeric owner and group, so the user that creates `data/database` must be able to write it.
+When Docker or a root-run launcher creates `data/database` as root, startup assigns that mount to the image's unprivileged `www-data` worker and restricts directories to mode `2770` and files to `0660`. Existing database contents are not rewritten, and symlinks and nested mounts are not traversed. A database mount already owned by a non-root host user keeps its non-root entries and modes; any residual root-owned entries are repaired to that host identity, and the container maps its application worker to the same numeric owner and group.
 
 nginx serves only `/var/www/public`, which contains the built frontend and the small API entrypoint. PHP application code lives in `/opt/fenping`; runtime files under `/var/lib/fenping` are not directly web-accessible. nginx explicitly rejects dotfiles, private extensions, and legacy runtime paths, while netboot files can only be downloaded through the validated API route.
 
@@ -276,6 +276,8 @@ The versioned `demo/` source contains a synthetic network with inventory, IPAM, 
 The generated archive is `data/backups/fenping-demo.tgz`. Before restoring it, the command creates a timestamped `data/backups/fenping-before-demo-*.tgz` containing the current database and netboot files. Demo timestamps shift to the restore time so recent activity remains suitable for screenshots.
 
 Normal, development, and demo restarts create a pre-upgrade archive while the old container is still running. The archive is checksum-validated and fully restored into temporary database and netboot paths with the exact target image before the old container is stopped. The previous image ID, repository digest, local rollback tag, archive checksum, and outcome are journaled under data/state/upgrades.
+
+For a faster disposable development cycle, `./fenping.sh dev --no-backup` skips the archive, restore verification, rollback image tag, and upgrade journal. If that replacement fails, `./fenping.sh rollback` cannot restore the skipped development restart.
 
 If the replacement fails its health check, it remains available for inspection. Run `./fenping.sh rollback` to restore the newest checkpoint. Rollback first creates and verifies a rescue archive of the post-upgrade state, then restores the pre-upgrade archive with the recorded previous image. The configured image in `.env` is not changed.
 

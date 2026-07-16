@@ -15,11 +15,32 @@ export FENPING_DATA_DIR DATABASE_PATH
 DATABASE_DIR=$(dirname "$DATABASE_PATH")
 mkdir -p "$DATABASE_DIR" /var/lib/fenping/netboot /var/lib/fenping/backups /var/lib/fenping/state /etc/dnsmasq.d /var/lib/misc
 
-# Keep the bind-mounted SQLite directory and file under the host user's existing
-# ownership and mode. Match the unprivileged application worker to that numeric
-# owner instead of changing permissions on live database storage.
+DEFAULT_DATABASE_UID=$(id -u www-data)
+DEFAULT_DATABASE_GID=$(id -g www-data)
 DATABASE_UID=$(stat -c '%u' "$DATABASE_DIR")
 DATABASE_GID=$(stat -c '%g' "$DATABASE_DIR")
+
+# Docker creates missing bind-mount sources as root. Repair that case to the
+# image's unprivileged worker identity without following symlinks or descending
+# into nested mounts. Existing non-root host ownership remains untouched.
+if [ "$DATABASE_UID" -eq 0 ]; then
+  echo "database directory is root-owned; assigning it to the application worker"
+  chown "$DEFAULT_DATABASE_UID:$DEFAULT_DATABASE_GID" "$DATABASE_DIR"
+  find "$DATABASE_DIR" -xdev -mindepth 1 \
+    \( -type d -exec mountpoint -q {} \; -prune \) -o \
+    \( -type d -exec chown "$DEFAULT_DATABASE_UID:$DEFAULT_DATABASE_GID" {} \; \) -o \
+    \( -type f -exec chown "$DEFAULT_DATABASE_UID:$DEFAULT_DATABASE_GID" {} \; \)
+  su www-data -s /bin/sh -c 'chmod 2770 "$1"' sh "$DATABASE_DIR"
+  find "$DATABASE_DIR" -xdev -mindepth 1 \
+    \( -type d -exec mountpoint -q {} \; -prune \) -o \
+    \( -type d -exec su www-data -s /bin/sh -c 'chmod 2770 "$1"' sh {} \; \) -o \
+    \( -type f -exec chmod 0660 {} \; \)
+  DATABASE_UID=$DEFAULT_DATABASE_UID
+  DATABASE_GID=$DEFAULT_DATABASE_GID
+fi
+
+# For a mount deliberately owned by a non-root host user, match the
+# unprivileged application worker to that numeric owner instead.
 if [ "$DATABASE_UID" -ne 0 ] && [ "$DATABASE_UID" -ne "$(id -u www-data)" ]; then
   sed -i "s/^www-data:\([^:]*\):[^:]*:/www-data:\1:$DATABASE_UID:/" /etc/passwd
 fi
@@ -27,6 +48,15 @@ if [ "$DATABASE_GID" -ne 0 ] && [ "$DATABASE_GID" -ne "$(id -g www-data)" ]; the
   sed -i "s/^\(www-data:[^:]*:[^:]*:\)[^:]*/\1$DATABASE_GID/" /etc/passwd
   sed -i "s/^\(www-data:[^:]*:\)[^:]*/\1$DATABASE_GID/" /etc/group
 fi
+
+# Complete a previously interrupted repair without taking ownership away from
+# a non-root host user. Apply directory modes as the final owner because the
+# intentionally reduced root capability set excludes CAP_FSETID.
+find "$DATABASE_DIR" -xdev -mindepth 1 \
+  \( -type d -exec mountpoint -q {} \; -prune \) -o \
+  \( -type d -user 0 -exec chown "$DATABASE_UID:$DATABASE_GID" {} \; \
+    -exec su www-data -s /bin/sh -c 'chmod 2770 "$1"' sh {} \; \) -o \
+  \( -type f -user 0 -exec chown "$DATABASE_UID:$DATABASE_GID" {} \; -exec chmod 0660 {} \; \)
 
 chown www-data:www-data /var/lib/fenping/netboot
 chgrp www-data /var/lib/fenping/backups

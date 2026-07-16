@@ -208,7 +208,7 @@ rollback_upgrade() {
 }
 
 run_restart() {
-  local mode="$1"
+  local mode="$1" skip_checkpoint="${2:-false}"
   if [ "$mode" = "rollback" ]; then
     rollback_upgrade
     return
@@ -229,10 +229,12 @@ run_restart() {
       echo "existing FenPing container is stopped; dev build will replace it without reviving obsolete code"
     fi
     previous_id=$(docker inspect fenping --format '{{.Image}}')
-    previous_ref=$(docker inspect fenping --format '{{.Config.Image}}')
-    previous_digest=$(repo_digest "$previous_id")
-    previous_tag="fenping-rollback:$id"
-    docker image tag "$previous_id" "$previous_tag"
+    if [ "$skip_checkpoint" != "true" ]; then
+      previous_ref=$(docker inspect fenping --format '{{.Config.Image}}')
+      previous_digest=$(repo_digest "$previous_id")
+      previous_tag="fenping-rollback:$id"
+      docker image tag "$previous_id" "$previous_tag"
+    fi
   fi
 
   if [ "$mode" = "dev" ]; then export FENPING_VERSION=dev; fi
@@ -251,7 +253,7 @@ run_restart() {
   target_tag="fenping-upgrade:$id"
   docker image tag "$target_id" "$target_tag"
 
-  if [ -n "$previous_id" ]; then
+  if [ -n "$previous_id" ] && [ "$skip_checkpoint" != "true" ]; then
     archive="fenping-pre-upgrade-$(date -u +%Y%m%d-%H%M%S).tgz"
     if [ "$previous_running" = "true" ]; then
       docker exec fenping php /opt/fenping/cli.php backup "/var/lib/fenping/backups/$archive"
@@ -263,6 +265,8 @@ run_restart() {
     [ -n "$checksum" ] || { echo "failed to record the verified backup checksum" >&2; return 1; }
     journal="$UPGRADE_STATE_DIR/$id.json"
     write_journal "$journal" "$id" "$archive" "$checksum" "$previous_id" "$previous_digest" "$previous_ref" "$previous_tag" "$target_id" "$target_digest" "$target_ref" "$target_tag"
+  elif [ -n "$previous_id" ]; then
+    echo "warning: replacing FenPing without a backup or rollback checkpoint"
   fi
 
   if docker inspect fenping >/dev/null 2>&1; then
@@ -276,12 +280,18 @@ run_restart() {
   docker compose up -d --remove-orphans --pull never
   docker compose ps
   if ! wait_for_fenping; then
-    [ -n "$journal" ] && update_journal_status "$journal" failed-health
-    echo "upgrade failed health checks; run ./fenping.sh rollback to restore the previous checkpoint" >&2
+    if [ -n "$journal" ]; then
+      update_journal_status "$journal" failed-health
+      echo "upgrade failed health checks; run ./fenping.sh rollback to restore the previous checkpoint" >&2
+    else
+      echo "development restart failed health checks; no rollback checkpoint was created" >&2
+    fi
     return 1
   fi
-  [ -n "$journal" ] && update_journal_status "$journal" active
-  prune_upgrade_checkpoints
+  if [ -n "$journal" ]; then
+    update_journal_status "$journal" active
+    prune_upgrade_checkpoints
+  fi
 
   if [ "$mode" = "demo" ]; then
     docker exec fenping sh -c 'install -m 0600 /dev/null /etc/crontabs/root'
