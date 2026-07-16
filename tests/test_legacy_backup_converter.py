@@ -44,6 +44,17 @@ CREATE TABLE `range` (
   `type` varchar(50) DEFAULT NULL
 );
 INSERT INTO `range` VALUES ('192.168.1.1','r&eacute;seau &amp; serveurs'),('15','gates &#47; doors');
+CREATE TABLE `ping` (
+  `ip` varchar(50) NOT NULL,
+  `mac` varchar(50) DEFAULT NULL,
+  `status` varchar(50) DEFAULT NULL,
+  `date` datetime NOT NULL
+);
+INSERT INTO `ping` VALUES
+('192.168.1.1','00:11:22:33:44:55','Up','2026-01-01 02:00:00'),
+('192.168.1.20','AA:BB:CC:DD:EE:FF','Up','2026-01-01 02:00:00'),
+('192.168.1.30','02-00-00-00-00-30','Down','2026-01-01 02:00:00'),
+('192.168.1.31','invalid','Down','2026-01-01 02:00:00');
 CREATE TABLE `stats` (
   `id` int NOT NULL,
   `ip` varchar(50) DEFAULT NULL,
@@ -145,6 +156,15 @@ def main() -> None:
             "2026-01-01 02:00:00",
             1,
         ]]
+        approvals = database["tables"]["device_approvals"]
+        assert approvals["columns"] == ["mac", "approved_at"]
+        assert [row[0] for row in approvals["rows"]] == [
+            "02:00:00:00:00:30",
+            "aa:bb:cc:dd:ee:ff",
+        ]
+        assert len({row[1] for row in approvals["rows"]}) == 1
+        assert approvals["rows"][0][1]
+        assert all(row[0] != "00:11:22:33:44:55" for row in approvals["rows"])
         assert database["tables"]["scan_snapshots"]["rows"][0][1:3] == [
             "192.168.1.20",
             "deep",

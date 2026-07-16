@@ -12,6 +12,8 @@ Conversion limits and intentional transformations:
   leading zeroes are normalized (for example, ``.077`` becomes ``.77``).
 * Legacy leases are normalized and rows sharing the same (MAC, IP) are merged.
   The removed ``tstp`` and ``vendor-class-identifier`` columns are not retained.
+* Valid MAC addresses observed in legacy leases or ping state are imported as
+  approved dynamic devices, except for hosts already reserved in ``ips``.
 * Category rows are retained, but short boundaries such as ``15`` are expanded
   onto the source dump's dominant IPv4 /24. Legacy HTML entities in category
   names are decoded exactly once.
@@ -22,8 +24,9 @@ Conversion limits and intentional transformations:
   named ``IP.xml``; every usable result is imported as a deep scan.
 * The legacy backups have no netboot file payload, so the generated archive
   contains an empty netboot directory and no netboot image records.
-* Tables and fields introduced after FenPing 1.2 have no source data.  Restore
-  leaves them empty or uses current schema defaults (including host scan fields).
+* Other tables and fields introduced after FenPing 1.2 have no source data.
+  Restore leaves them empty or uses current schema defaults (including host
+  scan fields).
 * Malformed UTF-8 input bytes are replaced with the Unicode replacement
   character so that db.json remains valid UTF-8.
 """
@@ -114,7 +117,14 @@ SCAN_TABLE_COLUMNS = {
         "hostname", "rtt",
     ],
 }
-EXPORT_TABLES = SUPPORTED_TABLES + tuple(SCAN_TABLE_COLUMNS)
+DERIVED_TABLE_COLUMNS = {
+    "device_approvals": ["mac", "approved_at"],
+}
+EXPORT_TABLES = (
+    SUPPORTED_TABLES
+    + tuple(DERIVED_TABLE_COLUMNS)
+    + tuple(SCAN_TABLE_COLUMNS)
+)
 MAX_NMAP_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_NMAP_ARCHIVE_BYTES = 1024 * 1024 * 1024
 CREATE_TABLE_RE = re.compile(r"^CREATE TABLE\s+`([^`]+)`\s*\(")
@@ -376,6 +386,11 @@ def valid_lease_ip(value: str) -> bool:
         return False
 
 
+def normalized_mac(value: object) -> str | None:
+    mac = str(value or "").strip().lower().replace("-", ":")
+    return mac if MAC_RE.fullmatch(mac) else None
+
+
 def normalize_legacy_dns(value: object) -> tuple[str | None, int]:
     if value is None:
         return None, 0
@@ -443,12 +458,12 @@ def merge_lease(
     columns: list[str],
     row: list[object],
     fallback_time: str,
-) -> bool:
+) -> str | None:
     values = dict(zip(columns, row))
     ip = str(values.get("ip") or "").strip()
-    mac = str(values.get("hardware-ethernet") or "").strip().lower()
-    if not valid_lease_ip(ip) or not MAC_RE.fullmatch(mac):
-        return False
+    mac = normalized_mac(values.get("hardware-ethernet"))
+    if not valid_lease_ip(ip) or mac is None:
+        return None
 
     hostname_value = values.get("client-hostname")
     hostname = str(hostname_value).strip() if hostname_value is not None else ""
@@ -465,7 +480,7 @@ def merge_lease(
         existing[3] = max(str(existing[3]), ends)
         existing[4] = min(str(existing[4]), first_seen)
         existing[5] = max(str(existing[5]), last_seen)
-    return True
+    return mac
 
 
 def write_spool(stream: TextIO, row: list[object]) -> None:
@@ -986,10 +1001,12 @@ def parse_data(
     leases: dict[tuple[str, str], list[object]] = {}
     ranges: list[list[object]] = []
     host_networks: Counter[str] = Counter()
+    managed_macs: set[str] = set()
+    observed_macs: set[str] = set()
     streams = {
         table: path.open("wt", encoding="utf-8", newline="\n")
         for table, path in spool_paths.items()
-        if table not in ("leases", "range")
+        if table not in ("leases", "range", "device_approvals")
     }
 
     try:
@@ -1034,10 +1051,13 @@ def parse_data(
                             f"expected {len(insert_columns)}"
                         )
                     if table == "leases":
-                        if not merge_lease(leases, insert_columns, row, fallback_time):
+                        mac = merge_lease(leases, insert_columns, row, fallback_time)
+                        if mac is None:
                             skipped_counts["invalid leases"] = (
                                 skipped_counts.get("invalid leases", 0) + 1
                             )
+                        else:
+                            observed_macs.add(mac)
                     elif table == "range":
                         ranges.append(row)
                     else:
@@ -1045,6 +1065,14 @@ def parse_data(
                             network = ipv4_network(row[insert_columns.index("ip")])
                             if network is not None:
                                 host_networks[network] += 1
+                        if table == "ips" and "mac" in insert_columns:
+                            mac = normalized_mac(row[insert_columns.index("mac")])
+                            if mac is not None:
+                                managed_macs.add(mac)
+                        if table == "ping" and "mac" in insert_columns:
+                            mac = normalized_mac(row[insert_columns.index("mac")])
+                            if mac is not None:
+                                observed_macs.add(mac)
                         if table == "ips" and "dns" in insert_columns:
                             dns_index = insert_columns.index("dns")
                             row[dns_index], invalid_dns = normalize_legacy_dns(row[dns_index])
@@ -1079,6 +1107,17 @@ def parse_data(
             for row in ranges:
                 write_spool(stream, row)
                 row_counts["range"] += 1
+
+    export_columns["device_approvals"] = list(
+        DERIVED_TABLE_COLUMNS["device_approvals"]
+    )
+    approval_macs = sorted(observed_macs - managed_macs)
+    row_counts["device_approvals"] = len(approval_macs)
+    with spool_paths["device_approvals"].open(
+        "wt", encoding="utf-8", newline="\n"
+    ) as stream:
+        for mac in approval_macs:
+            write_spool(stream, [mac, fallback_time])
 
     return export_columns, row_counts, skipped_counts
 
@@ -1233,6 +1272,9 @@ def convert(
             for table in SUPPORTED_TABLES
             if table in schemas
         }
+        spool_paths.update({
+            table: stage / f"{table}.rows" for table in DERIVED_TABLE_COLUMNS
+        })
         spool_paths.update({
             table: stage / f"{table}.rows" for table in SCAN_TABLE_COLUMNS
         })
