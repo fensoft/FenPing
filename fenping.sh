@@ -8,6 +8,7 @@ usage() {
     "  $0 start" \
     "  $0 destroy" \
     "  $0 dev [--no-backup]" \
+    "  $0 dev restore <backup.tgz>" \
     "  $0 demo" \
     "  $0 restore <backup.tgz>" \
     "  $0 rollback" \
@@ -97,15 +98,21 @@ case "$COMMAND" in
     MODE=""
     ;;
   dev)
-    if [ "$#" -eq 0 ]; then
-      SKIP_BACKUP=false
-    elif [ "$#" -eq 1 ] && [ "$1" = "--no-backup" ]; then
-      SKIP_BACKUP=true
+    if [ "$#" -eq 2 ] && [ "$1" = "restore" ]; then
+      ACTION="restore"
+      MODE="$COMMAND"
+      RESTORE_BACKUP="$2"
     else
-      usage_error
+      if [ "$#" -eq 0 ]; then
+        SKIP_BACKUP=false
+      elif [ "$#" -eq 1 ] && [ "$1" = "--no-backup" ]; then
+        SKIP_BACKUP=true
+      else
+        usage_error
+      fi
+      ACTION="restart"
+      MODE="$COMMAND"
     fi
-    ACTION="restart"
-    MODE="$COMMAND"
     ;;
   demo|rollback)
     [ "$#" -eq 0 ] || usage_error
@@ -142,8 +149,12 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-if [ "$ACTION" = "destroy" ]; then
+destroy_fenping() {
   docker compose down --remove-orphans
+}
+
+if [ "$ACTION" = "destroy" ]; then
+  destroy_fenping
   echo "FenPing container removed; persistent data and images were preserved"
   exit 0
 fi
@@ -195,16 +206,17 @@ restore_backup_name() {
 
 run_restore() {
   local backup="$1" archive="/var/lib/fenping/backups/$1"
-  if [ "$(docker inspect fenping --format '{{.State.Running}}' 2>/dev/null || true)" = "true" ]; then
-    docker exec fenping php /opt/fenping/cli.php restore "$archive"
-  else
-    docker compose run --rm --no-deps --pull never --name "fenping-restore-$$" app \
-      php /opt/fenping/cli.php restore "$archive"
-  fi
+  docker compose run --rm --no-deps --pull never --name "fenping-restore-$$" app \
+    php /opt/fenping/cli.php restore "$archive"
 }
 
 if [ "$ACTION" = "restore" ]; then
   backup=$(restore_backup_name "$RESTORE_BACKUP")
+  if [ "$MODE" = "dev" ]; then
+    source "$(dirname "$0")/tools/restart-recovery.sh"
+    build_dev_image
+  fi
+  destroy_fenping
   run_restore "$backup"
   echo "FenPing restored from data/backups/$backup"
   exit 0

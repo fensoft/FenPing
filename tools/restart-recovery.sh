@@ -28,6 +28,15 @@ resolved_compose_image() {
   '
 }
 
+build_dev_image() {
+  export FENPING_VERSION=dev
+  docker compose config --quiet
+  DEV_IMAGE_REF=$(resolved_compose_image)
+  [ -n "$DEV_IMAGE_REF" ] || { echo "could not resolve the app image from docker-compose.yml" >&2; return 1; }
+  echo "building $DEV_IMAGE_REF for the current platform"
+  docker build --pull --build-arg FENPING_VERSION=dev --tag "$DEV_IMAGE_REF" .
+}
+
 run_image_cli() {
   local image="$1"
   shift
@@ -237,14 +246,11 @@ run_restart() {
     fi
   fi
 
-  if [ "$mode" = "dev" ]; then export FENPING_VERSION=dev; fi
-  docker compose config --quiet
   if [ "$mode" = "dev" ]; then
-    target_ref=$(resolved_compose_image)
-    [ -n "$target_ref" ] || { echo "could not resolve the app image from docker-compose.yml" >&2; return 1; }
-    echo "building $target_ref for the current platform"
-    docker build --pull --build-arg FENPING_VERSION=dev --tag "$target_ref" .
+    build_dev_image
+    target_ref="$DEV_IMAGE_REF"
   else
+    docker compose config --quiet
     docker compose pull app
     target_ref=$(resolved_compose_image)
   fi

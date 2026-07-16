@@ -102,7 +102,9 @@ Application data is stored in the local SQLite database at `data/database/fenpin
 | `./fenping.sh` or `./fenping.sh restart` | Pull and deploy the configured published image. |
 | `./fenping.sh start` | Start or recreate FenPing from the configured image already present locally, without pulling or creating an upgrade backup. |
 | `./fenping.sh destroy` | Remove the FenPing Compose container while preserving persistent data and local images. |
+| `./fenping.sh restore data/backups/<backup.tgz>` | Validate the archive path, remove the running FenPing container, and restore through a fresh one-off container. Persistent data remains restored but stopped afterward. |
 | `./fenping.sh dev [--no-backup]` | Build the current platform as the local `dev` image and deploy it. `--no-backup` skips the pre-upgrade backup, restore verification, and rollback checkpoint. |
+| `./fenping.sh dev restore data/backups/<backup.tgz>` | Build the current checkout as the local `dev` image, remove the running container, and restore with that image. |
 | `./fenping.sh demo` | Rebuild and restore the synthetic screenshot environment. |
 | `./fenping.sh rollback` | Restore the newest pre-upgrade checkpoint and its recorded image. |
 | `./fenping.sh publish [version]` | Publish the three supported platforms; the version defaults to `FENPING_VERSION` or `1.8`. |
