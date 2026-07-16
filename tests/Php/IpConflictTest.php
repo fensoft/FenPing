@@ -7,6 +7,8 @@ namespace FenPing\Tests;
 use DateTimeImmutable;
 use FenPing\Api\Request;
 use FenPing\Ipam\IpConflictDetector;
+use FenPing\Network\Ipv4Network;
+use FenPing\Network\RouteDetector;
 use FenPing\Process\ProcessResult;
 use FenPing\Process\ProcessRunner;
 use FenPing\Support\Clock;
@@ -101,6 +103,7 @@ final class IpConflictTest extends IntegrationTestCase
         $detector = new IpConflictDetector(
             $this->app()->config(),
             new StubProcessRunner(new ProcessResult(2, '', 'capture failed')),
+            new RouteDetector(new StubProcessRunner(new ProcessResult(2, '', 'route lookup failed'))),
             $repository,
             new FixedClock(new DateTimeImmutable('2026-07-13 11:15:00 UTC')),
         );
@@ -115,6 +118,57 @@ final class IpConflictTest extends IntegrationTestCase
         self::assertSame(
             'degraded', $this->app()->health()->status()['ip_conflict_detection']['status'],
         );
+    }
+
+    public function testScanUsesTheDirectRouteInterfaceForDockerNetworks(): void
+    {
+        $network = Ipv4Network::from24('172.17.0.0/24', 'test network');
+        $processes = new RouteAwareConflictProcessRunner(new ProcessResult(0, implode("\n", [
+            '172.17.0.20 02:00:00:00:00:20',
+            '172.17.0.20 02:00:00:00:00:21',
+        ]), ''));
+        $detector = new IpConflictDetector(
+            $this->app()->config(),
+            $processes,
+            new RouteDetector($processes),
+            $this->app()->ipConflicts(),
+            new FixedClock(new DateTimeImmutable('2026-07-13 11:15:00 UTC')),
+        );
+
+        $result = $detector->scan($network);
+
+        self::assertTrue($result['successful']);
+        self::assertSame([
+            ['ip', '-4', 'route', 'show'],
+            [
+                '/usr/bin/arp-scan',
+                '--interface=docker0',
+                '--quiet',
+                '--plain',
+                '--retry=2',
+                '172.17.0.1-172.17.0.254',
+            ],
+        ], $processes->commands);
+        self::assertSame('172.17.0.20', $this->app()->ipConflicts()->active($network->cidr)[0]['ip']);
+    }
+
+    public function testScanRejectsNetworksReachedThroughAGateway(): void
+    {
+        $network = Ipv4Network::from24('198.51.100.0/24', 'test network');
+        $processes = new RoutedConflictProcessRunner();
+        $detector = new IpConflictDetector(
+            $this->app()->config(),
+            $processes,
+            new RouteDetector($processes),
+            $this->app()->ipConflicts(),
+            new FixedClock(new DateTimeImmutable('2026-07-13 11:15:00 UTC')),
+        );
+
+        $result = $detector->scan($network);
+
+        self::assertFalse($result['successful']);
+        self::assertSame('IP conflict detection requires a directly connected network: 198.51.100.0/24', $result['error']);
+        self::assertSame([['ip', '-4', 'route', 'show']], $processes->commands);
     }
 
     public function testApiNotificationsDiscordAndBackupsExposeConflictData(): void
@@ -206,5 +260,32 @@ final readonly class StubProcessRunner implements ProcessRunner
     public function run(array $command, array $environment = [], ?string $stdinFile = null, ?string $stdoutFile = null): ProcessResult
     {
         return $this->result;
+    }
+}
+
+final class RouteAwareConflictProcessRunner implements ProcessRunner
+{
+    public array $commands = [];
+
+    public function __construct(private readonly ProcessResult $scanResult) {}
+
+    public function run(array $command, array $environment = [], ?string $stdinFile = null, ?string $stdoutFile = null): ProcessResult
+    {
+        $this->commands[] = $command;
+        if ($command === ['ip', '-4', 'route', 'show']) {
+            return new ProcessResult(0, "172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1\n", '');
+        }
+        return $this->scanResult;
+    }
+}
+
+final class RoutedConflictProcessRunner implements ProcessRunner
+{
+    public array $commands = [];
+
+    public function run(array $command, array $environment = [], ?string $stdinFile = null, ?string $stdoutFile = null): ProcessResult
+    {
+        $this->commands[] = $command;
+        return new ProcessResult(0, "198.51.100.0/24 via 192.0.2.1 dev eth0 src 192.0.2.100\n", '');
     }
 }

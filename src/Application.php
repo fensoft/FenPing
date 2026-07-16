@@ -191,7 +191,8 @@ final class Application
         $this->auth = new AuthService($config);
         $this->ipConflicts = new IpConflictRepository($this->database, $this->liveUpdates);
         $this->processes = new NativeProcessRunner();
-        $this->networks = new NetworkManager($config, new RouteDetector($this->processes));
+        $routes = new RouteDetector($this->processes);
+        $this->networks = new NetworkManager($config, $routes);
         $dockerSocket = getenv('DOCKER_SOCKET');
         $dockerSource = new DockerEngineClient(
             $this->processes,
@@ -206,7 +207,7 @@ final class Application
             liveUpdates: $this->liveUpdates,
         );
         $this->dockerNetworkWatcher = new DockerNetworkWatcher($dockerSource, $this->dockerNetworkRefresh);
-        $this->ipConflictDetector = new IpConflictDetector($config, $this->processes, $this->ipConflicts, $clock);
+        $this->ipConflictDetector = new IpConflictDetector($config, $this->processes, $routes, $this->ipConflicts, $clock);
         $this->operations = new OperationTracker($this->database, $clock, $this->liveUpdates);
         $this->hostValidator = new HostValidator($this->networks);
         $dnsmasq = new DnsmasqManager($this->hostValidator);

@@ -6,6 +6,7 @@ namespace FenPing\Ipam;
 
 use FenPing\Config\AppConfig;
 use FenPing\Network\Ipv4Network;
+use FenPing\Network\RouteDetector;
 use FenPing\Process\ProcessRunner;
 use FenPing\Support\Clock;
 use Throwable;
@@ -15,6 +16,7 @@ final readonly class IpConflictDetector implements IpConflictScanner
     public function __construct(
         private AppConfig $config,
         private ProcessRunner $processes,
+        private RouteDetector $routes,
         private IpConflictRepository $repository,
         private Clock $clock,
     ) {}
@@ -22,11 +24,16 @@ final readonly class IpConflictDetector implements IpConflictScanner
     public function scan(Ipv4Network $network): array
     {
         $attemptedAt = $this->clock->now();
+        $route = $this->scanRoute($network);
+        if ($route['error'] !== null) {
+            $this->repository->recordFailure($network, $attemptedAt, $route['error']);
+            return ['successful' => false, 'transitions' => [], 'error' => $route['error']];
+        }
         $target = $network->host(1) . '-' . $network->host(254);
         try {
             $result = $this->processes->run([
                 '/usr/bin/arp-scan',
-                '--interface=' . $this->config->interface,
+                '--interface=' . $route['interface'],
                 '--quiet',
                 '--plain',
                 '--retry=2',
@@ -40,8 +47,8 @@ final readonly class IpConflictDetector implements IpConflictScanner
             $conflicts = $this->parse(
                 $result->stdout,
                 $network,
-                $this->config->applianceIp,
-                $this->localMac($this->config->interface),
+                $route['source'],
+                $this->localMac($route['interface']),
             );
             return [
                 'successful' => true,
@@ -52,6 +59,50 @@ final readonly class IpConflictDetector implements IpConflictScanner
             $this->repository->recordFailure($network, $attemptedAt, $error->getMessage());
             return ['successful' => false, 'transitions' => [], 'error' => $error->getMessage()];
         }
+    }
+
+    /** @return array{interface: string, source: string, error: ?string} */
+    private function scanRoute(Ipv4Network $network): array
+    {
+        $inspection = $this->routes->inspect();
+        if ($inspection['status'] !== 'ok') {
+            return [
+                'interface' => $this->config->interface,
+                'source' => $this->config->applianceIp,
+                'error' => null,
+            ];
+        }
+
+        $route = RouteDetector::coveringRoute($inspection['routes'], $network);
+        if ($route === null) {
+            return [
+                'interface' => '',
+                'source' => '',
+                'error' => "No route covers {$network->cidr}",
+            ];
+        }
+        if ($route['gateway'] !== null) {
+            return [
+                'interface' => '',
+                'source' => '',
+                'error' => "IP conflict detection requires a directly connected network: {$network->cidr}",
+            ];
+        }
+
+        $interface = trim((string) ($route['interface'] ?? ''));
+        if ($interface === '') {
+            return [
+                'interface' => '',
+                'source' => '',
+                'error' => "Route for {$network->cidr} has no interface",
+            ];
+        }
+        $source = trim((string) ($route['source'] ?? ''));
+        return [
+            'interface' => $interface,
+            'source' => $source !== '' ? $source : $this->config->applianceIp,
+            'error' => null,
+        ];
     }
 
     public function parse(string $output, Ipv4Network $network, string $localIp = '', string $localMac = ''): array
