@@ -9,6 +9,7 @@ usage() {
     "  $0 destroy" \
     "  $0 dev" \
     "  $0 demo" \
+    "  $0 restore <backup.tgz>" \
     "  $0 rollback" \
     "  $0 publish [version]"
 }
@@ -105,6 +106,12 @@ case "$COMMAND" in
     ACTION="$COMMAND"
     MODE=""
     ;;
+  restore)
+    [ "$#" -eq 1 ] || usage_error
+    ACTION="restore"
+    MODE=""
+    RESTORE_BACKUP="$1"
+    ;;
   publish)
     run_publish "$@"
     exit 0
@@ -152,6 +159,45 @@ resolve_docker_socket
 for dir in database dnsmasq dnsmasq.d netboot backups state; do
   mkdir -p "$(pwd)/data/$dir"
 done
+
+restore_backup_name() {
+  local backup="$1" root
+  root="$(pwd)"
+  backup="${backup#./}"
+  backup="${backup#"$root"/}"
+  backup="${backup#data/backups/}"
+  backup="${backup#/var/lib/fenping/backups/}"
+  if [ -z "$backup" ] || [ "$backup" != "$(basename "$backup")" ]; then
+    echo "restore backup must be a file in data/backups" >&2
+    exit 2
+  fi
+  case "$backup" in
+    *.tgz|*.tar.gz) ;;
+    *) echo "restore backup must end with .tgz or .tar.gz" >&2; exit 2 ;;
+  esac
+  if [ ! -f "data/backups/$backup" ]; then
+    echo "backup not found: data/backups/$backup" >&2
+    exit 1
+  fi
+  printf '%s\n' "$backup"
+}
+
+run_restore() {
+  local backup="$1" archive="/var/lib/fenping/backups/$1"
+  if [ "$(docker inspect fenping --format '{{.State.Running}}' 2>/dev/null || true)" = "true" ]; then
+    docker exec fenping php /opt/fenping/cli.php restore "$archive"
+  else
+    docker compose run --rm --no-deps --pull never --name "fenping-restore-$$" app \
+      php /opt/fenping/cli.php restore "$archive"
+  fi
+}
+
+if [ "$ACTION" = "restore" ]; then
+  backup=$(restore_backup_name "$RESTORE_BACKUP")
+  run_restore "$backup"
+  echo "FenPing restored from data/backups/$backup"
+  exit 0
+fi
 
 DEMO_TMP=""
 cleanup() {
