@@ -28,11 +28,25 @@ final readonly class StatusHistoryService
 
     public function statsMap(): array
     {
-        $statement = $this->database->connection()->query("SELECT DISTINCT ip FROM stats WHERE ip IS NOT NULL AND ip<>'' AND date_end > datetime('now', '-7 days')");
+        $statement = $this->database->connection()->query("
+            SELECT
+              *,
+              unixepoch(date_begin) AS `begin`,
+              unixepoch(date_end) AS `end`,
+              unixepoch(date_end)-unixepoch(date_begin) AS duration
+            FROM stats INDEXED BY stats_date_end
+            WHERE ip IS NOT NULL AND ip<>''
+              AND date_end > datetime('now', '-7 days')
+            ORDER BY ip, id ASC
+        ");
+        $rowsByIp = [];
+        while ($row = $statement->fetch(PDO::FETCH_ASSOC)) {
+            $rowsByIp[(string) $row['ip']][] = $row;
+        }
         $stats = [];
-        while ($ip = $statement->fetchColumn()) {
-            $summary = $this->summary($this->history((string) $ip));
-            if (!$summary['stable']) $stats[(string) $ip] = $summary;
+        foreach ($rowsByIp as $ip => $rows) {
+            $summary = $this->summary($this->normalizeHistoryRows($rows, 120));
+            if (!$summary['stable']) $stats[$ip] = $summary;
         }
         return $stats;
     }
@@ -40,7 +54,10 @@ final readonly class StatusHistoryService
 public function get_history($ip, $blipSeconds = 120) {
   $stmt = $this->database->connection()->prepare("select *, unixepoch(date_begin) as `begin`, unixepoch(date_end) as `end`, unixepoch(date_end)-unixepoch(date_begin) as duration from stats where ip=:ip and date_end > datetime('now', '-7 days') order by id asc");
   $stmt->execute(array("ip" => $ip));
-  $before = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  return $this->normalizeHistoryRows($stmt->fetchAll(PDO::FETCH_ASSOC), $blipSeconds);
+}
+
+private function normalizeHistoryRows(array $before, int $blipSeconds): array {
   $cutoff = $this->clock->now()->getTimestamp() - 7 * 24 * 60 * 60;
   if (count($before) > 0) {
     $now = $this->clock->now()->getTimestamp();

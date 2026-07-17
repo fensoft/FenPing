@@ -127,6 +127,7 @@ cat > /etc/crontabs/root <<'EOF'
 23 2 * * * php /opt/fenping/cli.php backup-maintenance daily
 41 4 * * 0 php /opt/fenping/cli.php backup-maintenance verify
 43 1 * * * php /opt/fenping/cli.php database-check
+7 5 * * * php /opt/fenping/cli.php status-clean
 EOF
 chmod 0600 /etc/crontabs/root
 php /opt/fenping/cli.php notify-restart || true

@@ -41,6 +41,7 @@ use FenPing\Cli\OuiCommand;
 use FenPing\Cli\PingCommand;
 use FenPing\Cli\PublishingCommand;
 use FenPing\Cli\ScanPortBackfillCommand;
+use FenPing\Cli\StatusHistoryCleanCommand;
 use FenPing\Cli\TrackedCommand;
 use FenPing\Cli\DoctorCommand;
 use FenPing\Cli\DockerNetworksRefreshCommand;
@@ -119,6 +120,7 @@ use FenPing\Status\TelegramApiClient;
 use FenPing\Status\TelegramChatRepository;
 use FenPing\Status\TelegramNotifier;
 use FenPing\Status\StatusHistoryService;
+use FenPing\Status\StatusHistoryCleaner;
 use FenPing\Support\SystemClock;
 use FenPing\Topology\TopologyRepository;
 use FenPing\Topology\TopologyService;
@@ -159,6 +161,7 @@ final class Application
     private readonly DiscoveredHostMetadataService $discoveredHostMetadata;
     private readonly CategoryRepository $categories;
     private readonly StatusHistoryService $history;
+    private readonly StatusHistoryCleaner $historyCleaner;
     private readonly NotificationService $notifications;
     private readonly NotificationRuleRepository $notificationRules;
     private readonly DiscordNotifier $discord;
@@ -235,6 +238,7 @@ final class Application
         $this->discoveredHostMetadata = new DiscoveredHostMetadataService($config, $this->database, $this->networks, $this->hosts, $this->hostMetadata, $this->hostMetadataNormalizer);
         $this->categories = new CategoryRepository($config, $this->database, $this->networks);
         $this->history = new StatusHistoryService($this->database, $clock);
+        $this->historyCleaner = new StatusHistoryCleaner($this->database);
         $this->notificationRules = new NotificationRuleRepository($this->database);
         $notificationPayloads = new DiscordPayloadBuilder($config);
         $this->discord = new DiscordNotifier($config, $this->database, $this->http, $this->operations, $this->notificationRules, $notificationPayloads);
@@ -339,6 +343,9 @@ final class Application
             'database' => $database, 'database-check' => $database, 'ping' => $ping,
             'hosts' => new HostsCommand($this->dhcpConfig), 'inventory' => $inventory,
             "scan-port-backfill" => new NoArgumentsCommand(new ScanPortBackfillCommand($this->portChanges, $this->liveUpdates), $usage),
+            'status-clean' => new LockingCommand(
+                new TrackedCommand(new PublishingCommand(new StatusHistoryCleanCommand($this->config, $this->historyCleaner), $this->liveUpdates, [LiveUpdateScope::Status]), $this->operations, 'status_history_cleanup'),
+                '/tmp/fenping-status-clean.lck', 'status history cleanup'),
             'oui-refresh' => $ouiRefresh, 'oui-sync' => $ouiSync, 'dnsmasq-leases' => $leases,
             "notify-restart" => new NoArgumentsCommand(new NotificationRestartCommand($this->notifications), $usage),
             "discord-restart" => new NoArgumentsCommand(new DiscordRestartCommand($this->discord), $usage),

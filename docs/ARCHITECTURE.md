@@ -273,6 +273,7 @@ The 1.x JSON contract is forward-compatible with future FenPing backups: later 1
 - Verified managed backup every day at 02:23 UTC.
 - Round-robin restore test every Sunday at 04:41 UTC.
 - SQLite integrity check every day at 01:43 UTC.
+- Status-history cleanup every day at 05:07 UTC; it removes expired events, retains only the newest configured number of events per IP, and compacts SQLite when at least 16 MiB and 20% of its allocated pages are reclaimable.
 
 Locks use `flock` under `/tmp` to prevent overlapping jobs.
 

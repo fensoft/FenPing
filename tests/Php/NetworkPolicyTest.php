@@ -84,6 +84,39 @@ final class NetworkPolicyTest extends TestCase
         }
     }
 
+    public function testStatusHistoryCleanupDefaultsAndRejectsInvalidValues(): void
+    {
+        $names = ['STATUS_HISTORY_RETENTION_DAYS', 'STATUS_HISTORY_MAX_EVENTS_PER_IP'];
+        $previous = array_combine($names, array_map('getenv', $names));
+        try {
+            foreach ($names as $name) putenv($name);
+            $defaults = AppConfig::fromEnvironment(dirname(__DIR__, 2));
+            self::assertSame(365, $defaults->statusHistoryRetentionDays);
+            self::assertSame(1000, $defaults->statusHistoryMaxEventsPerIp);
+
+            putenv('STATUS_HISTORY_RETENTION_DAYS=30');
+            putenv('STATUS_HISTORY_MAX_EVENTS_PER_IP=500');
+            $configured = AppConfig::fromEnvironment(dirname(__DIR__, 2));
+            self::assertSame(30, $configured->statusHistoryRetentionDays);
+            self::assertSame(500, $configured->statusHistoryMaxEventsPerIp);
+
+            foreach ($names as $name) {
+                foreach (['0', '-1', '1.5', 'many'] as $invalid) {
+                    foreach ($names as $reset) putenv($reset);
+                    putenv($name . '=' . $invalid);
+                    try {
+                        AppConfig::fromEnvironment(dirname(__DIR__, 2));
+                        self::fail("accepted invalid cleanup value $name=$invalid");
+                    } catch (InvalidArgumentException) {
+                        self::addToAssertionCount(1);
+                    }
+                }
+            }
+        } finally {
+            foreach ($previous as $name => $value) $this->restoreEnv($name, $value);
+        }
+    }
+
     public function testScanGuardrailDefaultsAndOverrides(): void
     {
         $names = [

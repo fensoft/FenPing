@@ -126,6 +126,8 @@ Important `.env` values:
 | `DHCP_NETWORK` | Required canonical DHCP `/24`, for example `10.10.10.0/24`. dnsmasq, reservations, categories, and netboot assignments remain restricted to this network; IPAM displays it alongside every configured extra network. |
 | `EXTRA_NETWORKS` | Optional comma-separated canonical `/24` networks available for scanning, for example `192.168.0.0/24,172.16.20.0/24`. FenPing reports whether an explicit route exists but never adds routes. |
 | `INVENTORY_DOWN_RETENTION_DAYS` | Days to keep an unreserved host visible after it changes to Down. Defaults to `7`; reserved hosts remain visible. |
+| `STATUS_HISTORY_RETENTION_DAYS` | Maximum age of status-history events. The daily cleanup defaults to `365` days. |
+| `STATUS_HISTORY_MAX_EVENTS_PER_IP` | Maximum retained status-history events per IP. The daily cleanup keeps the newest `1000` events by default. Cleanup compacts SQLite when at least 16 MiB and 20% of the file are reclaimable. |
 | `SCAN_GLOBAL_CONCURRENCY` | Maximum scans running across all networks. Defaults to `4`. |
 | `SCAN_NETWORK_CONCURRENCY` | Default maximum scans running in one `/24`. Defaults to `2`. |
 | `SCAN_NETWORK_DAILY_BUDGET` | Default scheduled-scan starts allowed per `/24` in a rolling 24 hours. Defaults to `254`; manual API and explicit CLI scans bypass this budget. |
@@ -229,6 +231,7 @@ docker exec fenping php /opt/fenping/cli.php inventory --profile standard 10.10.
 docker exec fenping php /opt/fenping/cli.php inventory --profile deep 10.10.10.10
 docker exec fenping php /opt/fenping/cli.php inventory --work
 docker exec fenping php /opt/fenping/cli.php scan-port-backfill
+docker exec fenping php /opt/fenping/cli.php status-clean [retention-days] [max-events-per-ip]
 docker exec fenping php /opt/fenping/cli.php oui-refresh
 docker exec fenping php /opt/fenping/cli.php oui-sync
 docker exec fenping php /opt/fenping/cli.php backup
@@ -246,6 +249,7 @@ Cron inside the container runs:
 - the inventory worker enforces global and per-network concurrency plus each network's rolling scheduled-scan budget.
 - the local IEEE OUI registry is refreshed monthly on the first day at 03:17.
 - dnsmasq lease import every minute.
+- status-history cleanup every day at 05:07 UTC.
 - a verified managed backup every day at 02:23 UTC.
 - a round-robin restore test of retained backups every Sunday at 04:41 UTC.
 

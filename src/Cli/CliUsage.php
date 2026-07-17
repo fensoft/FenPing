@@ -18,6 +18,7 @@ final readonly class CliUsage
         fwrite(STDERR, "       php cli.php inventory [--network IPv4/24] [--profile lightweight|standard|deep] [1-254|IPv4] (queue scans)" . PHP_EOL);
         fwrite(STDERR, "       php cli.php inventory --work" . PHP_EOL);
         fwrite(STDERR, "       php cli.php scan-port-backfill" . PHP_EOL);
+        fwrite(STDERR, "       php cli.php status-clean [retention-days] [max-events-per-ip]" . PHP_EOL);
         fwrite(STDERR, "       php cli.php oui-refresh" . PHP_EOL);
         fwrite(STDERR, "       php cli.php oui-sync" . PHP_EOL);
         fwrite(STDERR, "       php cli.php dnsmasq-leases" . PHP_EOL);
