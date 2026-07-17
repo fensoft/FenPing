@@ -9,6 +9,7 @@ use FenPing\Database\DatabaseManager;
 use FenPing\Docker\DockerNetworkCache;
 use FenPing\Host\DiscoveredHostMetadataService;
 use FenPing\Host\HostMetadataRepository;
+use FenPing\Host\HostRepository;
 use FenPing\Network\NetworkManager;
 use FenPing\Scan\ProfileCatalog;
 use FenPing\Scan\ScanPolicyService;
@@ -25,6 +26,7 @@ final readonly class InventoryReadService
         private NetworkManager $networks,
         private DockerNetworkCache $dockerNetworks,
         private HostMetadataRepository $metadata,
+        private HostRepository $hosts,
         private DiscoveredHostMetadataService $discoveredMetadata,
         private InventoryRowNormalizer $rows,
         private VendorLookup $vendors,
@@ -39,6 +41,7 @@ public function forNetwork(?string $networkCidr = null) {
   $dhcpNetwork = $selectedNetwork->cidr === $this->config->dhcpNetwork->cidr;
   $db = $this->database->connection();
   $managedMetadata = $this->metadata->managedHostMetadataMap();
+  $detectedMacsByIp = $this->hosts->detectedMacsByIp();
   $deviceMetadata = $this->metadata->inventoryDeviceMetadataMap();
   $dockerContainers = $this->dockerNetworks->containers();
   $latestScans = $this->getLatestScans();
@@ -156,6 +159,7 @@ public function forNetwork(?string $networkCidr = null) {
     $hostId = isset($data['id']) ? (int)$data['id'] : 0;
     if ($hostId > 0 && isset($managedMetadata[$hostId])) {
       $data = array_merge($data, $managedMetadata[$hostId]);
+      $data = $this->hosts->withDetectedMac($data, $detectedMacsByIp);
       $identity = $this->discoveredMetadata->identity($data);
       if (!$dhcpNetwork && $identity !== null) {
         $data['device_identity'] = $identity;

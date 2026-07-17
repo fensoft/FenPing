@@ -48,7 +48,7 @@ final readonly class HostService
         if ($host === false) {
             throw new HttpException(404, 'host not found');
         }
-        return $host;
+        return $this->hosts->withDetectedMac($host);
     }
 
     public function detail(int $id): array

@@ -77,6 +77,31 @@ test('keeps the edit modal open and reports a failed mutation', async ({ page, a
   expect(api.requestsFor('PUT', '/api/hosts/1')).toHaveLength(1);
 });
 
+test('shows a reserved MAC mismatch and can use the detected MAC', async ({ page, api }) => {
+  api.state.authenticated = true;
+  const gateway = api.state.hosts.find((host) => host.id === 1);
+  gateway.detected_mac = '02:00:00:00:00:11';
+  gateway.mac_mismatch = 1;
+  await page.goto('/');
+
+  const row = hostRow(page, 'Gateway');
+  await expect(row.locator('[title^="Reserved MAC differs from detected MAC"]')).toBeVisible();
+  await row.getByRole('button', { name: 'Edit host' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Edit host' });
+  const refresh = dialog.getByRole('button', { name: 'Use detected MAC' });
+  await expect(refresh).toBeVisible();
+  await expect(dialog.locator('input[name="mac"]')).toHaveValue('02:00:00:00:00:10');
+  await refresh.click();
+  await expect(dialog.locator('input[name="mac"]')).toHaveValue('02:00:00:00:00:11');
+  await expect(refresh).toBeHidden();
+
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  const updates = api.requestsFor('PUT', '/api/hosts/1');
+  expect(updates).toHaveLength(1);
+  expect(updates[0].body.mac).toBe('02:00:00:00:00:11');
+});
+
 test('queues the selected scan profile from Inventory', async ({ page, api }) => {
   api.state.authenticated = true;
   await page.goto('/');

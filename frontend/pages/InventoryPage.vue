@@ -81,6 +81,7 @@
                   <span v-for="tag in row.host.tags" :key="tag.toLowerCase()" class="badge bg-blue-lt text-blue">{{ tag }}</span>
                 </span>
                 <AppIcon v-if="toFlag(row.host.is_new)" name="alert-triangle" class="text-warning host-role-icon" :title="t('New device — approve it in IPAM')" />
+                <AppIcon v-if="toFlag(row.host.mac_mismatch)" name="alert-triangle" class="text-danger host-role-icon" :title="`${t('Reserved MAC differs from detected MAC')}: ${formatMac(row.host.mac)} → ${formatMac(row.host.detected_mac)}`" />
                 <AppIcon v-if="toFlag(row.host.repeater)" name="wifi" class="text-secondary host-role-icon" :title="t('Router/repeater')" />
                 <AppIcon v-if="row.host.via" name="antenna-bars-5" class="text-secondary host-role-icon" :title="row.host.via" />
                 <a v-if="row.host.web == 1 && row.host.ip" class="host-web-link" :href="`http://${row.host.ip}`" target="_blank" rel="noopener noreferrer" :title="t('Open web interface')" :aria-label="t('Open web interface')"><AppIcon name="external-link" /></a>

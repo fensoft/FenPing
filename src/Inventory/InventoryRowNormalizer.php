@@ -33,6 +33,8 @@ public function normalizeInventoryRow($data, $ip = null) {
     "name" => "",
     "ip" => $ip,
     "mac" => "",
+    "detected_mac" => "",
+    "mac_mismatch" => 0,
     "status" => "",
     "date" => null,
     "important" => 0,
@@ -57,6 +59,8 @@ public function normalizeInventoryRow($data, $ip = null) {
   $row["name"] = $row["name"] === null ? "" : $row["name"];
   $row["ip"] = $row["ip"] === null ? "" : $row["ip"];
   $row["mac"] = $row["mac"] === null ? "" : $row["mac"];
+  $row["detected_mac"] = $row["detected_mac"] === null ? "" : $row["detected_mac"];
+  $row["mac_mismatch"] = (int)(bool)$row["mac_mismatch"];
   $row["important"] = $row["important"] === null ? 0 : $row["important"];
   $row["display_name"] = $row["display_name"] === null ? "" : (string)$row["display_name"];
   $row["metadata_editable"] = (int)(bool)$row["metadata_editable"];

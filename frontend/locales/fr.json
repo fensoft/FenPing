@@ -369,6 +369,8 @@
   "No IP conflict events in the last {hours}h": "No IP conflict events in the last {hours}h",
   "Resolved": "Resolved",
   "Detected": "Detected",
+  "Reserved MAC differs from detected MAC": "L’adresse MAC réservée diffère de l’adresse MAC détectée",
+  "Use detected MAC": "Utiliser l’adresse MAC détectée",
   "Doctor": "Doctor",
   "Administrator diagnostics for network and appliance services": "Administrator diagnostics for network and appliance services",
   "Run doctor": "Run doctor",

@@ -27,7 +27,7 @@
             <div class="modal-body-grid">
               <label class="form-label">IP<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.ip" class="form-control" name="ip" type="text" /></div></label>
               <label class="form-label">{{ t('Router') }}<div class="input-group"><span class="input-group-text">{{ network }}.</span><input v-model.trim="modal.form.router" class="form-control" name="router" type="text" /></div></label>
-              <label class="form-label">MAC<input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" /></label>
+              <label class="form-label">MAC<div class="input-group"><input v-model.trim="modal.form.mac" class="form-control font-monospace" name="mac" type="text" /><button v-if="canUseDetectedMac" class="btn btn-outline-warning" type="button" @click="useDetectedMac"><AppIcon name="refresh" class="me-1" />{{ t('Use detected MAC') }}</button></div><small v-if="canUseDetectedMac" class="form-hint">{{ t('Detected') }}: <span class="font-monospace">{{ formatMac(modal.form.detected_mac) }}</span></small></label>
               <label class="form-label">{{ t('Name') }}<input v-model.trim="modal.form.name" class="form-control" name="name" type="text" /></label>
               <label class="form-label">{{ t('Display name') }}<input v-model.trim="modal.form.display_name" class="form-control" name="display_name" type="text" /></label>
               <label class="form-label">{{ t('Scheduled scan profile') }}<select v-model="modal.form.scan_profile" class="form-select" name="scan_profile"><option v-for="profile in scanProfiles" :key="profile.id" :value="profile.id">{{ t(profile.name) }}</option></select></label>
@@ -213,9 +213,13 @@ const title = computed(() => props.modal.type === 'create' && props.modal.purpos
   ? t('Reserve address')
   : t(({ login: 'Login', edit: 'Edit host', metadataEdit: 'Edit metadata', create: 'Create host', category: 'Add category', renameCategory: 'Rename category', deleteHost: 'Delete host', deleteCategory: 'Delete category', scanProfile: 'Start scan', scanError: 'Error', history: 'History {ip}', hostDetail: 'Host details', scan: 'Scan {ip}', loading: 'Loading' })[props.modal.type] || 'Dialog', { ip: props.modal.ip || '' }));
 const dialogClass = computed(() => props.modal.type === 'login' ? 'modal-sm' : ['scan', 'hostDetail'].includes(props.modal.type) ? 'modal-xl scan-modal-dialog' : 'modal-lg');
+const canUseDetectedMac = computed(() => props.modal.type === 'edit'
+  && formatMac(props.modal.form?.detected_mac) !== ''
+  && formatMac(props.modal.form?.mac) !== formatMac(props.modal.form?.detected_mac));
 const modalRoot = useAccessibleModal(() => props.modal.type, requestClose);
 
 function requestClose() { if (!props.saving) emit('close'); }
+function useDetectedMac() { if (canUseDetectedMac.value) props.modal.form.mac = formatMac(props.modal.form.detected_mac); }
 function forwardOpenScan(...args) { emit('open-scan', ...args); }
 function scanModeLabel(scan) { return scan?.merged_with ? `${scanProfileLabel(scan?.metadata?.mode)} + ${t('Deep')}` : scanProfileLabel(scan?.metadata?.mode); }
 function scanHistoryLabel(scan) { return `${formatServerDate(scan.date_end || scan.date_begin || '')} ${scanProfileLabel(scan.mode)} ${t(scan.status || scan.state || '-')} ${Number(scan.ports_count || 0)}p`; }

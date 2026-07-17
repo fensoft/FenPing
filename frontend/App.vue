@@ -573,6 +573,7 @@ function hostForm(data) {
     ip: toShortIp(data.ip || ''),
     router: data.router || '',
     mac: formatMac(data.mac),
+    detected_mac: formatMac(data.detected_mac),
     name: data.name || '',
     display_name: data.display_name || '',
     important: toFlag(data.important),

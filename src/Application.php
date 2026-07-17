@@ -247,7 +247,7 @@ final class Application
         $this->inventoryScanner = new InventoryScanner($this->profiles, $this->scanJobs, $this->scanCodec, $retention, $this->notifications);
         $this->inventoryScheduler = new InventoryScheduler($config, $this->database, $dockerCache, $this->hostMetadata, $this->inventoryScanner, $this->scanJobs, $this->profiles, $this->networks, $this->operations, $this->liveUpdates);
         $inventoryRows = new InventoryRowNormalizer($config, $dockerCache, $this->hostMetadata);
-        $inventoryRead = new InventoryReadService($config, $this->database, $this->networks, $dockerCache, $this->hostMetadata, $this->discoveredHostMetadata, $inventoryRows, $this->vendors, $this->history, $this->scanPolicy, $this->scanCodec);
+        $inventoryRead = new InventoryReadService($config, $this->database, $this->networks, $dockerCache, $this->hostMetadata, $this->hosts, $this->discoveredHostMetadata, $inventoryRows, $this->vendors, $this->history, $this->scanPolicy, $this->scanCodec);
         $savedFilters = new SavedInventoryFilterRepository($this->database, $this->hostMetadata, $this->hostMetadataNormalizer);
         $this->inventory = new InventoryService($inventoryRead, $inventoryRows, $this->hostMetadata, $savedFilters, $this->inventoryScheduler);
         $this->topology = new TopologyService($config, $this->networks, $this->inventory, new TopologyRepository($this->database));

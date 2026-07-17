@@ -31,6 +31,33 @@ final readonly class HostRepository
         return $this->one('SELECT * FROM ips WHERE LOWER(mac)=:value', strtolower($mac));
     }
 
+    public function withDetectedMac(array $host, ?array $detectedMacsByIp = null): array
+    {
+        $ip = trim((string) ($host['ip'] ?? ''));
+        $detectedMacsByIp ??= $this->detectedMacsByIp();
+        $detectedMac = $this->storedMac($detectedMacsByIp[$ip] ?? '');
+        $reservedMac = $this->storedMac($host['mac'] ?? '');
+        $host['detected_mac'] = $detectedMac;
+        $host['mac_mismatch'] = $reservedMac !== '' && $detectedMac !== '' && $reservedMac !== $detectedMac ? 1 : 0;
+        return $host;
+    }
+
+    public function detectedMacsByIp(): array
+    {
+        $detected = [];
+        $statement = $this->database->connection()->query(
+            "SELECT ip, mac FROM ping WHERE ip IS NOT NULL AND ip<>'' AND mac IS NOT NULL AND mac<>''",
+        );
+        while ($row = $statement->fetch(PDO::FETCH_ASSOC)) {
+            $ip = trim((string) ($row['ip'] ?? ''));
+            $mac = $this->storedMac($row['mac'] ?? '');
+            if ($ip !== '' && $mac !== '') {
+                $detected[$ip] = $mac;
+            }
+        }
+        return $detected;
+    }
+
     public function create(string $ip, string $mac): int
     {
         $statement = $this->database->connection()->prepare(
@@ -43,7 +70,9 @@ final readonly class HostRepository
             'scan_profile' => ProfileCatalog::MANAGED_DEFAULT,
             'scan_interval_hours' => ProfileCatalog::MANAGED_INTERVAL_HOURS,
         ]);
-        return (int) $this->database->connection()->lastInsertId();
+        $id = (int) $this->database->connection()->lastInsertId();
+        $this->removeDynamicApproval($mac);
+        return $id;
     }
 
     public function update(
@@ -96,8 +125,12 @@ final readonly class HostRepository
             'icon' => $icon,
             'id' => $id,
         ]);
+        $updated = $statement->rowCount();
+        if ($updated > 0) {
+            $this->removeDynamicApproval($mac);
+        }
         $this->metadata->replaceHostTags($id, $tags);
-        return $statement->rowCount();
+        return $updated;
     }
 
     public function delete(int $id): int
@@ -105,6 +138,26 @@ final readonly class HostRepository
         $statement = $this->database->connection()->prepare('DELETE FROM ips WHERE id=:id');
         $statement->execute(['id' => $id]);
         return $statement->rowCount();
+    }
+
+    private function removeDynamicApproval(string $mac): void
+    {
+        if ($mac === '') {
+            return;
+        }
+        $statement = $this->database->connection()->prepare(
+            'DELETE FROM device_approvals WHERE LOWER(mac)=LOWER(:mac)',
+        );
+        $statement->execute(['mac' => $mac]);
+    }
+
+    private function storedMac(mixed $value): string
+    {
+        if (!is_scalar($value)) {
+            return '';
+        }
+        $mac = strtolower(str_replace('-', ':', trim((string) $value)));
+        return preg_match('/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac) === 1 ? $mac : '';
     }
 
     private function one(string $sql, int|string $value): array|false

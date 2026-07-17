@@ -25,6 +25,53 @@ final class HostMetadataTest extends IntegrationTestCase
         }
     }
 
+    public function testReservingAnApprovedDeviceRemovesItFromIpam(): void
+    {
+        $backend = $this->app();
+        $mac = '02:00:00:00:00:39';
+        $backend->pingRepository()->save([
+            ['ip' => '192.0.2.39', 'mac' => $mac, 'status' => 'Up'],
+        ]);
+        $backend->ipam()->approve($mac);
+        self::assertCount(1, $backend->ipam()->summary()['approved']);
+
+        $hostId = $backend->hosts()->create('192.0.2.39', $mac);
+
+        self::assertGreaterThan(0, $hostId);
+        self::assertSame(0, (int) $backend->database()->connection()->query(
+            'SELECT COUNT(*) FROM device_approvals',
+        )->fetchColumn());
+        $ipam = $backend->ipam()->summary();
+        self::assertSame([], $ipam['pending']);
+        self::assertSame([], $ipam['approved']);
+    }
+
+    public function testReservedHostReportsADifferentDetectedMac(): void
+    {
+        $backend = $this->app();
+        $reservedMac = '02:00:00:00:00:50';
+        $detectedMac = '02:00:00:00:00:51';
+        $hostId = $backend->hosts()->create('192.0.2.50', $reservedMac);
+        $backend->pingRepository()->save([
+            ['ip' => '192.0.2.50', 'mac' => $detectedMac, 'status' => 'Up'],
+        ]);
+
+        $inventoryResponse = $backend->api()->handle($this->request('GET', '/api/inventory'));
+        self::assertSame(200, $inventoryResponse->status);
+        $inventory = json_decode($inventoryResponse->body, true, flags: JSON_THROW_ON_ERROR);
+        $hosts = array_column($inventory['hosts'], null, 'id');
+        self::assertSame($reservedMac, $hosts[$hostId]['mac']);
+        self::assertSame($detectedMac, $hosts[$hostId]['detected_mac']);
+        self::assertSame(1, $hosts[$hostId]['mac_mismatch']);
+
+        $hostResponse = $backend->api()->handle($this->request('GET', "/api/hosts/$hostId"));
+        self::assertSame(200, $hostResponse->status);
+        $host = json_decode($hostResponse->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame($reservedMac, $host['mac']);
+        self::assertSame($detectedMac, $host['detected_mac']);
+        self::assertSame(1, $host['mac_mismatch']);
+    }
+
     public function testMetadataTagsGuestReadsClearingAndHostCascade(): void
     {
         $backend = $this->app();
