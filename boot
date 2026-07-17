@@ -60,7 +60,7 @@ find "$DATABASE_DIR" -xdev -mindepth 1 \
 
 chown www-data:www-data /var/lib/fenping/netboot
 chgrp www-data /var/lib/fenping/backups
-chmod 0750 /var/lib/fenping/backups
+chmod 0770 /var/lib/fenping/backups
 install -d -o www-data -g www-data -m 0750 /run/fenping
 install -d -o www-data -g www-data -m 0700 /run/fenping/dnsmasq-pending
 install -d -o www-data -g www-data -m 0700 /run/fenping/sessions

@@ -359,6 +359,10 @@ Useful endpoints:
 | `POST` | `/api/netboot/images` | Upload a netboot image. |
 | `GET` | `/api/netboot/images/{id}/file` | Download a netboot image. |
 | `DELETE` | `/api/netboot/images/{id}` | Delete a netboot image. |
+| `GET` | `/api/backups` | Admin-only backup list and verification status. |
+| `POST` | `/api/backups` | Admin-only creation of a manual backup. |
+| `GET` | `/api/backups/{filename}/file` | Admin-only backup download. |
+| `POST` | `/api/backups/{filename}/restore` | Admin-only verified restore after creating a safety backup of current state. |
 
 Errors return JSON:
 

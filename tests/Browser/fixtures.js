@@ -159,6 +159,16 @@ function createApi() {
     configured: true,
     password: 'correct horse battery staple',
     hosts: seedHosts(),
+    backups: [{
+      filename: 'fenping-daily-20260714-022300.tgz',
+      kind: 'daily',
+      created_at: '2026-07-14T02:23:00+00:00',
+      size: 4096,
+      sha256: '1234567890abcdef',
+      verification: { status: 'verified', restore_tested_at: '2026-07-14T02:24:00+00:00', message: null },
+      retention_roles: ['daily'],
+      download_url: '/api/backups/fenping-daily-20260714-022300.tgz/file'
+    }],
     nextScanId: 100
   };
   const requests = [];
@@ -272,6 +282,34 @@ async function handleApi(route, api) {
 
   if (method === 'GET' && path === '/api/netboot/images') {
     await fulfillJson(route, { images: [] });
+    return;
+  }
+
+  if (method === 'GET' && path === '/api/backups') {
+    await fulfillJson(route, { backups: clone(api.state.backups), storage: { same_filesystem: false } });
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/backups') {
+    const filename = 'fenping-manual-20260714-120000-abcdef.tgz';
+    api.state.backups.unshift({
+      filename,
+      kind: 'manual',
+      created_at: '2026-07-14T12:00:00+00:00',
+      size: 8192,
+      sha256: 'abcdef1234567890',
+      verification: { status: 'unverified', restore_tested_at: null, message: null },
+      retention_roles: [],
+      download_url: `/api/backups/${filename}/file`
+    });
+    await fulfillJson(route, { created: filename });
+    return;
+  }
+
+  const backupRestoreMatch = path.match(/^\/api\/backups\/([^/]+)\/restore$/);
+  if (method === 'POST' && backupRestoreMatch) {
+    const filename = decodeURIComponent(backupRestoreMatch[1]);
+    await fulfillJson(route, { restored: filename, safety_backup: 'fenping-before-restore-20260714-120100-fedcba.tgz' });
     return;
   }
 

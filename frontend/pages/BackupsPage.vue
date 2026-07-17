@@ -3,7 +3,10 @@
     <div v-if="error" class="alert alert-danger mb-3" role="alert">{{ error }}</div>
     <div class="netboot-header">
       <div><h2>{{ t('Backups') }}</h2><div class="text-secondary small">{{ t('Verified appliance database and netboot archives') }}</div></div>
-      <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="loading || !isAuthenticated" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />{{ t('Refresh') }}</button>
+      <div class="btn-list">
+        <button class="btn btn-primary btn-sm" type="button" :disabled="busy || !isAuthenticated" @click="createBackup"><AppIcon :name="creating ? 'loader-2' : 'archive'" class="me-1" :class="{ 'is-spinning': creating }" />{{ t(creating ? 'Creating backup' : 'Create backup') }}</button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" :disabled="busy || !isAuthenticated" @click="load"><AppIcon name="refresh" class="me-1" :class="{ 'is-spinning': loading }" />{{ t('Refresh') }}</button>
+      </div>
     </div>
     <div v-if="!isAuthenticated" class="alert alert-info" role="alert">{{ t('Login to view and download backups.') }}<button class="btn btn-primary btn-sm ms-2" type="button" @click="$emit('login')">{{ t('Login') }}</button></div>
     <template v-else>
@@ -22,7 +25,10 @@
               <td class="text-nowrap">{{ formatServerDate(backup.created_at) }}</td>
               <td class="text-nowrap">{{ formatServerDate(backup.verification?.restore_tested_at) }}</td>
               <td class="backup-checksum font-monospace" :title="backup.sha256 || ''">{{ backup.sha256 ? backup.sha256.slice(0, 12) : '-' }}</td>
-              <td class="text-end"><a class="btn btn-outline-primary btn-sm icon-btn" :href="backup.download_url" :title="t('Download backup')"><AppIcon name="download" /></a></td>
+              <td class="text-end"><div class="btn-list justify-content-end flex-nowrap">
+                <a class="btn btn-outline-primary btn-sm icon-btn" :href="backup.download_url" :title="t('Download backup')" :aria-label="t('Download backup')"><AppIcon name="download" /></a>
+                <button class="btn btn-outline-danger btn-sm" type="button" :disabled="busy" :title="t('Restore backup')" @click="restoreBackup(backup)"><AppIcon :name="restoringFilename === backup.filename ? 'loader-2' : 'arrow-back-up'" class="me-1" :class="{ 'is-spinning': restoringFilename === backup.filename }" />{{ t(restoringFilename === backup.filename ? 'Restoring' : 'Restore') }}</button>
+              </div></td>
             </tr>
           </tbody>
         </table>
@@ -42,12 +48,16 @@ import { usePageController } from '../composables/usePageController.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({ isAuthenticated: Boolean });
-defineEmits(['login']);
+const emit = defineEmits(['login', 'notice']);
 const backups = ref([]);
 const storage = ref({});
 const loading = ref(false);
+const creating = ref(false);
+const restoringFilename = ref('');
 const error = ref('');
 const request = useAbortableTask();
+const mutationRequest = useAbortableTask();
+const busy = computed(() => loading.value || creating.value || restoringFilename.value !== '');
 
 usePageController({ loading, label: computed(() => t(loading.value ? 'Loading' : 'Backups')), title: computed(() => t('Refresh backups')), disabled: computed(() => !props.isAuthenticated), refresh: load });
 useLiveRefresh(['backups'], load);
@@ -68,6 +78,41 @@ async function load() {
     if (!isAbortError(loadError) && request.isCurrent(signal)) error.value = loadError.message;
   } finally {
     if (request.isCurrent(signal)) loading.value = false;
+  }
+}
+
+async function createBackup() {
+  if (!props.isAuthenticated) return emit('login');
+  const signal = mutationRequest.nextSignal();
+  creating.value = true;
+  error.value = '';
+  try {
+    await apiJson('/api/backups', { method: 'POST', signal });
+    if (!mutationRequest.isCurrent(signal)) return;
+    emit('notice', t('Backup created'));
+    await load();
+  } catch (createError) {
+    if (!isAbortError(createError) && mutationRequest.isCurrent(signal)) error.value = createError.message;
+  } finally {
+    if (mutationRequest.isCurrent(signal)) creating.value = false;
+  }
+}
+
+async function restoreBackup(backup) {
+  if (!props.isAuthenticated) return emit('login');
+  if (!backup?.filename || !window.confirm(t('Restore {name}? Current appliance data will be replaced. A safety backup will be created first.', { name: backup.filename }))) return;
+  const signal = mutationRequest.nextSignal();
+  restoringFilename.value = backup.filename;
+  error.value = '';
+  try {
+    await apiJson(`/api/backups/${encodeURIComponent(backup.filename)}/restore`, { method: 'POST', signal });
+    if (!mutationRequest.isCurrent(signal)) return;
+    emit('notice', t('Backup {name} restored', { name: backup.filename }));
+    await load();
+  } catch (restoreError) {
+    if (!isAbortError(restoreError) && mutationRequest.isCurrent(signal)) error.value = restoreError.message;
+  } finally {
+    if (mutationRequest.isCurrent(signal)) restoringFilename.value = '';
   }
 }
 

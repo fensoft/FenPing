@@ -115,6 +115,7 @@ final readonly class BackupManager
         }
         return $real;
     }
+    public function managedPath(string $filename): string { return $this->config->backupDir() . '/' . $filename; }
     public function sameFilesystem(): bool {
         $this->filesystem->backupEnsureDir($this->config->backupDir());
         $this->filesystem->backupEnsureDir(dirname($this->config->databasePath));
@@ -378,7 +379,7 @@ final readonly class BackupManager
             $callback();
             return 0;
         } catch (Throwable $error) {
-            fwrite(STDERR, $error->getMessage() . PHP_EOL);
+            error_log($error->getMessage());
             return $error instanceof InvalidArgumentException ? 2 : 1;
         }
     }
@@ -392,7 +393,7 @@ final readonly class BackupManager
     }
     private function warnSameDisk(): void {
         if ($this->sameFilesystem()) {
-            fwrite(STDERR, 'WARNING: backups and the appliance database are on the same filesystem; keep an off-appliance copy.' . PHP_EOL);
+            error_log('WARNING: backups and the appliance database are on the same filesystem; keep an off-appliance copy.');
         }
     }
 }

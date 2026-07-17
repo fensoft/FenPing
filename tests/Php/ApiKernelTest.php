@@ -341,6 +341,7 @@ final class ApiKernelTest extends IntegrationTestCase
             'GET /netboot/images guest ', 'POST /netboot/images session netboot',
             'GET /netboot/images/{id:int} guest ', 'GET /netboot/images/{id:int}/file guest ',
             'DELETE /netboot/images/{id:int} session netboot,hosts', 'GET /backups session ',
+            'POST /backups session ', 'POST /backups/{filename}/restore session ',
             'GET /backups/{filename}/file session ', 'GET /scans guest ', 'GET /scans/profiles guest ',
             'GET /services guest ', 'POST /scans/{ip:ipv4} session scans',
             'POST /scans/{ip:ipv4}/quick session scans', 'GET /scans/{ip:ipv4}/status guest ',

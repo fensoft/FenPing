@@ -13,11 +13,14 @@ use ReflectionMethod;
 final class BackupManagementTest extends IntegrationTestCase
 {
     private string $archive;
+    /** @var list<string> */
+    private array $generatedArchives = [];
 
     protected function setUp(): void
     {
         $this->resetDatabase();
         $this->archive = $this->app()->config()->backupDir() . '/test-managed.tgz';
+        $this->generatedArchives = [];
         @unlink($this->archive);
         @unlink($this->archive . '.metadata.json');
     }
@@ -26,6 +29,10 @@ final class BackupManagementTest extends IntegrationTestCase
     {
         @unlink($this->archive);
         @unlink($this->archive . '.metadata.json');
+        foreach ($this->generatedArchives as $archive) {
+            @unlink($archive);
+            @unlink($archive . '.metadata.json');
+        }
         if ($this->app()->auth()->isAuthenticated()) {
             $this->app()->auth()->logout();
         }
@@ -80,6 +87,38 @@ final class BackupManagementTest extends IntegrationTestCase
         self::assertSame(400, $sidecar->status);
     }
 
+    public function testBackupApiCreatesAndRestoresWithSafetyBackup(): void
+    {
+        $guestCreate = $this->app()->api()->handle($this->request('/api/backups', 'POST'));
+        self::assertSame(403, $guestCreate->status);
+        $guestRestore = $this->app()->api()->handle($this->request('/api/backups/missing.tgz/restore', 'POST'));
+        self::assertSame(403, $guestRestore->status);
+
+        self::assertTrue($this->app()->auth()->login(''));
+        $database = $this->app()->database()->connection();
+        $database->exec("INSERT INTO ips (name, ip) VALUES ('before backup', '192.0.2.10')");
+
+        $create = $this->app()->api()->handle($this->request('/api/backups', 'POST'));
+        self::assertSame(200, $create->status, $create->body);
+        $created = json_decode($create->body, true, flags: JSON_THROW_ON_ERROR)['created'];
+        self::assertMatchesRegularExpression('/^fenping-manual-\d{8}-\d{6}-[a-f0-9]{6}\.tgz$/', $created);
+        $createdPath = $this->app()->config()->backupDir() . '/' . $created;
+        $this->generatedArchives[] = $createdPath;
+        self::assertFileExists($createdPath);
+
+        $database->exec("INSERT INTO ips (name, ip) VALUES ('after backup', '192.0.2.11')");
+        $restore = $this->app()->api()->handle($this->request('/api/backups/' . rawurlencode($created) . '/restore', 'POST'));
+        self::assertSame(200, $restore->status, $restore->body);
+        $restored = json_decode($restore->body, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame($created, $restored['restored']);
+        self::assertNotSame($created, $restored['safety_backup']);
+        $safetyPath = $this->app()->config()->backupDir() . '/' . $restored['safety_backup'];
+        $this->generatedArchives[] = $safetyPath;
+        self::assertFileExists($safetyPath);
+        self::assertSame(1, (int) $database->query('SELECT COUNT(*) FROM ips')->fetchColumn());
+        self::assertSame('before backup', $database->query('SELECT name FROM ips')->fetchColumn());
+    }
+
     public function testRetentionSelectsSevenDaysFourIsoWeeksAndTwoCheckpoints(): void
     {
         $now = new DateTimeImmutable('2026-07-12T12:00:00+00:00');
@@ -113,8 +152,8 @@ final class BackupManagementTest extends IntegrationTestCase
         self::assertArrayNotHasKey('checkpoint-2.tgz', $roles);
     }
 
-    private function request(string $uri): Request
+    private function request(string $uri, string $method = 'GET'): Request
     {
-        return new Request('GET', $uri, [], [], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => $uri], []);
+        return new Request($method, $uri, [], [], [], ['REQUEST_METHOD' => $method, 'REQUEST_URI' => $uri], []);
     }
 }
