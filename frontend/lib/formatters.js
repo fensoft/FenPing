@@ -25,6 +25,14 @@ export function formatActivityDuration(value) {
   return `${years}y ${days % 365}d`;
 }
 
+export function downActivityClass(status, value) {
+  if (!['Down', 'arp-down'].includes(status) || value === undefined || value === null) return '';
+  const seconds = Math.max(0, Math.floor(Number(value || 0)));
+  if (seconds < 7 * 86400) return 'activity-down-under-week';
+  if (seconds < 30 * 86400) return 'activity-down-under-month';
+  return 'activity-down-over-month';
+}
+
 export function formatBytes(value) {
   const bytes = Number(value || 0);
   if (bytes < 1024) return `${bytes} B`;

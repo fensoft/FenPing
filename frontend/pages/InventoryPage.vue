@@ -60,7 +60,7 @@
         <tbody>
           <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 7 : 6">{{ t('Loading') }}</td></tr>
           <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 7 : 6">{{ t('No hosts') }}</td></tr>
-          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter.prevent="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
+          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), row.type === 'host' ? downActivityClass(row.host.status, row.host?.stability?.current_seconds) : '', { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter.prevent="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
             <template v-if="row.type === 'category'">
               <td><button class="btn category-toggle" type="button" :title="t(row.collapsed ? 'Open category' : 'Close category')" :aria-label="t(row.collapsed ? 'Open category' : 'Close category')" @click="toggleCategory(row.categoryKey)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" /></button></td>
               <td class="category-name" colspan="5"><span class="category-title">{{ row.name }}</span><span class="category-summary">{{ row.total }} {{ t(row.total === 1 ? 'device' : 'devices') }} <span aria-hidden="true">·</span> {{ row.online }} {{ t('online') }}</span></td>
@@ -122,7 +122,7 @@ import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
-import { formatActivityDuration, formatMac, formatServerDate, parseServerDate, scanCanCancel, scanIsActiveState, scanProgressLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
+import { downActivityClass, formatActivityDuration, formatMac, formatServerDate, parseServerDate, scanCanCancel, scanIsActiveState, scanProgressLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({

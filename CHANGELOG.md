@@ -19,6 +19,7 @@ Development after the 1.7 tag.
 
 - Inventory now shows the actual duration of the current Down state instead of capping it at the seven-day uptime-analysis window.
 - Inventory balances desktop columns across Device, Vendor, IP, Activity, and Services and formats activity older than 365 days as years plus remaining days.
+- Down rows use progressively darker gray text after one week and one month; backgrounds remain red only for important Down rows.
 
 ## [1.7] - 2026-07-16
 

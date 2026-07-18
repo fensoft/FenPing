@@ -25,7 +25,17 @@ test('shows the full desktop inventory layout without overflow', async ({ page }
   expect(Math.abs(ipBox.width - activityBox.width)).toBeLessThan(2);
   expect(Math.abs(ipBox.width - servicesBox.width)).toBeLessThan(2);
   expect(deviceBox.width).toBeGreaterThan(ipBox.width);
-  await expect(page.getByText('Down 2y 42d', { exact: true })).toBeVisible();
+  const oldDownActivity = page.getByText('Down 2y 42d', { exact: true });
+  await expect(oldDownActivity).toBeVisible();
+  const oldDownRow = page.locator('tr.inventory-host-row').filter({ hasText: 'Office printer' });
+  await expect(oldDownRow).toHaveClass(/activity-down-over-month/);
+  await expect(oldDownRow.locator('td').first()).toHaveCSS('color', 'rgb(31, 41, 55)');
+  await expect(oldDownRow.locator('td').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  const recentDownRow = page.locator('tr.inventory-host-row').filter({ hasText: 'Lobby camera' });
+  await expect(recentDownRow).toHaveClass(/activity-down-under-week/);
+  await expect(recentDownRow.locator('td').first()).toHaveCSS('color', 'rgb(107, 114, 128)');
+  await expect(recentDownRow.locator('td').first()).toHaveCSS('background-color', 'rgb(255, 246, 246)');
+  await expect(page.locator('tr.inventory-host-row').filter({ hasText: 'Gateway' })).not.toHaveClass(/activity-down-/);
   await expect(page.locator('.inventory-mobile-meta').first()).toBeHidden();
   await expectNoHorizontalOverflow(page);
 });

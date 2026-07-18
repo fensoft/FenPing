@@ -64,6 +64,7 @@ function seedHosts() {
       web: 0,
       dhcp_managed: 0,
       network_is_dhcp: 1,
+      stability: { current_seconds: 3 * 24 * 60 * 60 },
       scan: null
     }
   ];

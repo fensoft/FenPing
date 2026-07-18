@@ -1233,6 +1233,18 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   width: 17%;
 }
 
+.inventory-host-row.activity-down-under-week > td {
+  color: #6b7280;
+}
+
+.inventory-host-row.activity-down-under-month > td {
+  color: #4b5563;
+}
+
+.inventory-host-row.activity-down-over-month > td {
+  color: #1f2937;
+}
+
 .col-actions {
   width: 6.25rem;
 }
@@ -2165,6 +2177,18 @@ html[data-bs-theme='dark'] .inventory-summary {
 
 html[data-bs-theme='dark'] .inventory-summary strong {
   color: #e4eaf2;
+}
+
+html[data-bs-theme='dark'] .inventory-host-row.activity-down-under-week > td {
+  color: #b0b0b0;
+}
+
+html[data-bs-theme='dark'] .inventory-host-row.activity-down-under-month > td {
+  color: #919191;
+}
+
+html[data-bs-theme='dark'] .inventory-host-row.activity-down-over-month > td {
+  color: #737373;
 }
 
 html[data-bs-theme='dark'] .category-toggle {
