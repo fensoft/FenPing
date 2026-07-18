@@ -13,6 +13,7 @@ final readonly class DnsmasqManager
     public const DNSMASQ_DHCP_HOSTS = '/etc/dnsmasq.d/fenping.dhcp-hosts';
     public const DNSMASQ_DHCP_OPTS = '/etc/dnsmasq.d/fenping.dhcp-opts';
     public const DNSMASQ_HOSTS = '/etc/dnsmasq.d/fenping.hosts';
+    public const DNSMASQ_DNS_OVERRIDES = '/etc/dnsmasq.d/fenping.dns-overrides';
     public const DNSMASQ_PID = '/var/run/dnsmasq.pid';
     public const DNSMASQ_RELOAD_SIGNAL = 1;
     public const DNSMASQ_UPDATE_LOCK = '/tmp/fenping-dnsmasq-update.lock';
@@ -25,7 +26,8 @@ public function dnsmasqGeneratedFiles(): array {
   return array(
     'dhcpHosts' => array('candidate' => 'fenping.dhcp-hosts', 'live' => self::DNSMASQ_DHCP_HOSTS),
     'dhcpOptions' => array('candidate' => 'fenping.dhcp-opts', 'live' => self::DNSMASQ_DHCP_OPTS),
-    'dnsHosts' => array('candidate' => 'fenping.hosts', 'live' => self::DNSMASQ_HOSTS)
+    'dnsHosts' => array('candidate' => 'fenping.hosts', 'live' => self::DNSMASQ_HOSTS),
+    'customDns' => array('candidate' => 'fenping.dns-overrides', 'live' => self::DNSMASQ_DNS_OVERRIDES),
   );
 }
 
@@ -79,7 +81,7 @@ public function applyDnsmasqCandidate(string $dir): void {
 }
 
 public function validateGeneratedDnsmasqFiles(array $files): void {
-  foreach (array('dhcpHosts', 'dhcpOptions', 'dnsHosts') as $key) {
+  foreach (array('dhcpHosts', 'dhcpOptions', 'dnsHosts', 'customDns') as $key) {
     if (!array_key_exists($key, $files) || !is_string($files[$key]))
       throw new RuntimeException("missing generated dnsmasq data: $key");
     if (strlen($files[$key]) > 4 * 1024 * 1024 || strpos($files[$key], "\0") !== false)
@@ -109,6 +111,30 @@ public function validateGeneratedDnsmasqFiles(array $files): void {
       if (preg_match('/^[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+)*$/', $name) !== 1)
         throw new RuntimeException('invalid generated DNS name');
     }
+  }
+
+  foreach ($this->generatedDnsmasqLines($files['customDns']) as $line) {
+    if (preg_match('/^host-record=([a-z0-9.-]+(?:,[a-z0-9.-]+)*),(\d{1,3}(?:\.\d{1,3}){3})$/', $line, $matches) === 1) {
+      $this->validator->ip($matches[2], true);
+      foreach (explode(',', $matches[1]) as $name)
+        $this->validateDnsOverrideName($name);
+      continue;
+    }
+    if (preg_match('/^cname=([a-z0-9.-]+),([a-z0-9.-]+)$/', $line, $matches) === 1) {
+      $this->validateDnsOverrideName($matches[1]);
+      $this->validateDnsOverrideName($matches[2]);
+      continue;
+    }
+    throw new RuntimeException('invalid generated DNS override');
+  }
+}
+
+private function validateDnsOverrideName(string $name): void {
+  if (strlen($name) > 253)
+    throw new RuntimeException('invalid generated DNS override name');
+  foreach (explode('.', $name) as $label) {
+    if (strlen($label) > 63 || preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/', $label) !== 1)
+      throw new RuntimeException('invalid generated DNS override name');
   }
 }
 
@@ -177,7 +203,7 @@ public function ensureDnsmasqCandidateDir(string $dir): void {
 }
 
 public function clearDnsmasqCandidateDir(string $dir): void {
-  foreach (array('fenping.dhcp-hosts', 'fenping.dhcp-opts', 'fenping.hosts', 'fenping.conf') as $name)
+  foreach (array('fenping.dhcp-hosts', 'fenping.dhcp-opts', 'fenping.hosts', 'fenping.dns-overrides', 'fenping.conf') as $name)
     @unlink($dir . '/' . $name);
 }
 

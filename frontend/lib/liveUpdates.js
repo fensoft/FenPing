@@ -9,6 +9,7 @@ export const liveUpdateScopes = Object.freeze([
   'operations',
   'networks',
   'vendors',
+  'dns',
   'all'
 ]);
 

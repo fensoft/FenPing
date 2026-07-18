@@ -2877,3 +2877,63 @@ html[data-bs-theme='dark'] .topology-node-meta { fill: #aeb8c5; }
   .topology-toolbar .btn-group { align-self: flex-start; }
   .topology-canvas { height: 420px; }
 }
+.dns-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dns-header h2 { margin-bottom: .15rem; }
+
+.dns-workspace {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  min-height: 34rem;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  overflow: hidden;
+  background: var(--tblr-bg-surface);
+}
+
+.dns-group-list {
+  border-inline-end: 1px solid var(--tblr-border-color);
+  background: var(--tblr-bg-surface-secondary);
+  overflow-y: auto;
+}
+
+.dns-group-item {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--tblr-border-color);
+  padding: .8rem .9rem;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  text-align: start;
+}
+
+.dns-group-item:hover, .dns-group-item.active { background: var(--tblr-active-bg); }
+.dns-group-item.active { box-shadow: inset 3px 0 var(--tblr-primary); }
+[dir="rtl"] .dns-group-item.active { box-shadow: inset -3px 0 var(--tblr-primary); }
+.dns-group-item span:first-child { min-width: 0; }
+.dns-group-item strong, .dns-group-item small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dns-group-item small { color: var(--tblr-secondary); margin-top: .15rem; }
+
+.dns-editor { padding: 1rem; min-width: 0; }
+.dns-editor-toolbar { display: flex; align-items: end; gap: 1rem; margin-bottom: 1rem; }
+.dns-editor-label { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .4rem; }
+.dns-records-editor { min-height: 23rem; resize: vertical; font-family: var(--tblr-font-monospace); font-size: .85rem; line-height: 1.5; tab-size: 2; }
+.dns-editor-actions { display: flex; align-items: center; gap: .5rem; margin-top: 1rem; }
+.dns-editor-empty { display: grid; place-items: center; padding: 2rem; text-align: center; }
+
+@media (max-width: 767.98px) {
+  .dns-header { align-items: flex-start; }
+  .dns-workspace { grid-template-columns: 1fr; }
+  .dns-group-list { border-inline-end: 0; border-bottom: 1px solid var(--tblr-border-color); max-height: 14rem; }
+  .dns-editor-toolbar { align-items: stretch; flex-direction: column; }
+}

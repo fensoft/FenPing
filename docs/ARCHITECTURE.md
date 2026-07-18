@@ -124,6 +124,7 @@ Important tables:
 - `scan_snapshot_*`: normalized scan scopes, addresses, hostnames, ports/CPEs, closed-port summaries, OS matches/classes/CPEs, NSE scripts and structured script nodes, and traceroute hops.
 - `scan_port_changes`: appeared, disappeared, and service/version-change events linked to the scan that observed them.
 - `netboot_images`: uploaded netboot file metadata.
+- `dns_override_groups`: named, enableable hosts-file/CNAME documents compiled into validated dnsmasq configuration.
 - `users`: legacy table still present in schema.
 
 `DatabaseManager::initialize()` creates a version-zero database from the current `db.sql`. For an older nonzero database, it requires every sequential `NNNN_description.sql` file through `DatabaseManager::SCHEMA_VERSION` and applies each file in its own `BEGIN IMMEDIATE` transaction. The framework advances `PRAGMA user_version` only after the SQL succeeds, so a failed migration rolls back both schema/data changes and the version. Migration files must not manage transactions or set `user_version` themselves.
@@ -201,6 +202,8 @@ The Docker network cache also retains verified network name, container name, and
 `php cli.php hosts` always validates candidate files with `dnsmasq --test`, atomically replaces the generated files, and reloads/starts local dnsmasq. If replacement or reload fails, it restores the previous files.
 
 Host create, edit, and delete requests hold a shared dnsmasq update lock and an immediate SQLite transaction while generating and testing a candidate configuration. Metadata and complete tag replacement participate in the same host-edit transaction. The candidate is applied before the SQL commit; an apply failure rolls back SQL, while a commit failure regenerates dnsmasq from the committed database state. Netboot image deletion uses the same path because it clears per-host boot assignments. Host names, MAC addresses, router octets, DNS server addresses, IP addresses, netboot filenames, and curated icon slugs are validated before storage or rendering.
+
+DNS override group create, edit, enable/disable, and delete operations use the same `MutationCoordinator`. `DnsOverrideParser` accepts hosts-file-style IPv4 lines and explicit `CNAME alias target` lines, rejects duplicate owners and alias cycles across enabled groups, and requires every CNAME chain to end at a record known locally to dnsmasq. Custom owners suppress same-named generated host entries. The rendered `/etc/dnsmasq.d/fenping.dns-overrides` file is included in candidate validation and atomic apply/recovery.
 
 Promotion to a DHCP host copies metadata, tags, and scan cadence and removes the matching discovery record inside the dnsmasq-coordinated transaction, so an apply failure restores the source metadata as well.
 

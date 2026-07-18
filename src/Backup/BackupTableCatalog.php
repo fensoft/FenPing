@@ -8,7 +8,7 @@ final readonly class BackupTableCatalog
 {
 public function backupTableNames(): array {
   return array(
-    'device_approvals', 'netboot_images', 'ips', 'tags', 'inventory_saved_filters',
+    'device_approvals', 'netboot_images', 'dns_override_groups', 'ips', 'tags', 'inventory_saved_filters',
     'inventory_device_metadata', 'host_tags', 'inventory_saved_filter_tags',
     'inventory_device_tags', 'leases', 'oui_vendors',
     'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',

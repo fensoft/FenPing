@@ -12,6 +12,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 - Status tracking with `Up`, `Down`, `arp`, and `arp-down` states.
 - Stability, host history, and a 24-hour notify view.
 - Static DHCP/DNS host management through dnsmasq.
+- Named DNS override groups with hosts-file import, enable/disable controls, IPv4 records, and local CNAME aliases.
 - Transactional DHCP lease history with stable first-seen and last-seen timestamps.
 - Device onboarding with reversible MAC approval and DHCP pool utilization tracking.
 - Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
@@ -147,6 +148,18 @@ Important `.env` values:
 Discord and Telegram use the same persisted delivery rules. The Notifications modal controls restarts, IP conflicts, and separate Normal/Important host-status and service-change switches. Telegram chat destinations are discovered through the Bot API's `getUpdates` method and selected in that modal; only authenticated administrators can retrieve chat/user details. The bot token and Discord settings remain environment-only, and Telegram destination IDs, bot fingerprints, and discovered user metadata are excluded from backups.
 
 Managed hosts require a valid IPv4 address and six-octet MAC address. Host names are optional; when set, they must contain one DNS label using letters, numbers, and internal hyphens. Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
+
+The **DNS** page manages override groups separately from DHCP reservations. Each group is editable as plain text and can be enabled or disabled as a unit. Blank lines and comments beginning with `#` are ignored. IPv4 records use hosts-file syntax, and aliases use an explicit CNAME form:
+
+```text
+# One address can own one or more names
+192.168.1.20 printer.example.test printer
+
+# The target must be a local FenPing or enabled custom record
+CNAME print.example.test printer.example.test
+```
+
+Enabled groups are compiled into dnsmasq configuration and syntax-tested inside the same database/configuration transaction used by DHCP mutations. A custom record replaces the generated FenPing record for the same name instead of adding a second address. Dnsmasq cannot point a local CNAME directly at a target learned only from an upstream resolver, so FenPing rejects such targets rather than allowing a silently ignored alias.
 
 ## Startup Doctor
 

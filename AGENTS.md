@@ -39,6 +39,7 @@ Do not add a separate database service or split dnsmasq into another container u
 - `src/Scan/`: profiles, XML codec, queue/snapshot repositories, results, port changes, and retention.
 - `src/Inventory/`, `src/Host/`, `src/Status/`, `src/Netboot/`, `src/Ipam/`: application domain services.
 - `src/Dhcp/`, `src/Backup/`, `src/Oui/`, `src/Ping/`, `src/Discord/`, `src/Health/`: operational services.
+- `src/Dns/`: DNS override text parsing, cross-group validation, and group persistence.
 - `src/Backend/`: class-owned behavior modules composed by the injected `Backend`; production code contains no procedural compatibility layer.
 - `db.sql`: canonical idempotent SQLite schema for new databases, tracked with `PRAGMA user_version`.
 - `migrations/`: immutable sequential SQLite upgrades for existing nonzero schema versions.
@@ -91,7 +92,7 @@ Routes are converted to typed `Route` objects and dispatched by `src/Api/ApiKern
 
 Guest mode is read-only. Mutating routes require authenticated session/body auth.
 
-Host and netboot mutations that affect dnsmasq must go through `FenPing\Dhcp\MutationCoordinator` so database changes and generated configuration stay coordinated. Do not write DHCP fields without `FenPing\Dhcp\HostValidator`.
+Host, netboot, and DNS override mutations that affect dnsmasq must go through `FenPing\Dhcp\MutationCoordinator` so database changes and generated configuration stay coordinated. Do not write DHCP fields without `FenPing\Dhcp\HostValidator`.
 
 ## Tests Before Commit
 
@@ -136,6 +137,7 @@ If PHP or Node is unavailable on the host, run syntax checks inside the containe
 - Lease imports must retain the `(hardware-ethernet, ip)` history and use the staging/upsert transaction in `dnsmasq.leases.php`; do not restore truncate-and-reinsert behavior.
 - Automatic inventory discovery must honor each managed host's `scan_profile` and `scan_interval_hours`; manual API/CLI scans intentionally bypass cadence.
 - dnsmasq generation happens through `php cli.php hosts`.
+- DNS override groups use hosts-file IPv4 lines or `CNAME alias target`; enabled CNAME chains must end at a name known locally to dnsmasq.
 - Cron is inside the container; do not look for Ofelia.
 - Avoid full `/24` inventory scans unless the user accepts LAN scan traffic.
 - Keep locale catalogs aligned with `frontend/locales/README.md`; `npm test` enforces key and placeholder parity.

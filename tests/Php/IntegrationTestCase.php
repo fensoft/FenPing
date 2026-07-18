@@ -34,7 +34,7 @@ abstract class IntegrationTestCase extends TestCase
                 'notification_delivery_settings',
                 'inventory_device_tags', 'inventory_saved_filter_tags', 'host_tags',
                 'inventory_device_metadata', 'inventory_saved_filters', 'tags',
-                'stats', 'ping', 'ips', 'range', 'netboot_images',
+                'stats', 'ping', 'ips', 'range', 'netboot_images', 'dns_override_groups',
             ] as $table) {
                 $pdo->exec('DELETE FROM ' . $table);
             }

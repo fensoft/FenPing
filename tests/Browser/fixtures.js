@@ -169,6 +169,16 @@ function createApi() {
       retention_roles: ['daily'],
       download_url: '/api/backups/fenping-daily-20260714-022300.tgz/file'
     }],
+    dnsGroups: [{
+      id: 1,
+      name: 'Lab services',
+      enabled: true,
+      contents: '192.0.2.20 printer.test printer',
+      record_count: 1,
+      created_at: '2026-07-14 10:00:00',
+      updated_at: '2026-07-14 10:00:00'
+    }],
+    nextDnsGroupId: 2,
     nextScanId: 100
   };
   const requests = [];
@@ -234,6 +244,48 @@ async function handleApi(route, api) {
 
   if (method === 'GET' && path === '/api/topology') {
     await fulfillJson(route, topologyPayload());
+    return;
+  }
+
+  if (method === 'GET' && path === '/api/dns/groups') {
+    await fulfillJson(route, { groups: clone(api.state.dnsGroups) });
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/dns/groups') {
+    const group = {
+      id: api.state.nextDnsGroupId++,
+      name: body?.name || '',
+      enabled: Boolean(body?.enabled),
+      contents: body?.contents || '',
+      record_count: String(body?.contents || '').split(/\r?\n/).filter(line => line.trim() && !line.trim().startsWith('#')).length,
+      created_at: '2026-07-14 10:00:00',
+      updated_at: '2026-07-14 10:00:00'
+    };
+    api.state.dnsGroups.push(group);
+    await fulfillJson(route, { group: clone(group), log: 'dnsmasq reloaded' });
+    return;
+  }
+
+  const dnsGroupMatch = path.match(/^\/api\/dns\/groups\/(\d+)$/);
+  if (method === 'PUT' && dnsGroupMatch) {
+    const group = api.state.dnsGroups.find(candidate => Number(candidate.id) === Number(dnsGroupMatch[1]));
+    if (!group) { await fulfillJson(route, { error: 'DNS group not found' }, 404); return; }
+    Object.assign(group, clone(body), {
+      id: group.id,
+      enabled: Boolean(body?.enabled),
+      record_count: String(body?.contents || '').split(/\r?\n/).filter(line => line.trim() && !line.trim().startsWith('#')).length,
+      updated_at: '2026-07-14 10:01:00'
+    });
+    await fulfillJson(route, { group: clone(group), log: 'dnsmasq reloaded' });
+    return;
+  }
+
+  if (method === 'DELETE' && dnsGroupMatch) {
+    const index = api.state.dnsGroups.findIndex(candidate => Number(candidate.id) === Number(dnsGroupMatch[1]));
+    if (index === -1) { await fulfillJson(route, { error: 'DNS group not found' }, 404); return; }
+    api.state.dnsGroups.splice(index, 1);
+    await fulfillJson(route, { deleted: true, log: 'dnsmasq reloaded' });
     return;
   }
 

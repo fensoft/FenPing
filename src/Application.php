@@ -5,16 +5,7 @@ declare(strict_types=1);
 namespace FenPing;
 
 use FenPing\Api\ApiKernel;
-use FenPing\Api\Controller\BackupController;
-use FenPing\Api\Controller\DoctorController;
-use FenPing\Api\Controller\DockerNetworksController;
-use FenPing\Api\Controller\AuthController;
-use FenPing\Api\Controller\HostController;
-use FenPing\Api\Controller\IpamController;
-use FenPing\Api\Controller\NetbootController;
-use FenPing\Api\Controller\ScanController;
-use FenPing\Api\Controller\SystemController;
-use FenPing\Api\Controller\TopologyController;
+use FenPing\Api\Controller\{AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, HostController, IpamController, NetbootController, ScanController, SystemController, TopologyController};
 use FenPing\Auth\AuthService;
 use FenPing\Backup\BackupService;
 use FenPing\Backup\BackupArchiveService;
@@ -54,6 +45,8 @@ use FenPing\Dhcp\DnsmasqManager;
 use FenPing\Dhcp\LeaseImporter;
 use FenPing\Dhcp\HostValidator;
 use FenPing\Dhcp\MutationCoordinator;
+use FenPing\Dns\DnsOverrideGroupService;
+use FenPing\Dns\DnsOverrideParser;
 use FenPing\Doctor\DoctorService;
 use FenPing\Doctor\NativeDoctorSystem;
 use FenPing\Doctor\ProcessDoctorReportProvider;
@@ -137,6 +130,7 @@ final class Application
     private readonly HostValidator $hostValidator;
     private readonly ConfigManager $dhcpConfig;
     private readonly MutationCoordinator $dhcpMutations;
+    private readonly DnsOverrideGroupService $dnsOverrideGroups;
     private readonly LeaseImporter $leaseImporter;
     private readonly NetworkManager $networks;
     private readonly IpConflictRepository $ipConflicts;
@@ -214,7 +208,9 @@ final class Application
         $this->operations = new OperationTracker($this->database, $clock, $this->liveUpdates);
         $this->hostValidator = new HostValidator($this->networks);
         $dnsmasq = new DnsmasqManager($this->hostValidator);
-        $renderer = new ConfigRenderer($config, $this->database, $this->hostValidator);
+        $dnsOverrideParser = new DnsOverrideParser();
+        $this->dnsOverrideGroups = new DnsOverrideGroupService($this->database, $dnsOverrideParser);
+        $renderer = new ConfigRenderer($config, $this->database, $this->hostValidator, $dnsOverrideParser);
         $this->dhcpConfig = new ConfigManager($config, $renderer, $dnsmasq, $this->operations);
         $this->dhcpMutations = new MutationCoordinator($this->database, $this->dhcpConfig, $dnsmasq, $this->operations);
         $this->leaseImporter = new LeaseImporter($this->database, $this->liveUpdates);
@@ -295,6 +291,7 @@ final class Application
         return new ApiKernel($this->auth, [
             new DoctorController(new ProcessDoctorReportProvider($this->config, $this->processes)),
             new DockerNetworksController(new PrivilegedDockerNetworkRefreshGateway($this->processes, $this->config->projectDir)),
+            new DnsOverrideController($this->dnsOverrideGroups, $mutations),
             new AuthController($this->auth),
             new SystemController(
                 $this->config,
@@ -365,6 +362,7 @@ final class Application
     public function hostMetadataNormalizer(): HostMetadataNormalizer { return $this->hostMetadataNormalizer; }
     public function dhcpConfig(): ConfigManager { return $this->dhcpConfig; }
     public function dhcpMutations(): MutationCoordinator { return $this->dhcpMutations; }
+    public function dnsOverrideGroups(): DnsOverrideGroupService { return $this->dnsOverrideGroups; }
     public function inventoryScanner(): InventoryScanner { return $this->inventoryScanner; }
     public function discord(): DiscordNotifier { return $this->discord; }
     public function notificationRules(): NotificationRuleRepository { return $this->notificationRules; }

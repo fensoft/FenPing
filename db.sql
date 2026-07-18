@@ -9,6 +9,15 @@ CREATE TABLE IF NOT EXISTS netboot_images (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS dns_override_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT COLLATE NOCASE NOT NULL UNIQUE,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  contents TEXT NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS ips (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT COLLATE NOCASE UNIQUE,
@@ -452,4 +461,4 @@ CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scrip
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
 CREATE INDEX IF NOT EXISTS operation_failures_operation_time ON operation_failures (operation, failed_at);
 
-PRAGMA user_version = 9;
+PRAGMA user_version = 10;

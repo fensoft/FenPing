@@ -11,7 +11,7 @@ use Throwable;
 
 final class DatabaseManager
 {
-    public const SCHEMA_VERSION = 9;
+    public const SCHEMA_VERSION = 10;
     private const BUSY_TIMEOUT_MS = 30000;
 
     private ?PDO $connection = null;
@@ -104,6 +104,9 @@ final class DatabaseManager
         $missingInventoryMetadata = $this->missingInventoryDeviceMetadataTables();
         if ($missingInventoryMetadata !== []) {
             throw new RuntimeException('database schema version 9 is missing tables: ' . implode(', ', $missingInventoryMetadata));
+        }
+        if (!$this->tableExists('dns_override_groups')) {
+            throw new RuntimeException('database schema version 10 is missing table: dns_override_groups');
         }
     }
 

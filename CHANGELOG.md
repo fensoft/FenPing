@@ -8,6 +8,10 @@ Release dates use the corresponding Git tag dates. Application and Docker develo
 
 Development after the 1.7 tag.
 
+### Added
+
+- Added named DNS override groups with text-file import, hosts-file IPv4 records, local CNAME aliases, enable/disable controls, transactional dnsmasq validation, live UI updates, and portable backup support.
+
 ## [1.7] - 2026-07-16
 
 Development after the 1.6 tag through 2026-07-16.

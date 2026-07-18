@@ -21,6 +21,7 @@ enable-tftp
 tftp-root=/var/lib/fenping/netboot
 
 addn-hosts=/etc/dnsmasq.d/fenping.hosts
+conf-file=/etc/dnsmasq.d/fenping.dns-overrides
 pid-file=/var/run/dnsmasq.pid
 user=root
 quiet-dhcp

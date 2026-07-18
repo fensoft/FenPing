@@ -325,6 +325,8 @@ final class ApiKernelTest extends IntegrationTestCase
         );
         $expected = [
             'GET /doctor session ', 'POST /networks/refresh guest ',
+            'GET /dns/groups guest ', 'POST /dns/groups session dns',
+            'PUT /dns/groups/{id:int} session dns', 'DELETE /dns/groups/{id:int} session dns',
             'GET /auth/session guest ', 'POST /auth/login guest ', 'POST /auth/logout guest ',
             'GET /health guest ', 'GET /health/live guest ', 'GET /health/ready guest ',
             'GET /inventory guest ', 'PUT /inventory/device-metadata body hosts',

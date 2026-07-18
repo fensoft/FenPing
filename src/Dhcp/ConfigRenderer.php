@@ -6,6 +6,7 @@ namespace FenPing\Dhcp;
 
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
+use FenPing\Dns\DnsOverrideParser;
 use PDO;
 
 final readonly class ConfigRenderer
@@ -14,6 +15,7 @@ final readonly class ConfigRenderer
         private AppConfig $config,
         private DatabaseManager $database,
         private HostValidator $validator,
+        private DnsOverrideParser $dnsOverrides,
     ) {
     }
 
@@ -21,7 +23,7 @@ public function buildDnsmasqFiles(): array {
   $applianceIp = $this->validator->ip($this->config->applianceIp ?? '', true);
   $dhcpHosts = array();
   $dhcpOptions = array();
-  $dnsHosts = array($applianceIp . ' lan fenping fenping.lan');
+  $dnsHostRecords = array(array('ip' => $applianceIp, 'names' => array('lan', 'fenping', 'fenping.lan')));
 
   $stmt = $this->database->connection()->query("
     SELECT
@@ -48,7 +50,7 @@ public function buildDnsmasqFiles(): array {
     $tag = $this->hostTag($ip);
 
     if ($name !== '')
-      $dnsHosts[] = $ip . ' ' . $this->dnsNames($name);
+      $dnsHostRecords[] = array('ip' => $ip, 'names' => array($name, $name . '.lan'));
 
     if ($mac !== '') {
       $reservation = array($mac, "set:$tag", $ip);
@@ -74,13 +76,30 @@ public function buildDnsmasqFiles(): array {
 
   for ($i = 1; $i <= 255; $i++) {
     $ip = $this->validator->ip(($this->config->network ?? '') . '.' . $i, true);
-    $dnsHosts[] = "$ip _$i _$i.lan @$i @$i.lan ip$i ip$i.lan";
+    $dnsHostRecords[] = array('ip' => $ip, 'names' => array("_$i", "_$i.lan", "@$i", "@$i.lan", "ip$i", "ip$i.lan"));
+  }
+
+  $groups = $this->database->connection()->query(
+    'SELECT id, name, enabled, contents FROM dns_override_groups ORDER BY name COLLATE NOCASE, id'
+  )->fetchAll(PDO::FETCH_ASSOC);
+  $baseNames = array_merge(...array_map(static fn(array $record): array => $record['names'], $dnsHostRecords));
+  $customDns = $this->dnsOverrides->compile($groups, $baseNames);
+  $overridden = array_fill_keys($customDns['owned_names'], true);
+  $dnsHosts = array();
+  foreach ($dnsHostRecords as $record) {
+    $names = array_values(array_filter(
+      $record['names'],
+      static fn(string $name): bool => !isset($overridden[strtolower($name)])
+    ));
+    if ($names !== array())
+      $dnsHosts[] = $record['ip'] . ' ' . implode(' ', $names);
   }
 
   return array(
     'dhcpHosts' => $this->lines($dhcpHosts),
     'dhcpOptions' => $this->lines($dhcpOptions),
-    'dnsHosts' => $this->lines($dnsHosts)
+    'dnsHosts' => $this->lines($dnsHosts),
+    'customDns' => $customDns['config'],
   );
 }
 
