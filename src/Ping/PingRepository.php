@@ -33,6 +33,33 @@ final class PingRepository
         $this->liveUpdates->publish(LiveUpdateScope::Status);
     }
 
+    /**
+     * @param list<string> $ips
+     * @return array<string, string>
+     */
+    public function statusesByIp(array $ips): array
+    {
+        $ips = array_values(array_unique(array_filter(
+            $ips,
+            static fn(mixed $ip): bool => is_string($ip) && $ip !== '',
+        )));
+        if ($ips === []) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($ips), '?'));
+        $statement = $this->database->connection()->prepare(
+            "SELECT ip, status FROM ping WHERE ip IN ($placeholders)",
+        );
+        $statement->execute($ips);
+
+        $statuses = [];
+        while (($row = $statement->fetch(PDO::FETCH_ASSOC)) !== false) {
+            $statuses[(string) $row['ip']] = (string) ($row['status'] ?? '');
+        }
+        return $statuses;
+    }
+
     private function statements(): array
     {
         if ($this->statements !== null) {

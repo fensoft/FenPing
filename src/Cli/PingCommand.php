@@ -10,16 +10,18 @@ use FenPing\Ipam\IpConflictScanner;
 use FenPing\Ipam\IpConflictService;
 use FenPing\Network\NetworkManager;
 use FenPing\Ping\PingRepository;
-use FenPing\Ping\PingScanner;
+use FenPing\Ping\PingScannerGateway;
 use FenPing\Status\NotificationService;
 use Throwable;
 
 final readonly class PingCommand implements Command
 {
+    private const DOWN_RETRY_ATTEMPTS = 3;
+
     public function __construct(
         private AppConfig $config,
         private NetworkManager $networks,
-        private PingScanner $scanner,
+        private PingScannerGateway $scanner,
         private PingRepository $repository,
         private NotificationService $notifications,
         private DiscordNotifier $discord,
@@ -79,10 +81,11 @@ public function run(array $args): int {
   else
     $this->notifications->sendIpConflictChanges($this->conflicts->transitionDetails($conflictScan['transitions']));
 
-  $hosts = $this->scanner->scan($targets, array_filter(array_unique(array(
+  $localIps = array_values(array_filter(array_unique(array(
     getenv('IP') ?: '',
     $this->config->applianceIp ?? ''
   ))));
+  $hosts = $this->verifiedHosts($targets, $localIps);
   $this->repository->save($hosts);
   $this->notifications->sendStatusChangesSince($notifyAfterId);
 
@@ -92,6 +95,34 @@ public function run(array $args): int {
   }
 
   return 0;
+}
+
+private function verifiedHosts(array $targets, array $localIps): array {
+  $previousStatuses = $this->repository->statusesByIp(array_values($targets));
+  $hosts = $this->scanner->scan($targets, $localIps);
+  $hostIndexes = array();
+  $retryTargets = array();
+
+  foreach ($hosts as $index => $host) {
+    $ip = (string)($host['ip'] ?? '');
+    $hostIndexes[$ip] = $index;
+    if (($previousStatuses[$ip] ?? null) === 'Up'
+        && (string)($host['status'] ?? '') !== 'Up')
+      $retryTargets[$ip] = $ip;
+  }
+
+  for ($attempt = 0; $attempt < self::DOWN_RETRY_ATTEMPTS && $retryTargets !== array(); $attempt++) {
+    foreach ($this->scanner->scan(array_values($retryTargets), $localIps) as $host) {
+      $ip = (string)($host['ip'] ?? '');
+      if (!isset($retryTargets[$ip]) || !isset($hostIndexes[$ip]))
+        continue;
+      $hosts[$hostIndexes[$ip]] = $host;
+      if ((string)($host['status'] ?? '') === 'Up')
+        unset($retryTargets[$ip]);
+    }
+  }
+
+  return $hosts;
 }
 
 }

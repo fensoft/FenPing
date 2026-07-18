@@ -17,7 +17,7 @@ use RuntimeException;
 use Throwable;
 use FenPing\Realtime\LiveUpdateScope;
 
-final readonly class PingScanner
+final readonly class PingScanner implements PingScannerGateway
 {
     public function __construct(private AppConfig $config)
     {

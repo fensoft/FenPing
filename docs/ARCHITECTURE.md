@@ -144,6 +144,7 @@ The `update_status` procedure appends to `stats` immediately when status/IP/MAC 
 - Raw ICMP sockets are used when available.
 - `/proc/net/arp` is read directly for MAC discovery.
 - `arping` helps distinguish `arp` from `arp-down`.
+- A host transitioning from `Up` to any non-`Up` status is scanned up to three more times before the final result is persisted and notifications are sent. Retry candidates are scanned together and stop retrying as soon as they return to `Up`.
 
 The inventory and scan services under `src/Inventory/` and `src/Scan/` perform discovery and queued nmap scans:
 
