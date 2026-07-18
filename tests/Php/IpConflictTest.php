@@ -174,7 +174,8 @@ final class IpConflictTest extends IntegrationTestCase
     public function testApiNotificationsDiscordAndBackupsExposeConflictData(): void
     {
         $network = $this->app()->config()->dhcpNetwork;
-        $this->app()->hosts()->create('192.0.2.60', '02:00:00:00:00:60');
+        $importantHostId = $this->app()->hosts()->create('192.0.2.60', '02:00:00:00:00:60');
+        $this->app()->database()->connection()->exec("UPDATE ips SET important=1 WHERE id=$importantHostId");
         $opened = $this->app()->ipConflicts()->reconcile($network, ['192.0.2.60' => [
             '02:00:00:00:00:60' => true,
             '02:00:00:00:00:61' => true,
@@ -194,6 +195,8 @@ final class IpConflictTest extends IntegrationTestCase
         $notifications = $this->app()->notifications()->recent();
         self::assertSame(1, $notifications['summary']['conflict_total']);
         self::assertSame('detected', $notifications['conflict_changes'][0]['type']);
+        self::assertSame(1, $notifications['conflict_changes'][0]['important']);
+        self::assertSame(1, $notifications['conflict_changes'][0]['devices'][0]['important']);
 
         $details = $this->app()->ipConflictService()->transitionDetails($opened);
         $payloads = $this->app()->discord()->discordIpConflictPayloads($details);

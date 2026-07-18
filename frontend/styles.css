@@ -490,6 +490,45 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   overflow: hidden;
 }
 
+.notification-filter-toolbar {
+  align-items: center;
+  background: var(--tblr-bg-surface, #fff);
+  border: 1px solid var(--tblr-border-color, #dce1e7);
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+  padding: 0.45rem;
+}
+
+.notification-page-size {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.notification-page-size .form-select {
+  min-width: 4.5rem;
+}
+
+.table-pagination {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+  padding: 0.4rem 0.15rem 0;
+}
+
+.pagination-position {
+  color: var(--tblr-secondary-color, #667085) !important;
+  cursor: default;
+  min-width: 7.5rem;
+  opacity: 1 !important;
+}
+
 .notify-summary-item {
   border-right: 1px solid #dce1e7;
   min-width: 6.25rem;
@@ -2389,6 +2428,15 @@ html[data-bs-theme='dark'] .scan-state-filtered {
   .filter-count {
     margin-left: 0;
     width: 100%;
+  }
+
+  .notification-page-size {
+    margin-inline-start: 0;
+  }
+
+  .table-pagination {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .netboot-header {

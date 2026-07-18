@@ -17,24 +17,44 @@
       </div>
     </div>
 
+    <div class="notification-filter-toolbar">
+      <fieldset v-for="group in filterGroups" :key="group.key" class="filter-segment">
+        <legend class="visually-hidden">{{ group.label }}</legend>
+        <div class="btn-group" role="group" :aria-label="group.label">
+          <template v-for="option in group.options" :key="option.value">
+            <input :id="`notification-filter-${group.key}-${option.value}`" v-model="filters[group.key]" class="btn-check" type="radio" :name="`notification-filter-${group.key}`" :value="option.value" autocomplete="off" />
+            <label class="btn btn-outline-secondary btn-sm" :for="`notification-filter-${group.key}-${option.value}`">{{ option.label }}</label>
+          </template>
+        </div>
+      </fieldset>
+      <label class="notification-page-size text-secondary small">
+        <span>{{ t('Rows per page') }}</span>
+        <select v-model.number="pageSize" class="form-select form-select-sm" :aria-label="t('Rows per page')">
+          <option v-for="size in pageSizes" :key="size" :value="size">{{ size }}</option>
+        </select>
+      </label>
+      <button v-if="hasActiveFilters" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Clear filters')" :aria-label="t('Clear filters')" @click="resetFilters"><AppIcon name="filter-x" /></button>
+    </div>
+
     <div class="notify-summary">
-      <div class="notify-summary-item"><span>{{ t('Total') }}</span><strong>{{ summary.total || 0 }}</strong></div>
-      <div class="notify-summary-item"><span>{{ t('Hosts') }}</span><strong>{{ summary.hosts || 0 }}</strong></div>
-      <div class="notify-summary-item"><span>{{ t('Services') }}</span><strong>{{ summary.port_total || 0 }}</strong></div>
-      <div class="notify-summary-item"><span>{{ t('IP conflicts') }}</span><strong>{{ summary.conflict_total || 0 }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('Total') }}</span><strong>{{ filteredSummary.total }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('Hosts') }}</span><strong>{{ filteredSummary.hosts }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('Services') }}</span><strong>{{ filteredSummary.port_total }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('IP conflicts') }}</span><strong>{{ filteredSummary.conflict_total }}</strong></div>
       <div v-for="item in statusCounts" :key="item.status" class="notify-summary-item">
         <span>{{ statusLabel(item.status) }}</span><strong>{{ item.count }}</strong>
       </div>
     </div>
 
+    <template v-if="typeVisible('conflicts')">
     <div class="notification-section-heading"><h3>{{ t('IP conflicts') }}</h3><span class="text-secondary small">{{ t('{count} conflict events', { count: conflictChanges.length }) }}</span></div>
     <div class="table-wrap">
       <table class="table table-sm notify-table conflict-table">
         <thead><tr><th>{{ t('Time') }}</th><th>IP</th><th>{{ t('Change') }}</th><th>{{ t('Devices') }}</th></tr></thead>
         <tbody>
           <tr v-if="loading && conflictChanges.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('Loading') }}</td></tr>
-          <tr v-else-if="!loading && conflictChanges.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('No IP conflict events in the last {hours}h', { hours: notify.hours || 24 }) }}</td></tr>
-          <tr v-for="change in conflictChanges" :key="change.event_id" :class="change.type === 'detected' ? 'table-danger' : ''">
+          <tr v-else-if="!loading && conflictChanges.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ hasActiveFilters ? t('No matching notifications') : t('No IP conflict events in the last {hours}h', { hours: notify.hours || 24 }) }}</td></tr>
+          <tr v-for="change in conflictPage.items" :key="change.event_id" :class="change.type === 'detected' ? 'table-danger' : ''">
             <td class="notify-time"><span>{{ formatNotifyDate(change.occurred_at) }}</span><small>{{ formatRelativeAge(change.occurred, now) }}</small></td>
             <td><strong class="font-monospace">{{ change.ip }}</strong><small class="d-block text-secondary">{{ change.network }}</small></td>
             <td><span class="badge" :class="change.type === 'resolved' ? 'bg-green-lt text-green' : 'bg-red-lt text-red'">{{ t(change.type === 'resolved' ? 'Resolved' : 'Detected') }}</span></td>
@@ -45,15 +65,18 @@
         </tbody>
       </table>
     </div>
+    <AppPagination :pagination="conflictPage" @update:page="pages.conflicts = $event" />
+    </template>
 
-    <div class="notification-section-heading"><h3>{{ t('Host status') }}</h3><span class="text-secondary small">{{ t('{count} changes', { count: summary.status_total || changes.length }) }}</span></div>
+    <template v-if="typeVisible('status')">
+    <div class="notification-section-heading"><h3>{{ t('Host status') }}</h3><span class="text-secondary small">{{ t('{count} changes', { count: changes.length }) }}</span></div>
     <div class="table-wrap">
       <table class="table table-sm notify-table">
         <thead><tr><th>{{ t('Time') }}</th><th>{{ t('Host') }}</th><th>{{ t('Change') }}</th><th>{{ t('Duration') }}</th></tr></thead>
         <tbody>
           <tr v-if="loading && changes.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('Loading') }}</td></tr>
-          <tr v-else-if="!loading && changes.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ t('No changes in the last {hours}h', { hours: notify.hours || 24 }) }}</td></tr>
-          <tr v-for="change in changes" :key="change.id" :class="{ 'important-down': change.important == 1 && change.status !== 'Up' }">
+          <tr v-else-if="!loading && changes.length === 0"><td class="text-secondary text-center py-4" colspan="4">{{ hasActiveFilters ? t('No matching notifications') : t('No changes in the last {hours}h', { hours: notify.hours || 24 }) }}</td></tr>
+          <tr v-for="change in statusPage.items" :key="change.id" :class="{ 'important-down': change.important == 1 && change.status !== 'Up' }">
             <td class="notify-time">
               <span>{{ formatNotifyDate(change.date_begin) }}</span>
               <small>{{ formatRelativeAge(change.begin, now) }}</small>
@@ -81,15 +104,18 @@
         </tbody>
       </table>
     </div>
+    <AppPagination :pagination="statusPage" @update:page="pages.status = $event" />
+    </template>
 
+    <template v-if="typeVisible('services')">
     <div class="notification-section-heading"><h3>{{ t('Services') }}</h3><span class="text-secondary small">{{ t('{count} changes', { count: portChanges.length }) }}</span></div>
     <div class="table-wrap">
       <table class="table table-sm notify-table service-change-table">
         <thead><tr><th>{{ t('Time') }}</th><th>{{ t('Host') }}</th><th>{{ t('Port') }}</th><th>{{ t('Change') }}</th><th>{{ t('Service') }}</th><th>{{ t('Scan') }}</th></tr></thead>
         <tbody>
           <tr v-if="loading && portChanges.length === 0"><td class="text-secondary text-center py-4" colspan="6">{{ t('Loading') }}</td></tr>
-          <tr v-else-if="!loading && portChanges.length === 0"><td class="text-secondary text-center py-4" colspan="6">{{ t('No service changes in the last {hours}h', { hours: notify.hours || 24 }) }}</td></tr>
-          <tr v-for="change in portChanges" :key="`port-${change.id}`" :class="{ 'important-down': change.important == 1 && change.change_type === 'disappeared' }">
+          <tr v-else-if="!loading && portChanges.length === 0"><td class="text-secondary text-center py-4" colspan="6">{{ hasActiveFilters ? t('No matching notifications') : t('No service changes in the last {hours}h', { hours: notify.hours || 24 }) }}</td></tr>
+          <tr v-for="change in servicePage.items" :key="`port-${change.id}`" :class="{ 'important-down': change.important == 1 && change.change_type === 'disappeared' }">
             <td class="notify-time"><span>{{ formatNotifyDate(change.created_at) }}</span><small>{{ formatRelativeAge(change.created, now) }}</small></td>
             <td class="notify-host">
               <button class="btn btn-link btn-sm p-0 notify-host-name" type="button" @click="$emit('open-scan', change.ip, change.scan_id)">{{ hostName(change) }}</button>
@@ -112,6 +138,8 @@
         </tbody>
       </table>
     </div>
+    <AppPagination :pagination="servicePage" @update:page="pages.services = $event" />
+    </template>
     <NotificationDeliveryModal
       v-if="settingsOpen"
       v-model:rules="draftRules"
@@ -133,7 +161,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import AppPagination from '../components/AppPagination.vue';
 import NotificationDeliveryModal from '../components/NotificationDeliveryModal.vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
@@ -151,6 +180,11 @@ import {
   statusTitle
 } from '../lib/formatters.js';
 import { t } from '../lib/i18n.js';
+import {
+  filterNotificationCollections,
+  notificationFilterDefaults,
+  paginateItems
+} from '../lib/notificationFilters.js';
 import { scanProfileBadgeClass, scanProfileLabel } from '../lib/scanProfiles.js';
 
 defineOptions({ inheritAttrs: false });
@@ -184,11 +218,43 @@ const settingsSuccess = ref('');
 const settingsOpen = ref(false);
 const now = useNow();
 const request = useAbortableTask();
-const changes = computed(() => notify.value.changes || []);
-const portChanges = computed(() => notify.value.port_changes || []);
-const conflictChanges = computed(() => notify.value.conflict_changes || []);
-const summary = computed(() => notify.value.summary || {});
-const statusCounts = computed(() => Object.entries(summary.value.status_counts || {})
+const filters = ref({ ...notificationFilterDefaults });
+const pageSizes = Object.freeze([10, 25, 50]);
+const pageSize = ref(10);
+const pages = reactive({ conflicts: 1, status: 1, services: 1 });
+const filterGroups = computed(() => [
+  { key: 'importance', label: t('Importance filter'), options: [{ value: 'normal', label: t('Normal') }, { value: 'all', label: t('All') }, { value: 'important', label: t('Important') }] },
+  { key: 'type', label: t('Notification type filter'), options: [{ value: 'all', label: t('All') }, { value: 'conflicts', label: t('IP conflicts') }, { value: 'status', label: t('Host status') }, { value: 'services', label: t('Services') }] }
+]);
+const hasActiveFilters = computed(() => filters.value.importance !== 'all' || filters.value.type !== 'all');
+const filtered = computed(() => filterNotificationCollections({
+  conflicts: notify.value.conflict_changes,
+  status: notify.value.changes,
+  services: notify.value.port_changes
+}, filters.value));
+const changes = computed(() => filtered.value.status);
+const portChanges = computed(() => filtered.value.services);
+const conflictChanges = computed(() => filtered.value.conflicts);
+const conflictPage = computed(() => paginateItems(conflictChanges.value, pages.conflicts, pageSize.value));
+const statusPage = computed(() => paginateItems(changes.value, pages.status, pageSize.value));
+const servicePage = computed(() => paginateItems(portChanges.value, pages.services, pageSize.value));
+const filteredSummary = computed(() => {
+  const allRows = [...conflictChanges.value, ...changes.value, ...portChanges.value];
+  const statusCounts = {};
+  for (const change of changes.value) {
+    const status = String(change?.status || '');
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  }
+  return {
+    total: allRows.length,
+    hosts: new Set(allRows.map((row) => row?.ip).filter(Boolean)).size,
+    status_total: changes.value.length,
+    port_total: portChanges.value.length,
+    conflict_total: conflictChanges.value.length,
+    status_counts: statusCounts
+  };
+});
+const statusCounts = computed(() => Object.entries(filteredSummary.value.status_counts)
   .sort(([a], [b]) => String(a).localeCompare(String(b)))
   .map(([status, count]) => ({ status, count })));
 const rulesDirty = computed(() => JSON.stringify(draftRules.value) !== JSON.stringify(savedRules.value));
@@ -203,8 +269,26 @@ usePageController({
   refresh: load
 });
 useLiveRefresh(['hosts', 'status', 'scans', 'conflicts', 'vendors'], load);
+watch(
+  () => [filters.value.importance, filters.value.type, pageSize.value],
+  () => resetPages()
+);
 
 onMounted(load);
+
+function resetPages() {
+  pages.conflicts = 1;
+  pages.status = 1;
+  pages.services = 1;
+}
+
+function resetFilters() {
+  filters.value = { ...notificationFilterDefaults };
+}
+
+function typeVisible(type) {
+  return filters.value.type === 'all' || filters.value.type === type;
+}
 
 function openNotificationSettings() {
   settingsError.value = '';

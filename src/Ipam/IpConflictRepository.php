@@ -211,7 +211,8 @@ final readonly class IpConflictRepository
               COALESCE(NULLIF((SELECT i.name FROM ips i WHERE LOWER(i.mac)=LOWER(d.mac) ORDER BY i.id DESC LIMIT 1), ''),
                 NULLIF((SELECT l.`client-hostname` FROM leases l WHERE LOWER(l.`hardware-ethernet`)=LOWER(d.mac)
                   ORDER BY l.active DESC, l.last_seen DESC LIMIT 1), ''), '') AS name,
-              COALESCE(NULLIF((SELECT i.ip FROM ips i WHERE LOWER(i.mac)=LOWER(d.mac) ORDER BY i.id DESC LIMIT 1), ''), '') AS managed_ip
+              COALESCE(NULLIF((SELECT i.ip FROM ips i WHERE LOWER(i.mac)=LOWER(d.mac) ORDER BY i.id DESC LIMIT 1), ''), '') AS managed_ip,
+              COALESCE((SELECT i.important FROM ips i WHERE LOWER(i.mac)=LOWER(d.mac) ORDER BY i.id DESC LIMIT 1), 0) AS important
             FROM ip_conflict_devices d
             WHERE d.conflict_id=:conflict_id
             ORDER BY d.mac
@@ -226,6 +227,7 @@ final readonly class IpConflictRepository
                 'mac' => strtolower((string) $device['mac']),
                 'name' => (string) $device['name'],
                 'managed_ip' => (string) $device['managed_ip'],
+                'important' => (int) $device['important'],
                 'first_seen_at' => $device['first_seen_at'],
                 'last_seen_at' => $device['last_seen_at'],
                 'current' => $current,
@@ -238,6 +240,7 @@ final readonly class IpConflictRepository
             'detected_at' => $row['detected_at'],
             'last_seen_at' => $row['last_seen_at'],
             'resolved_at' => $row['resolved_at'],
+            'important' => array_filter($devices, static fn(array $device): bool => $device['important'] === 1) === [] ? 0 : 1,
             'devices' => $devices,
         ];
     }
