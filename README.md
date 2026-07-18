@@ -19,6 +19,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 - Category/range separators with collapsible groups and rename support.
 - Lightweight, standard, and deep nmap profiles with deduplicated database history; partial results never replace the latest deep snapshot.
 - Service-change notifications when an open port appears, disappears, or reports a different service/version.
+- Optional daily and weekly Discord/Telegram summaries of outages, new devices, IP conflicts, changed ports, and expiring certificates observed by scans.
 - Searchable service inventory showing every open service per computer from the latest deep or merged partial scan.
 - Local MAC vendor resolution from the IEEE MA-L, MA-M, MA-S, and IAB registries, without sending device addresses to a third party.
 - Netboot image upload, delete, and per-host boot image selection.
@@ -145,7 +146,7 @@ Important `.env` values:
 | `HEALTH_*_MAX_AGE_MINUTES`, `HEALTH_*_MAX_AGE_DAYS` | Freshness limits for ping, discovery, lease import, OUI data, and backups; see `env.template` for defaults. |
 | `HEALTH_DISK_*_PERCENT`, `HEALTH_DHCP_*_PERCENT` | Warning and critical utilization thresholds for disk and the DHCP pool. Defaults to `80` and `90` percent. |
 
-Discord and Telegram use the same persisted delivery rules. The Notifications modal controls restarts, IP conflicts, and separate Normal/Important host-status and service-change switches. Telegram chat destinations are discovered through the Bot API's `getUpdates` method and selected in that modal; only authenticated administrators can retrieve chat/user details. The bot token and Discord settings remain environment-only, and Telegram destination IDs, bot fingerprints, and discovered user metadata are excluded from backups.
+Discord and Telegram use the same persisted delivery rules. The Notifications modal controls restarts, IP conflicts, separate Normal/Important host-status and service-change switches, and daily or weekly reports at a selected UTC hour. Scheduled summaries cover the preceding one or seven days and include certificate expiry from retained `ssl-cert` scan observations. Telegram chat destinations are discovered through the Bot API's `getUpdates` method and selected in that modal; only authenticated administrators can retrieve chat/user details. The bot token and Discord settings remain environment-only, and Telegram destination IDs, bot fingerprints, and discovered user metadata are excluded from backups.
 
 Managed hosts require a valid IPv4 address and six-octet MAC address. Host names are optional; when set, they must contain one DNS label using letters, numbers, and internal hyphens. Per-host DNS overrides accept one or more IPv4 addresses separated by spaces, commas, or semicolons.
 
@@ -354,7 +355,7 @@ Useful endpoints:
 | `GET` | `/api/ipam` | All configured subnets, their pending and approved dynamic devices, active conflicts, and DHCP pool utilization. |
 | `PUT` | `/api/ipam/devices/{mac}/approval` | Acknowledge a new device without changing DHCP behavior. |
 | `DELETE` | `/api/ipam/devices/{mac}/approval` | Mark an acknowledged dynamic device as new again. |
-| `PUT` | `/api/notify/delivery` | Admin-only replacement of the shared delivery rules and, when supplied, the selected discovered Telegram chat. |
+| `PUT` | `/api/notify/delivery` | Admin-only replacement of shared event rules, scheduled-report settings, and, when supplied, the selected discovered Telegram chat. |
 | `GET` | `/api/notify/telegram/chats` | Admin-only refresh and listing of Telegram chats discovered through `getUpdates`. |
 | `GET` | `/api/notify` | Last 24 hours of changes. |
 | `GET` | `/api/services` | Current open services by host using the latest effective scan. |

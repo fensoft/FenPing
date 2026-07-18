@@ -11,7 +11,7 @@ use Throwable;
 
 final class DatabaseManager
 {
-    public const SCHEMA_VERSION = 10;
+    public const SCHEMA_VERSION = 11;
     private const BUSY_TIMEOUT_MS = 30000;
 
     private ?PDO $connection = null;
@@ -107,6 +107,9 @@ final class DatabaseManager
         }
         if (!$this->tableExists('dns_override_groups')) {
             throw new RuntimeException('database schema version 10 is missing table: dns_override_groups');
+        }
+        if (!$this->tableExists('scheduled_report_settings') || !$this->tableExists('scheduled_report_runs')) {
+            throw new RuntimeException('database schema version 11 is missing scheduled report tables');
         }
     }
 

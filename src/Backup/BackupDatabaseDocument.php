@@ -93,6 +93,8 @@ public function backupRestoreDatabase(array $document): void {
     }
     if (isset($schema['notification_delivery_settings']))
       $database->exec('INSERT OR IGNORE INTO notification_delivery_settings (id) VALUES (1)');
+    if (isset($schema['scheduled_report_settings']))
+      $database->exec('INSERT OR IGNORE INTO scheduled_report_settings (id) VALUES (1)');
 
     $violations = $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC);
     if ($violations !== array())

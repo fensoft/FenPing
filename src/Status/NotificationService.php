@@ -6,6 +6,7 @@ namespace FenPing\Status;
 
 use FenPing\Config\AppConfig;
 use FenPing\Discord\DiscordNotifier;
+use FenPing\Report\ScheduledReportService;
 use InvalidArgumentException;
 
 final readonly class NotificationService
@@ -17,6 +18,7 @@ final readonly class NotificationService
         private DiscordNotifier $discord,
         private TelegramNotifier $telegram,
         private TelegramChatRepository $chats,
+        private ScheduledReportService $reports,
     ) {
     }
 
@@ -39,6 +41,7 @@ final readonly class NotificationService
                 'configured' => $this->chats->telegramBotConfigured(),
                 'chat_selected' => $this->chats->telegramSelectedChatId() !== null,
             ],
+            'reports' => $this->reports->deliverySettings(),
         ];
     }
     public function updateRules(array $rules): array
@@ -51,18 +54,31 @@ final readonly class NotificationService
     public function updateDelivery(array $body): array
     {
         $updateTelegramChat = array_key_exists('telegram_chat_id', $body);
-        $expected = $updateTelegramChat ? ['rules', 'telegram_chat_id'] : ['rules'];
+        $updateReports = array_key_exists('reports', $body);
+        $expected = ['rules'];
+        if ($updateTelegramChat) $expected[] = 'telegram_chat_id';
+        if ($updateReports) $expected[] = 'reports';
         $this->rules->notificationRequireExactKeys($body, $expected);
         if (!is_array($body['rules'] ?? null)) {
             throw new InvalidArgumentException('invalid notification rules');
         }
         $rules = $this->rules->notificationValidateRules($body['rules']);
+        $reports = null;
+        if ($updateReports) {
+            if (!is_array($body['reports'])) {
+                throw new InvalidArgumentException('invalid scheduled report settings');
+            }
+            $reports = $this->reports->validateSettings($body['reports']);
+        }
         if ($updateTelegramChat) {
             $this->chats->telegramChatSelectionUpdate($body['telegram_chat_id']);
         }
         $this->rules->notificationRulesUpdate($rules);
+        if ($reports !== null) $this->reports->updateSettings($reports);
         return $this->delivery();
     }
+
+    public function runScheduledReports(): array { return $this->reports->runDue(); }
 
     public function providersEnabled(): bool {
         return $this->discord->discordNotificationsEnabled() || $this->chats->telegramNotificationsEnabled();

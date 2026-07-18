@@ -32,6 +32,7 @@ abstract class IntegrationTestCase extends TestCase
                 'ip_conflict_devices', 'ip_conflicts', 'ip_conflict_monitor',
                 'telegram_known_chats',
                 'notification_delivery_settings',
+                'scheduled_report_runs', 'scheduled_report_settings',
                 'inventory_device_tags', 'inventory_saved_filter_tags', 'host_tags',
                 'inventory_device_metadata', 'inventory_saved_filters', 'tags',
                 'stats', 'ping', 'ips', 'range', 'netboot_images', 'dns_override_groups',

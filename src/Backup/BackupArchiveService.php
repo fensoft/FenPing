@@ -148,7 +148,7 @@ public function backupTableNames(): array {
     'inventory_device_metadata', 'host_tags', 'inventory_saved_filter_tags',
     'inventory_device_tags', 'leases', 'oui_vendors',
     'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',
-    'notification_delivery_settings',
+    'notification_delivery_settings', 'scheduled_report_settings', 'scheduled_report_runs',
     'ping', 'range', 'scan_snapshots', 'scans', 'scan_port_changes',
     'scan_snapshot_addresses', 'scan_snapshot_hostnames',
     'scan_snapshot_scopes', 'scan_snapshot_ports',

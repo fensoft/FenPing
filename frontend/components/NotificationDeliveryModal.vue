@@ -97,6 +97,47 @@
                 </tbody>
               </table>
             </div>
+
+            <section class="mt-4" aria-labelledby="scheduled-reports-title">
+              <div class="mb-3">
+                <h3 id="scheduled-reports-title" class="mb-1">{{ t('Scheduled reports') }}</h3>
+                <div class="small text-secondary">{{ t('Summaries include outages, new devices, IP conflicts, changed ports, and certificates observed by scans.') }}</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-check form-switch">
+                    <input v-model="reports.daily_enabled" class="form-check-input" type="checkbox" :disabled="!isAuthenticated || saving" />
+                    <span class="form-check-label">{{ t('Daily report') }}</span>
+                  </label>
+                  <div class="small text-secondary">{{ lastRunLabel('daily') }}</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-check form-switch">
+                    <input v-model="reports.weekly_enabled" class="form-check-input" type="checkbox" :disabled="!isAuthenticated || saving" />
+                    <span class="form-check-label">{{ t('Weekly report') }}</span>
+                  </label>
+                  <div class="small text-secondary">{{ lastRunLabel('weekly') }}</div>
+                </div>
+                <label class="col-md-4 form-label">
+                  {{ t('Delivery hour (UTC)') }}
+                  <select v-model.number="reports.hour_utc" class="form-select" :disabled="!isAuthenticated || saving">
+                    <option v-for="hour in 24" :key="hour - 1" :value="hour - 1">{{ String(hour - 1).padStart(2, '0') }}:00</option>
+                  </select>
+                </label>
+                <label class="col-md-4 form-label">
+                  {{ t('Weekly day') }}
+                  <select v-model.number="reports.weekly_day" class="form-select" :disabled="!isAuthenticated || saving || !reports.weekly_enabled">
+                    <option v-for="day in weekDays" :key="day.value" :value="day.value">{{ day.label }}</option>
+                  </select>
+                </label>
+                <label class="col-md-4 form-label">
+                  {{ t('Certificate warning') }}
+                  <select v-model.number="reports.certificate_warning_days" class="form-select" :disabled="!isAuthenticated || saving">
+                    <option v-for="days in [7, 14, 30, 60, 90]" :key="days" :value="days">{{ t('{days} days', { days }) }}</option>
+                  </select>
+                </label>
+              </div>
+            </section>
           </div>
 
           <div class="modal-footer justify-content-between">
@@ -133,6 +174,7 @@ const props = defineProps({
   telegramChatsLoading: Boolean
 });
 const rules = defineModel('rules', { type: Object, required: true });
+const reports = defineModel('reports', { type: Object, required: true });
 const telegramChatId = defineModel('telegramChatId', { type: String, default: '' });
 const emit = defineEmits(['close', 'refresh-telegram-chats', 'save']);
 const mentionLabel = computed(() => props.delivery.discord.mention_target === 'everyone'
@@ -140,6 +182,9 @@ const mentionLabel = computed(() => props.delivery.discord.mention_target === 'e
   : props.delivery.discord.mention_target === 'user'
     ? t('Configured user')
     : t('Disabled'));
+const weekDays = computed(() => [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+].map((label, value) => ({ value, label: t(label) })));
 const modalRoot = useAccessibleModal(() => 'notification-delivery', requestClose);
 
 function requestClose() {
@@ -160,5 +205,11 @@ function telegramUserMeta(user) {
     t('User ID: {id}', { id: user.id }),
     user.language_code || ''
   ].filter(Boolean).join(' · ');
+}
+
+function lastRunLabel(frequency) {
+  const run = props.delivery?.reports?.last_runs?.[frequency];
+  if (!run) return t('Never sent');
+  return t('Last run: {date} ({state})', { date: `${run.scheduled_for} UTC`, state: t(run.state) });
 }
 </script>

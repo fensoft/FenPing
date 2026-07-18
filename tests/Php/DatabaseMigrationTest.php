@@ -58,7 +58,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
                 $manager = new DatabaseManager($config);
                 $manager->initialize();
 
-                self::assertSame(10, $manager->schemaVersion());
+                self::assertSame(11, $manager->schemaVersion());
                 $row = $manager->connection()->query(
                     "SELECT network, request_source, progress_percent, progress_phase FROM scans",
                 )->fetch(PDO::FETCH_ASSOC);
@@ -103,7 +103,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         ");
 
         $this->app()->database()->applyMigrations($database, \FenPing\Database\DatabaseManager::SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
-        self::assertSame(10, $this->app()->database()->schemaVersion($database));
+        self::assertSame(11, $this->app()->database()->schemaVersion($database));
         $existing = $database->query("SELECT scan_profile, scan_interval_hours FROM ips WHERE ip='192.0.2.40'")->fetch(PDO::FETCH_ASSOC);
         self::assertSame('deep', $existing['scan_profile']);
         self::assertSame(1, (int) $existing['scan_interval_hours']);
@@ -116,6 +116,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         foreach ([
             'ip_conflicts', 'ip_conflict_devices', 'ip_conflict_monitor',
             'operation_status', 'operation_failures', 'notification_delivery_settings',
+            'scheduled_report_settings', 'scheduled_report_runs',
             'telegram_known_chats', 'tags', 'host_tags', 'inventory_saved_filters',
             'inventory_saved_filter_tags', 'inventory_device_metadata', 'inventory_device_tags',
         ] as $table) {
@@ -129,9 +130,9 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         self::assertContains('queued_at', array_column($scanColumns, 'name'));
 
         $this->app()->database()->applyMigrations(
-            $database, 10, $this->app()->config()->projectDir . '/migrations',
+            $database, 11, $this->app()->config()->projectDir . '/migrations',
         );
-        self::assertSame(10, $this->app()->database()->schemaVersion($database));
+        self::assertSame(11, $this->app()->database()->schemaVersion($database));
         self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
     }
 
@@ -161,11 +162,11 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         $this->app()->database()->applyMigrations(
             $database,
-            10,
+            11,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(10, $this->app()->database()->schemaVersion($database));
+        self::assertSame(11, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
             'name',
@@ -209,11 +210,11 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         $this->app()->database()->applyMigrations(
             $database,
-            10,
+            11,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(10, $this->app()->database()->schemaVersion($database));
+        self::assertSame(11, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
             'name',
@@ -283,11 +284,11 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         $this->app()->database()->applyMigrations(
             $database,
-            10,
+            11,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(10, $this->app()->database()->schemaVersion($database));
+        self::assertSame(11, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(scans)')->fetchAll(PDO::FETCH_ASSOC),
             'name',

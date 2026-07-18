@@ -168,7 +168,7 @@ The inventory and scan services under `src/Inventory/` and `src/Scan/` perform d
 - Selecting a lightweight or standard snapshot merges it at read time with the preceding deep snapshot. Partial values override matching ports; deep-only ports and OS data remain and each port carries its source profile.
 - Port-change detection builds an effective view from the latest deep snapshot plus every newer partial observation in chronological order. It removes only ports included in each scan scope, retains richer version data when partial detection is incomplete, and records services in the first usable result as newly appeared.
 - Service-change events are retained for one week, returned by `/api/notify`, and rendered alongside host-status changes.
-- A singleton `notification_delivery_settings` row supplies the shared restart, conflict, normal/important host-status, and normal/important service-change rules plus the selected Telegram destination. Authenticated chat discovery ingests `getUpdates` into the local-only `telegram_known_chats` table, retaining chat and sender display details while excluding all Telegram IDs and discovery state from backups. A bot-token fingerprint clears stale destinations when the configured bot changes. Discord and Telegram independently deliver the same permitted events; every Discord delivery receives the environment-derived mention with explicit `allowed_mentions` when one is configured.
+- A singleton `notification_delivery_settings` row supplies the shared restart, conflict, normal/important host-status, and normal/important service-change rules plus the selected Telegram destination. `scheduled_report_settings` stores daily/weekly UTC timing and the certificate-warning horizon, while unique `scheduled_report_runs` rows make the hourly cron check restart-safe and idempotent. Reports aggregate the preceding window from status, conflict, port-change, and retained `ssl-cert` facts. Authenticated chat discovery ingests `getUpdates` into the local-only `telegram_known_chats` table, retaining chat and sender display details while excluding all Telegram IDs and discovery state from backups. A bot-token fingerprint clears stale destinations when the configured bot changes. Discord and Telegram independently deliver the same permitted events; every Discord delivery receives the environment-derived mention with explicit `allowed_mentions` when one is configured.
 - Boot runs the idempotent `scan-port-backfill` command after schema setup. It chronologically replays retained structured snapshots, fills missing events with each scan's original completion time, and makes pre-feature scan changes immediately available to Notify.
 - History pruning keeps one week of jobs plus the latest complete and latest changed result for each profile.
 
@@ -274,6 +274,7 @@ The 1.x JSON contract is forward-compatible with future FenPing backups: later 1
 - Queue worker every minute; its internal lock prevents duplicate coordinators.
 - IEEE vendor registry refresh on the first day of each month at 03:17.
 - dnsmasq lease import every minute.
+- Scheduled-report due check at minute 11 of every hour; unique period keys prevent duplicate daily or weekly delivery.
 - Verified managed backup every day at 02:23 UTC.
 - Round-robin restore test every Sunday at 04:41 UTC.
 - SQLite integrity check every day at 01:43 UTC.

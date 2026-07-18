@@ -7,36 +7,10 @@ namespace FenPing;
 use FenPing\Api\ApiKernel;
 use FenPing\Api\Controller\{AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, HostController, IpamController, NetbootController, ScanController, SystemController, TopologyController};
 use FenPing\Auth\AuthService;
-use FenPing\Backup\BackupService;
-use FenPing\Backup\BackupArchiveService;
-use FenPing\Backup\BackupArchiveTools;
-use FenPing\Backup\BackupDatabaseDocument;
-use FenPing\Backup\BackupFilesystem;
-use FenPing\Backup\BackupManager;
-use FenPing\Backup\BackupTableCatalog;
+use FenPing\Backup\{BackupService, BackupArchiveService, BackupArchiveTools, BackupDatabaseDocument, BackupFilesystem, BackupManager, BackupTableCatalog};
 use FenPing\Discord\DiscordNotifier;
 use FenPing\Discord\DiscordPayloadBuilder;
-use FenPing\Cli\CliKernel;
-use FenPing\Cli\CliUsage;
-use FenPing\Cli\BackupCommand;
-use FenPing\Cli\CallableCommand;
-use FenPing\Cli\DatabaseCommand;
-use FenPing\Cli\DiscordRestartCommand;
-use FenPing\Cli\HostsCommand;
-use FenPing\Cli\InventoryCommand;
-use FenPing\Cli\LeaseImportCommand;
-use FenPing\Cli\LockingCommand;
-use FenPing\Cli\NotificationRestartCommand;
-use FenPing\Cli\NoArgumentsCommand;
-use FenPing\Cli\OuiCommand;
-use FenPing\Cli\PingCommand;
-use FenPing\Cli\PublishingCommand;
-use FenPing\Cli\ScanPortBackfillCommand;
-use FenPing\Cli\StatusHistoryCleanCommand;
-use FenPing\Cli\TrackedCommand;
-use FenPing\Cli\DoctorCommand;
-use FenPing\Cli\DockerNetworksRefreshCommand;
-use FenPing\Cli\DockerNetworksWatchCommand;
+use FenPing\Cli\{CliKernel, CliUsage, BackupCommand, CallableCommand, DatabaseCommand, DiscordRestartCommand, HostsCommand, InventoryCommand, LeaseImportCommand, LockingCommand, NotificationRestartCommand, NoArgumentsCommand, OuiCommand, PingCommand, PublishingCommand, ScanPortBackfillCommand, ScheduledReportCommand, StatusHistoryCleanCommand, TrackedCommand, DoctorCommand, DockerNetworksRefreshCommand, DockerNetworksWatchCommand};
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
 use FenPing\Dhcp\ConfigManager;
@@ -92,6 +66,10 @@ use FenPing\Process\ProcessRunner;
 use FenPing\Realtime\LiveUpdatePublisher;
 use FenPing\Realtime\LiveUpdateScope;
 use FenPing\Realtime\NchanLiveUpdatePublisher;
+use FenPing\Report\ScheduledReportFormatter;
+use FenPing\Report\ScheduledReportQueryRepository;
+use FenPing\Report\ScheduledReportService;
+use FenPing\Report\ScheduledReportSettingsRepository;
 use FenPing\Scan\PortChangeService;
 use FenPing\Scan\PortKnowledgeMerger;
 use FenPing\Scan\ProfileCatalog;
@@ -157,6 +135,7 @@ final class Application
     private readonly StatusHistoryService $history;
     private readonly StatusHistoryCleaner $historyCleaner;
     private readonly NotificationService $notifications;
+    private readonly ScheduledReportService $scheduledReports;
     private readonly NotificationRuleRepository $notificationRules;
     private readonly DiscordNotifier $discord;
     private readonly TelegramChatRepository $telegramChats;
@@ -242,7 +221,19 @@ final class Application
         $this->telegramChats = new TelegramChatRepository($config, $this->database, $telegramApi);
         $this->telegram = new TelegramNotifier($config, $this->notificationRules, $this->telegramChats, $telegramApi, $this->operations, $notificationPayloads);
         $notificationQueries = new NotificationQueryRepository($config, $this->database, $this->history, $this->vendors, $this->ipConflictService);
-        $this->notifications = new NotificationService($config, $notificationQueries, $this->notificationRules, $this->discord, $this->telegram, $this->telegramChats);
+        $reportSettings = new ScheduledReportSettingsRepository($this->database);
+        $this->scheduledReports = new ScheduledReportService(
+            $this->database,
+            $reportSettings,
+            new ScheduledReportQueryRepository($this->database),
+            new ScheduledReportFormatter(),
+            $this->discord,
+            $this->telegram,
+            $this->telegramChats,
+            $clock,
+            $this->liveUpdates,
+        );
+        $this->notifications = new NotificationService($config, $notificationQueries, $this->notificationRules, $this->discord, $this->telegram, $this->telegramChats, $this->scheduledReports);
         $retention = new RetentionService($this->database, $this->portChanges);
         $this->inventoryScanner = new InventoryScanner($this->profiles, $this->scanJobs, $this->scanCodec, $retention, $this->notifications);
         $this->inventoryScheduler = new InventoryScheduler($config, $this->database, $dockerCache, $this->hostMetadata, $this->inventoryScanner, $this->scanJobs, $this->profiles, $this->networks, $this->operations, $this->liveUpdates);
@@ -345,6 +336,7 @@ final class Application
                 '/tmp/fenping-status-clean.lck', 'status history cleanup'),
             'oui-refresh' => $ouiRefresh, 'oui-sync' => $ouiSync, 'dnsmasq-leases' => $leases,
             "notify-restart" => new NoArgumentsCommand(new NotificationRestartCommand($this->notifications), $usage),
+            "scheduled-report" => new ScheduledReportCommand($this->scheduledReports, $usage),
             "discord-restart" => new NoArgumentsCommand(new DiscordRestartCommand($this->discord), $usage),
             'backup' => new BackupCommand($this->backups, 'backup'),
             'restore' => new BackupCommand($this->backups, 'restore'),
@@ -385,6 +377,7 @@ final class Application
     public function categories(): CategoryRepository { return $this->categories; }
     public function history(): StatusHistoryService { return $this->history; }
     public function notifications(): NotificationService { return $this->notifications; }
+    public function scheduledReports(): ScheduledReportService { return $this->scheduledReports; }
     public function netboot(): NetbootImageService { return $this->netboot; }
     public function ipam(): IpamService { return $this->ipam; }
     public function backups(): BackupService { return $this->backups; }

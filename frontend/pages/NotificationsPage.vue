@@ -143,6 +143,7 @@
     <NotificationDeliveryModal
       v-if="settingsOpen"
       v-model:rules="draftRules"
+      v-model:reports="draftReports"
       v-model:telegram-chat-id="draftTelegramChatId"
       :delivery="delivery"
       :is-authenticated="isAuthenticated"
@@ -196,14 +197,24 @@ const defaultRules = Object.freeze({
   service_changes: { normal: true, important: true },
   ip_conflicts: true
 });
+const defaultReports = Object.freeze({
+  daily_enabled: false,
+  weekly_enabled: false,
+  hour_utc: 8,
+  weekly_day: 1,
+  certificate_warning_days: 30
+});
 const notify = ref({ hours: 24, summary: {}, changes: [], port_changes: [], conflict_changes: [] });
 const delivery = ref({
   rules: cloneRules(defaultRules),
   discord: { configured: false, mention_target: null },
-  telegram: { configured: false, chat_selected: false }
+  telegram: { configured: false, chat_selected: false },
+  reports: { settings: cloneReports(defaultReports), last_runs: {} }
 });
 const savedRules = ref(cloneRules(defaultRules));
 const draftRules = ref(cloneRules(defaultRules));
+const savedReports = ref(cloneReports(defaultReports));
+const draftReports = ref(cloneReports(defaultReports));
 const telegramChats = ref([]);
 const savedTelegramChatId = ref('');
 const draftTelegramChatId = ref('');
@@ -258,9 +269,10 @@ const statusCounts = computed(() => Object.entries(filteredSummary.value.status_
   .sort(([a], [b]) => String(a).localeCompare(String(b)))
   .map(([status, count]) => ({ status, count })));
 const rulesDirty = computed(() => JSON.stringify(draftRules.value) !== JSON.stringify(savedRules.value));
+const reportsDirty = computed(() => JSON.stringify(draftReports.value) !== JSON.stringify(savedReports.value));
 const telegramChatDirty = computed(() => telegramChatsLoaded.value
   && draftTelegramChatId.value !== savedTelegramChatId.value);
-const settingsDirty = computed(() => rulesDirty.value || telegramChatDirty.value);
+const settingsDirty = computed(() => rulesDirty.value || reportsDirty.value || telegramChatDirty.value);
 usePageController({
   loading,
   label: computed(() => loading.value ? t('Loading') : t('Notify')),
@@ -317,11 +329,14 @@ async function load() {
       port_changes: data.port_changes || [],
       conflict_changes: data.conflict_changes || []
     };
-    const wasDirty = rulesDirty.value;
+    const rulesWereDirty = rulesDirty.value;
+    const reportsWereDirty = reportsDirty.value;
     const incoming = normalizeDelivery(data.delivery);
     delivery.value = incoming;
     savedRules.value = cloneRules(incoming.rules);
-    if (!wasDirty) draftRules.value = cloneRules(incoming.rules);
+    if (!rulesWereDirty) draftRules.value = cloneRules(incoming.rules);
+    savedReports.value = cloneReports(incoming.reports.settings);
+    if (!reportsWereDirty) draftReports.value = cloneReports(incoming.reports.settings);
   } catch (loadError) {
     if (!isAbortError(loadError) && request.isCurrent(signal)) error.value = loadError.message;
   } finally {
@@ -335,7 +350,7 @@ async function saveRules() {
   settingsError.value = '';
   settingsSuccess.value = '';
   try {
-    const payload = { rules: cloneRules(draftRules.value) };
+    const payload = { rules: cloneRules(draftRules.value), reports: cloneReports(draftReports.value) };
     if (telegramChatsLoaded.value)
       payload.telegram_chat_id = draftTelegramChatId.value || null;
     const updated = await apiJson('/api/notify/delivery', {
@@ -346,6 +361,8 @@ async function saveRules() {
     delivery.value = incoming;
     savedRules.value = cloneRules(incoming.rules);
     draftRules.value = cloneRules(incoming.rules);
+    savedReports.value = cloneReports(incoming.reports.settings);
+    draftReports.value = cloneReports(incoming.reports.settings);
     if (telegramChatsLoaded.value)
       savedTelegramChatId.value = draftTelegramChatId.value;
     emit('notice', t('Notification rules saved'));
@@ -393,6 +410,10 @@ function normalizeDelivery(value) {
     telegram: {
       configured: Boolean(value?.telegram?.configured),
       chat_selected: Boolean(value?.telegram?.chat_selected)
+    },
+    reports: {
+      settings: cloneReports(value?.reports?.settings || defaultReports),
+      last_runs: value?.reports?.last_runs && typeof value.reports.last_runs === 'object' ? value.reports.last_runs : {}
     }
   };
 }
@@ -409,6 +430,16 @@ function cloneRules(value) {
       important: Boolean(value?.service_changes?.important)
     },
     ip_conflicts: Boolean(value?.ip_conflicts)
+  };
+}
+
+function cloneReports(value) {
+  return {
+    daily_enabled: Boolean(value?.daily_enabled),
+    weekly_enabled: Boolean(value?.weekly_enabled),
+    hour_utc: Number.isInteger(value?.hour_utc) ? value.hour_utc : 8,
+    weekly_day: Number.isInteger(value?.weekly_day) ? value.weekly_day : 1,
+    certificate_warning_days: Number.isInteger(value?.certificate_warning_days) ? value.certificate_warning_days : 30
   };
 }
 

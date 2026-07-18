@@ -124,6 +124,7 @@ cat > /etc/crontabs/root <<'EOF'
 17 3 1 * * php /opt/fenping/cli.php oui-refresh
 */15 * * * * php /opt/fenping/cli.php ping
 * * * * * php /opt/fenping/cli.php dnsmasq-leases
+11 * * * * php /opt/fenping/cli.php scheduled-report
 23 2 * * * php /opt/fenping/cli.php backup-maintenance daily
 41 4 * * 0 php /opt/fenping/cli.php backup-maintenance verify
 43 1 * * * php /opt/fenping/cli.php database-check
