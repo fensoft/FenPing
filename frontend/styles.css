@@ -377,6 +377,32 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   overflow-y: auto;
 }
 
+.inventory-export-datasets {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.inventory-export-option {
+  align-items: flex-start;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  cursor: pointer;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.inventory-export-option:has(input:checked) {
+  background: var(--tblr-primary-lt);
+  border-color: var(--tblr-primary);
+}
+
+.inventory-export-option small {
+  color: var(--tblr-secondary-color);
+  display: block;
+  margin-top: 0.15rem;
+}
+
 .notification-telegram-settings {
   border-top: 1px solid #dce1e7;
   margin-top: 0.8rem;

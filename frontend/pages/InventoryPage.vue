@@ -41,6 +41,7 @@
         <button v-if="isAuthenticated && matchingSavedFilter" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Rename saved view')" :aria-label="t('Rename saved view')" @click="beginSavedFilterEdit"><AppIcon name="pencil" /></button>
         <button v-if="isAuthenticated && matchingSavedFilter" class="btn btn-outline-danger btn-sm icon-btn" type="button" :title="t('Delete saved view')" :aria-label="t('Delete saved view')" @click="deleteSavedFilter"><AppIcon name="trash" /></button>
         <button v-if="hasActiveFilters" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Clear filters')" @click="resetFilters"><AppIcon name="filter-x" /></button>
+        <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" @click="exportOpen = true"><AppIcon name="download" class="me-1" />{{ t('Export') }}</button>
         <div class="inventory-summary" aria-live="polite"><strong>{{ inventorySummary.devices }}</strong> {{ t('devices') }} <span aria-hidden="true">·</span> <span class="inventory-summary-online">{{ inventorySummary.online }} {{ t('online') }}</span> <span v-if="inventorySummary.newDevices > 0" aria-hidden="true">·</span> <span v-if="inventorySummary.newDevices > 0" class="inventory-summary-new">{{ inventorySummary.newDevices }} {{ t('new') }}</span></div>
       </div>
       <form v-if="savedFilterEditor" class="saved-filter-editor" @submit.prevent="submitSavedFilter">
@@ -105,11 +106,13 @@
         </tbody>
       </table>
     </div>
+    <InventoryExportModal v-if="exportOpen" :network="selectedCidr" @close="exportOpen = false" @download="exportOpen = false" />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import InventoryExportModal from '../components/InventoryExportModal.vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, matchingSavedInventoryFilter, normalizeInventoryFilters, normalizeTags } from '../lib/inventoryFilters.js';
 import { hostIconName } from '../lib/hostIcons.js';
@@ -140,6 +143,7 @@ const selectedCidr = ref(readStorage('fenping_selected_network', ''));
 const dhcpCidr = ref('');
 const loading = ref(false);
 const error = ref('');
+const exportOpen = ref(false);
 const request = useAbortableTask();
 const now = useNow(30000);
 const filterGroups = computed(() => [

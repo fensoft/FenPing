@@ -37,3 +37,19 @@ test('filters inventory through search and combined segmented controls', async (
   await expect(visibleHostRows(page)).toHaveCount(3);
   await expect(page.locator('.inventory-summary')).toContainText('3 devices');
 });
+
+test('builds a download for the selected inventory dataset and format', async ({ page, api }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Login' }).click();
+  const login = page.getByRole('dialog', { name: 'Login' });
+  await login.getByLabel('Password').fill(api.state.password);
+  await login.getByRole('button', { name: 'Login' }).click();
+
+  await page.getByRole('button', { name: 'Export' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Inventory export' });
+  await dialog.getByText('Lease history', { exact: true }).click();
+  await dialog.getByText('JSON', { exact: true }).click();
+  const link = dialog.getByRole('link', { name: 'Download export' });
+  await expect(link).toHaveAttribute('href', '/api/exports/leases?format=json&network=192.0.2.0%2F24');
+  await expect(link).toHaveAttribute('download', '');
+});

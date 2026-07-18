@@ -13,6 +13,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 - Stability, host history, and a 24-hour notify view.
 - Static DHCP/DNS host management through dnsmasq.
 - Named DNS override groups with hosts-file import, enable/disable controls, IPv4 records, and local CNAME aliases.
+- Authenticated CSV and JSON exports for the selected network’s hosts, DHCP lease history, effective services, scan changes, and seven-day uptime intervals.
 - Transactional DHCP lease history with stable first-seen and last-seen timestamps.
 - Device onboarding with reversible MAC approval and DHCP pool utilization tracking.
 - Transactional DHCP updates: host changes are validated and syntax-checked before the database and dnsmasq configuration are committed together.
@@ -357,6 +358,7 @@ Useful endpoints:
 | `DELETE` | `/api/ipam/devices/{mac}/approval` | Mark an acknowledged dynamic device as new again. |
 | `PUT` | `/api/notify/delivery` | Admin-only replacement of shared event rules, scheduled-report settings, and, when supplied, the selected discovered Telegram chat. |
 | `GET` | `/api/notify/telegram/chats` | Admin-only refresh and listing of Telegram chats discovered through `getUpdates`. |
+| `GET` | `/api/exports/{dataset}` | Admin-only CSV/JSON download for `hosts`, `leases`, `services`, `scan_changes`, or `uptime_history`, scoped by the configured `network` query parameter. |
 | `GET` | `/api/notify` | Last 24 hours of changes. |
 | `GET` | `/api/services` | Current open services by host using the latest effective scan. |
 | `POST` | `/api/ping/refresh` | Run ping scan and wait for completion. |

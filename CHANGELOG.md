@@ -12,6 +12,7 @@ Development after the 1.7 tag.
 
 - Added named DNS override groups with text-file import, hosts-file IPv4 records, local CNAME aliases, enable/disable controls, transactional dnsmasq validation, live UI updates, and portable backup support.
 - Added configurable daily and weekly Discord/Telegram reports for outages, new devices, IP conflicts, changed ports, and expiring certificates, with persisted idempotent scheduling and run status.
+- Added authenticated, network-scoped CSV and JSON inventory exports for hosts, DHCP lease history, effective services, scan changes, and retained uptime history.
 
 ## [1.7] - 2026-07-16
 

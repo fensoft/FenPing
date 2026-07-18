@@ -333,7 +333,7 @@ final class ApiKernelTest extends IntegrationTestCase
             'POST /inventory/saved-filters body hosts', 'PUT /inventory/saved-filters/{id:int} body hosts',
             'DELETE /inventory/saved-filters/{id:int} body hosts', 'GET /notify guest ',
             'GET /notify/telegram/chats session ', 'PUT /notify/delivery session all',
-            'POST /ping/refresh session ', 'GET /history/{ip:ipv4} guest ',
+            'POST /ping/refresh session ', 'GET /exports/{dataset} session ', 'GET /history/{ip:ipv4} guest ',
             'GET /hosts/{id:int}/detail guest ', 'GET /hosts/by-ip/{ip:ipv4}/detail guest ',
             'GET /hosts/{id:int} guest ', 'POST /hosts body hosts', 'PUT /hosts/{id:int}/metadata body hosts',
             'PUT /hosts/{id:int} body hosts', 'DELETE /hosts/{id:int} body hosts',

@@ -300,6 +300,22 @@ async function handleApi(route, api) {
     return;
   }
 
+  const exportMatch = path.match(/^\/api\/exports\/(hosts|leases|services|scan_changes|uptime_history)$/);
+  if (method === 'GET' && exportMatch) {
+    const format = url.searchParams.get('format') === 'json' ? 'json' : 'csv';
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'Content-Type': format === 'json' ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="fenping-${exportMatch[1].replaceAll('_', '-')}-192-0-2-0-24-20260714-120000.${format}"`
+      },
+      body: format === 'json'
+        ? JSON.stringify({ format: 'fenping-inventory-export', dataset: exportMatch[1], network: CIDR, count: 1, records: [{}] })
+        : 'ip,name\n192.0.2.10,Gateway\n'
+    });
+    return;
+  }
+
   if (method === 'POST' && path === '/api/ping/refresh') {
     await fulfillJson(route, { status: 'ok' });
     return;

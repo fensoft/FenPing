@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace FenPing;
 
 use FenPing\Api\ApiKernel;
-use FenPing\Api\Controller\{AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, HostController, IpamController, NetbootController, ScanController, SystemController, TopologyController};
+use FenPing\Api\Controller\{AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, SystemController, TopologyController};
 use FenPing\Auth\AuthService;
 use FenPing\Backup\{BackupService, BackupArchiveService, BackupArchiveTools, BackupDatabaseDocument, BackupFilesystem, BackupManager, BackupTableCatalog};
 use FenPing\Discord\DiscordNotifier;
@@ -32,6 +32,7 @@ use FenPing\Docker\DockerNetworkWatcher;
 use FenPing\Http\HttpClient;
 use FenPing\Http\HttpTransport;
 use FenPing\Http\NativeHttpClient;
+use FenPing\Export\InventoryExportService;
 use FenPing\Docker\PrivilegedDockerNetworkRefreshGateway;
 use FenPing\Health\HealthService;
 use FenPing\Health\DatabaseHealthProbe;
@@ -277,6 +278,7 @@ final class Application
         $validator = $this->hostValidator;
         $hostService = new HostService($this->config, $this->database, $this->networks, $this->hosts, $this->hostMetadata, $this->hostMetadataNormalizer, $this->discoveredHostMetadata, $validator, $mutations, $this->inventory, $this->history, $this->scanJobs, $this->netboot, $this->vendors);
         $results = $this->scanResults();
+        $exports = new InventoryExportService($this->database, $this->inventory, $results);
         $clock = new SystemClock();
 
         return new ApiKernel($this->auth, [
@@ -292,6 +294,7 @@ final class Application
                 $this->notifications,
                 new PrivilegedPingRefreshGateway($this->config),
             ),
+            new ExportController($exports, $this->networks),
             new HostController($hostService, $this->categories, $this->history),
             new IpamController($this->ipam, $validator),
             new NetbootController($this->netboot, $mutations),

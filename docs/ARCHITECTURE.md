@@ -224,6 +224,7 @@ Important files:
 - `frontend/router.js`: named routes for inventory, IPAM, services, notifications, scans, host detail, and netboot.
 - `frontend/App.vue`: application shell, authentication, cross-page actions, and modal orchestration.
 - `frontend/pages/`: independent inventory, IPAM, services, notifications, scans, host detail, and netboot route components.
+- `FenPing\Export\InventoryExportService`: authenticated, selected-network CSV/JSON projection of current inventory, complete lease history, effective services, port changes, and retained raw uptime intervals. CSV cells that could be interpreted as spreadsheet formulas are neutralized on output.
 - `frontend/components/`: accessible application modal and smaller shared view components.
 - `frontend/composables/`: abort-controller lifecycle, page refresh registration, reactive time, and modal focus management.
 - `frontend/lib/api.js`: the only frontend `fetch` boundary, with consistent JSON/text errors and `AbortSignal` support.
