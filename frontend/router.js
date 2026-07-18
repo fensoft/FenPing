@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import BackupsPage from './pages/BackupsPage.vue';
+import AuditPage from './pages/AuditPage.vue';
 import DoctorPage from './pages/DoctorPage.vue';
 import DnsPage from './pages/DnsPage.vue';
 import HostDetailPage from './pages/HostDetailPage.vue';
@@ -13,6 +14,7 @@ import TopologyPage from './pages/TopologyPage.vue';
 
 export const routeNames = Object.freeze({
   inventory: 'inventory',
+  audit: 'audit',
   backups: 'backups',
   doctor: 'doctor',
   dns: 'dns',
@@ -30,6 +32,7 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: routeNames.inventory, component: InventoryPage },
+    { path: '/audit', name: routeNames.audit, component: AuditPage },
     { path: '/backups', name: routeNames.backups, component: BackupsPage },
     { path: '/doctor', name: routeNames.doctor, component: DoctorPage },
     { path: '/dns', name: routeNames.dns, component: DnsPage },

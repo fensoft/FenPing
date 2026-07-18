@@ -6,13 +6,15 @@ namespace FenPing\Auth;
 
 use FenPing\Api\AuthPolicy;
 use FenPing\Api\HttpException;
+use FenPing\Api\RequestContext;
+use FenPing\Audit\AuditLogService;
 use FenPing\Config\AppConfig;
 
 final readonly class AuthService
 {
     private const SESSION_NAME = 'FenPingSession';
 
-    public function __construct(private AppConfig $config)
+    public function __construct(private AppConfig $config, private AuditLogService $audit)
     {
     }
 
@@ -40,18 +42,28 @@ final readonly class AuthService
     public function login(mixed $password): bool
     {
         if (!hash_equals($this->config->password, (string) $password)) {
+            if (RequestContext::request() !== null) {
+                $this->audit->record('auth.login_failed', 'session', null, 'Failed administrator login', actor: 'anonymous');
+            }
             return false;
         }
         $this->startSession();
         session_regenerate_id(true);
         $_SESSION['fenping_authenticated'] = true;
         $_SESSION['fenping_secret'] = $this->sessionSecret();
+        if (RequestContext::request() !== null) {
+            $this->audit->record('auth.login_succeeded', 'session', null, 'Administrator logged in', actor: 'admin');
+        }
         return true;
     }
 
     public function logout(): void
     {
+        $authenticated = $this->isAuthenticated();
         $this->startSession();
+        if ($authenticated && RequestContext::request() !== null) {
+            $this->audit->record('auth.logout', 'session', null, 'Administrator logged out', actor: 'admin');
+        }
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $params = session_get_cookie_params();

@@ -443,6 +443,19 @@ CREATE TABLE IF NOT EXISTS users (
   pass TEXT
 );
 
+CREATE TABLE IF NOT EXISTS audit_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actor TEXT NOT NULL,
+  remote_address TEXT,
+  user_agent TEXT,
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT,
+  summary TEXT NOT NULL,
+  details_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE TABLE IF NOT EXISTS oui_vendors (
   prefix_length INTEGER NOT NULL,
   prefix TEXT NOT NULL,
@@ -488,5 +501,8 @@ CREATE INDEX IF NOT EXISTS scan_snapshot_scripts_snapshot ON scan_snapshot_scrip
 CREATE INDEX IF NOT EXISTS scan_snapshot_script_nodes_parent ON scan_snapshot_script_nodes (script_id, parent_id, position);
 CREATE INDEX IF NOT EXISTS operation_failures_operation_time ON operation_failures (operation, failed_at);
 CREATE INDEX IF NOT EXISTS scheduled_report_runs_started ON scheduled_report_runs (started_at);
+CREATE INDEX IF NOT EXISTS audit_events_occurred ON audit_events (occurred_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS audit_events_action_occurred ON audit_events (action, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS audit_events_resource_occurred ON audit_events (resource_type, occurred_at DESC);
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;

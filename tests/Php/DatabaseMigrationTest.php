@@ -58,7 +58,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
                 $manager = new DatabaseManager($config);
                 $manager->initialize();
 
-                self::assertSame(11, $manager->schemaVersion());
+                self::assertSame(DatabaseManager::SCHEMA_VERSION, $manager->schemaVersion());
                 $row = $manager->connection()->query(
                     "SELECT network, request_source, progress_percent, progress_phase FROM scans",
                 )->fetch(PDO::FETCH_ASSOC);
@@ -102,8 +102,8 @@ final class DatabaseMigrationTest extends IntegrationTestCase
           PRAGMA user_version=1;
         ");
 
-        $this->app()->database()->applyMigrations($database, \FenPing\Database\DatabaseManager::SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
-        self::assertSame(11, $this->app()->database()->schemaVersion($database));
+        $this->app()->database()->applyMigrations($database, DatabaseManager::SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations');
+        self::assertSame(DatabaseManager::SCHEMA_VERSION, $this->app()->database()->schemaVersion($database));
         $existing = $database->query("SELECT scan_profile, scan_interval_hours FROM ips WHERE ip='192.0.2.40'")->fetch(PDO::FETCH_ASSOC);
         self::assertSame('deep', $existing['scan_profile']);
         self::assertSame(1, (int) $existing['scan_interval_hours']);
@@ -130,9 +130,9 @@ final class DatabaseMigrationTest extends IntegrationTestCase
         self::assertContains('queued_at', array_column($scanColumns, 'name'));
 
         $this->app()->database()->applyMigrations(
-            $database, 11, $this->app()->config()->projectDir . '/migrations',
+            $database, DatabaseManager::SCHEMA_VERSION, $this->app()->config()->projectDir . '/migrations',
         );
-        self::assertSame(11, $this->app()->database()->schemaVersion($database));
+        self::assertSame(DatabaseManager::SCHEMA_VERSION, $this->app()->database()->schemaVersion($database));
         self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
     }
 
@@ -162,11 +162,11 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         $this->app()->database()->applyMigrations(
             $database,
-            11,
+            DatabaseManager::SCHEMA_VERSION,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(11, $this->app()->database()->schemaVersion($database));
+        self::assertSame(DatabaseManager::SCHEMA_VERSION, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
             'name',
@@ -210,11 +210,11 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         $this->app()->database()->applyMigrations(
             $database,
-            11,
+            DatabaseManager::SCHEMA_VERSION,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(11, $this->app()->database()->schemaVersion($database));
+        self::assertSame(DatabaseManager::SCHEMA_VERSION, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(ips)')->fetchAll(PDO::FETCH_ASSOC),
             'name',
@@ -284,11 +284,11 @@ final class DatabaseMigrationTest extends IntegrationTestCase
 
         $this->app()->database()->applyMigrations(
             $database,
-            11,
+            DatabaseManager::SCHEMA_VERSION,
             $this->app()->config()->projectDir . '/migrations',
         );
 
-        self::assertSame(11, $this->app()->database()->schemaVersion($database));
+        self::assertSame(DatabaseManager::SCHEMA_VERSION, $this->app()->database()->schemaVersion($database));
         $columns = array_column(
             $database->query('PRAGMA table_info(scans)')->fetchAll(PDO::FETCH_ASSOC),
             'name',

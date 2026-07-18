@@ -7,6 +7,7 @@ namespace FenPing\Api\Controller;
 use FenPing\Api\AuthPolicy;
 use FenPing\Api\Request;
 use FenPing\Api\Route;
+use FenPing\Audit\AuditLogService;
 use FenPing\Host\CategoryRepository;
 use FenPing\Api\HttpException;
 use FenPing\Host\HostService;
@@ -21,6 +22,7 @@ final readonly class HostController implements Controller
         private HostService $hosts,
         private CategoryRepository $categories,
         private StatusHistoryService $history,
+        private AuditLogService $audit,
     ) {
     }
 
@@ -34,28 +36,28 @@ final readonly class HostController implements Controller
             new Route(
                 'POST',
                 '/hosts',
-                fn(Request $request, array $params): array => $this->hosts->create($request->body()),
+                fn(Request $request, array $params): array => $this->createHost($request),
                 AuthPolicy::BodyOrSession,
                 [LiveUpdateScope::Hosts],
             ),
             new Route(
                 'PUT',
                 '/hosts/{id:int}/metadata',
-                fn(Request $request, array $params): array => $this->hosts->updateDiscoveredMetadata($params['id'], $request->body()),
+                fn(Request $request, array $params): array => $this->updateMetadata($params['id'], $request),
                 AuthPolicy::BodyOrSession,
                 [LiveUpdateScope::Hosts],
             ),
             new Route(
                 'PUT',
                 '/hosts/{id:int}',
-                fn(Request $request, array $params): array => $this->hosts->update($params['id'], $request->body()),
+                fn(Request $request, array $params): array => $this->updateHost($params['id'], $request),
                 AuthPolicy::BodyOrSession,
                 [LiveUpdateScope::Hosts],
             ),
             new Route(
                 'DELETE',
                 '/hosts/{id:int}',
-                fn(Request $request, array $params): array => $this->hosts->delete($params['id']),
+                fn(Request $request, array $params): array => $this->deleteHost($params['id']),
                 AuthPolicy::BodyOrSession,
                 [LiveUpdateScope::Hosts],
             ),
@@ -81,6 +83,77 @@ final readonly class HostController implements Controller
                 [LiveUpdateScope::Hosts],
             ),
         ];
+    }
+
+    private function createHost(Request $request): array
+    {
+        $result = $this->hosts->create($request->body());
+        $host = $this->hosts->get((int) $result['id']);
+        $this->audit->record(
+            'host.created', 'host', $result['id'], 'Created DHCP reservation for ' . $this->hostLabel($host),
+            ['after' => $this->hostSnapshot($host)],
+        );
+        return $result;
+    }
+
+    private function updateHost(int $id, Request $request): array
+    {
+        $before = $this->hosts->get($id);
+        $result = $this->hosts->update($id, $request->body());
+        $after = $this->hosts->get($id);
+        $this->audit->record(
+            'host.updated', 'host', $id, 'Updated host ' . $this->hostLabel($after),
+            ['changes' => $this->changes($this->hostSnapshot($before), $this->hostSnapshot($after))],
+        );
+        return $result;
+    }
+
+    private function updateMetadata(int $id, Request $request): array
+    {
+        $before = $this->hosts->get($id);
+        $result = $this->hosts->updateDiscoveredMetadata($id, $request->body());
+        $after = $this->hosts->get($id);
+        $this->audit->record(
+            'host.metadata_updated', 'host', $id, 'Updated inventory metadata for ' . $this->hostLabel($after),
+            ['changes' => $this->changes($this->hostSnapshot($before), $this->hostSnapshot($after))],
+        );
+        return $result;
+    }
+
+    private function deleteHost(int $id): array
+    {
+        $before = $this->hosts->get($id);
+        $result = $this->hosts->delete($id);
+        $this->audit->record(
+            'host.deleted', 'host', $id, 'Deleted DHCP reservation for ' . $this->hostLabel($before),
+            ['before' => $this->hostSnapshot($before)],
+        );
+        return $result;
+    }
+
+    private function hostSnapshot(array $host): array
+    {
+        return array_intersect_key($host, array_flip([
+            'id', 'ip', 'mac', 'name', 'display_name', 'router', 'dns', 'repeater', 'important', 'web',
+            'netboot_image_id', 'scan_profile', 'scan_interval_hours', 'notes', 'location', 'owner',
+            'model', 'icon', 'tags',
+        ]));
+    }
+
+    private function changes(array $before, array $after): array
+    {
+        $changes = [];
+        foreach (array_unique([...array_keys($before), ...array_keys($after)]) as $field) {
+            if (($before[$field] ?? null) !== ($after[$field] ?? null)) {
+                $changes[$field] = ['before' => $before[$field] ?? null, 'after' => $after[$field] ?? null];
+            }
+        }
+        return $changes;
+    }
+
+    private function hostLabel(array $host): string
+    {
+        return (string) (($host['display_name'] ?? '') ?: ($host['name'] ?? '') ?: ($host['ip'] ?? 'host'));
     }
     private function createCategory(Request $request): array
     {

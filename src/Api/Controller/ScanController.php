@@ -10,6 +10,7 @@ use FenPing\Api\JsonResponse;
 use FenPing\Api\Request;
 use FenPing\Api\Response;
 use FenPing\Api\Route;
+use FenPing\Audit\AuditLogService;
 use FenPing\Inventory\InventoryWorkerLauncher;
 use FenPing\Network\NetworkManager;
 use FenPing\Network\NetworkPolicyException;
@@ -28,6 +29,7 @@ final readonly class ScanController implements Controller
         private ResultService $results,
         private NetworkManager $networks,
         private InventoryWorkerLauncher $worker,
+        private AuditLogService $audit,
     ) {
     }
 
@@ -90,6 +92,12 @@ final readonly class ScanController implements Controller
         }
         $queued = $this->jobs->enqueue($ip, $profile);
         $this->worker->start();
+        $metadata = $queued['metadata'];
+        $this->audit->record(
+            'scan.queued', 'scan', $metadata['id'] ?? null,
+            ($queued['created'] ? 'Queued' : 'Reused') . " manual {$profile} scan for {$ip}",
+            ['ip' => $ip, 'profile' => $profile, 'created' => $queued['created']],
+        );
         return new JsonResponse([
             'queued' => true,
             'created' => $queued['created'],
@@ -109,6 +117,10 @@ final readonly class ScanController implements Controller
             throw new HttpException(409, $error->getMessage());
         }
         $metadata = $result['metadata'];
+        $this->audit->record(
+            'scan.cancelled', 'scan', $metadata['id'] ?? $id, "Cancelled manual scan for {$ip}",
+            ['ip' => $ip, 'profile' => $metadata['mode'] ?? null, 'state' => $metadata['state'] ?? null],
+        );
         return new JsonResponse([
             'cancellation_requested' => true,
             'cancelled' => $metadata['state'] === 'cancelled',

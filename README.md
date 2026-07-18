@@ -25,6 +25,7 @@ It uses a static Vue/Vite frontend with Vue Router, an nginx/PHP-FPM API and CLI
 - Local MAC vendor resolution from the IEEE MA-L, MA-M, MA-S, and IAB registries, without sending device addresses to a third party.
 - Netboot image upload, delete, and per-host boot image selection.
 - Guest read-only mode and admin login.
+- Admin-only audit log for successful and failed logins, host and DHCP/DNS edits, restores, netboot changes, and manual scan requests, with filtering and structured change details.
 - Abortable route loading, live running durations, and keyboard-accessible modal dialogs.
 - Dark mode.
 - Ten browser-interface languages—English, Simplified Chinese, Spanish, French, Arabic, Brazilian Portuguese, Indonesian, Japanese, Russian, and German—with a locally persisted Auto/manual selector, browser-language detection, and RTL support.
@@ -320,6 +321,8 @@ docker exec fenping php /opt/fenping/cli.php restore /var/lib/fenping/backups/fe
 
 Backups use the database-neutral version 1.6 JSON format (`db.json` inside the archive). Existing version 1.6 archives created by MariaDB-based FenPing releases remain restorable into SQLite. SQL-based backups from earlier versions are not supported.
 
+The appliance-local audit trail is intentionally excluded from portable backups. Restoring an archive therefore cannot replace prior audit history; a successful API or CLI restore appends its own audit event to the existing trail.
+
 Legacy 1.2 SQL and nmap backups can be converted offline, without a MariaDB/MySQL server. The nmap archive must contain one latest result per host named `IP.xml`:
 
 ```bash
@@ -332,7 +335,7 @@ The converter parses mysqldump and nmap XML data directly, migrates legacy lease
 
 The UI starts in guest mode. Guests can view inventory, IPAM utilization, services, history, scans, health, and notifications, but cannot approve devices or change DHCP/DNS/netboot state.
 
-After login, admins can create/edit hosts, edit metadata for discovered Docker devices with a verified network/container identity, manage shared tag views, add/rename/delete categories, trigger ping refreshes and choose lightweight, standard, or deep host scans, upload/delete netboot images, and assign netboot images to hosts.
+After login, admins can create/edit hosts, edit metadata for discovered Docker devices with a verified network/container identity, manage shared tag views, add/rename/delete categories, trigger ping refreshes and choose lightweight, standard, or deep host scans, upload/delete netboot images, assign netboot images to hosts, and review the searchable Audit log. Audit records include the actor, client address, action, resource, summary, and structured before/after details where applicable; passwords are never recorded.
 
 Netboot uploads accept UEFI applications (`.efi`), iPXE/PXE loaders (`.kpxe`, `.kkpxe`, `.kkkpxe`, `.pxe`, `.lkrn`), PXELINUX loaders (`.0`), and iPXE scripts (`.ipxe`). FenPing validates both the filename extension and the file content. PHP execution is disabled in the netboot directory.
 
@@ -348,6 +351,7 @@ Useful endpoints:
 | `GET` | `/api/health/live` | Process liveness; succeeds while the PHP application can answer. |
 | `GET` | `/api/health/ready` | Traffic readiness; returns HTTP `503` until SQLite, dnsmasq, cron, and integrity status are ready. |
 | `GET` | `/api/doctor` | Admin-only live network, storage, service-listener, and competing-DHCP diagnostics. |
+| `GET` | `/api/audit` | Admin-only paginated audit events, with optional `search`, `action`, and `resource_type` filters. |
 | `GET` | `/api/inventory` | Network inventory with host metadata, available tags, and shared saved filters. |
 | `PUT` | `/api/inventory/device-metadata` | Admin-only metadata and scan-schedule update for a currently verified Docker network/container identity. |
 | `POST` | `/api/inventory/saved-filters` | Admin-only creation of an appliance-wide tag view. |

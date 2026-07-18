@@ -23,6 +23,11 @@ final class RequestContext
         return self::$request?->body();
     }
 
+    public static function request(): ?Request
+    {
+        return self::$request;
+    }
+
     public static function clear(): void
     {
         self::$request = null;

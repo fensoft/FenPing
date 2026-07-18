@@ -9,6 +9,7 @@ use FenPing\Api\FileResponse;
 use FenPing\Api\HttpException;
 use FenPing\Api\Request;
 use FenPing\Api\Route;
+use FenPing\Audit\AuditLogService;
 use FenPing\Dhcp\MutationCoordinator;
 use FenPing\Netboot\NetbootImageService;
 use FenPing\Realtime\LiveUpdateScope;
@@ -20,6 +21,7 @@ final readonly class NetbootController implements Controller
     public function __construct(
         private NetbootImageService $netboot,
         private MutationCoordinator $mutations,
+        private AuditLogService $audit,
     ) {
     }
 
@@ -71,7 +73,12 @@ final readonly class NetbootController implements Controller
     private function create(Request $request): array
     {
         try {
-            return $this->netboot->create($request->files['file'] ?? [], (string) ($request->post['name'] ?? ''));
+            $image = $this->netboot->create($request->files['file'] ?? [], (string) ($request->post['name'] ?? ''));
+            $this->audit->record(
+                'netboot_image.created', 'netboot_image', $image['id'], 'Uploaded netboot image ' . $image['name'],
+                ['after' => $this->snapshot($image)],
+            );
+            return $image;
         } catch (RuntimeException $error) {
             throw new HttpException(400, $error->getMessage());
         }
@@ -80,11 +87,22 @@ final readonly class NetbootController implements Controller
     private function delete(int $id): array
     {
         try {
+            $before = $this->netboot->withHostCount($id);
             $change = $this->mutations->commit(fn(): array => $this->netboot->delete($id));
         } catch (OutOfBoundsException $error) {
             throw new HttpException(404, $error->getMessage());
         }
         $this->netboot->deleteFile($change['result']);
+        $image = $change['result'];
+        $this->audit->record(
+            'netboot_image.deleted', 'netboot_image', $id, 'Deleted netboot image ' . $image['name'],
+            ['before' => $this->snapshot($before)],
+        );
         return ['deleted' => true, 'log' => $change['log']];
+    }
+
+    private function snapshot(array $image): array
+    {
+        return array_intersect_key($image, array_flip(['id', 'name', 'original_name', 'size', 'hosts', 'created_at']));
     }
 }

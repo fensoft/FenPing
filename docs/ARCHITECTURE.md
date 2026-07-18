@@ -70,6 +70,8 @@ Stable ping records update their activity timestamp at most once per day; actual
 
 The typed API kernel, router, request, authorization policies, and JSON/XML/file responses live under `src/Api/`. Domain-facing behavior is exposed through injected services and repositories under `src/`.
 
+`FenPing\Audit\AuditLogService` appends administrative and security events to `audit_events` after successful mutations, and also records successful and failed authentication attempts. Records contain an actor label, direct client address, user agent, action, resource identity, summary, and controlled structured details; request credentials are never passed to the logger. Audit writes are best-effort so a logging failure cannot turn a completed DHCP apply, restore, or file operation into a misleading API failure. The admin-only `GET /api/audit` endpoint provides server-side action/resource/search filters and pagination.
+
 ### Live Updates
 
 Nchan runs inside the existing nginx process and exposes guest-readable `GET /api/events` as an EventSource stream. Backend producers post only to a loopback-restricted publisher location. Messages are versioned invalidation hints containing scope names and a UTC timestamp, never LAN records, credentials, or authorization state. The in-memory channel retains at most 32 messages for five minutes and does not use Redis.
@@ -209,6 +211,8 @@ Promotion to a DHCP host copies metadata, tags, and scan cadence and removes the
 
 Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_images`. Browser downloads are streamed through `/api/netboot/images/{id}/file`; nginx denies the entire legacy `/netboot` URL path and never maps the storage directory into the document root, so uploaded PHP-like files cannot execute.
 
+Host reservation create/edit/delete, DNS override group mutations, netboot upload/delete, API and CLI restores, and manual scan queue/cancel paths append audit events only after the underlying action succeeds. Host edits store field-level before/after changes; DNS override contents are represented by record counts and SHA-256 hashes instead of copying imported hosts-file text into the audit trail. Netboot assignment changes are included in host diffs.
+
 `dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a temporary staging table. One immediate SQLite transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
 
 `FenPing\Ipam\IpamService` combines lease, ping, and status observations by MAC. Devices seen within seven days remain pending until approved or converted into a managed fixed host. Onboarding suppression is MAC-based: the MAC of a managed fixed host is hidden, while a different MAC observed at that host's reserved IP remains visible. Addresses remain visible regardless of whether they fall inside the dynamic DHCP pool. Pending and approved device lists use numeric IPv4 order with MAC order as the duplicate-address tie-breaker. Approval only updates `device_approvals`; it never changes DHCP access or reloads dnsmasq. Pool utilization counts the union of active unexpired leases and fixed MAC reservations within the configured dynamic range, so overlapping addresses count once.
@@ -265,6 +269,8 @@ Default backups go to `/var/lib/fenping/backups/fenping-YYYYmmdd-HHMMSS.tgz`, mo
 Restore supports version 1.6 (and compatible later 1.x) FenPing `.tgz` archives. It validates `manifest.json` and `db.json`, initializes or migrates the database to the current schema, imports the JSON data transactionally, restores netboot files, and regenerates dnsmasq files. Pre-1.6 SQL-based archives and raw `.sql`/`.sql.gz` dumps are intentionally unsupported.
 
 The 1.x JSON contract is forward-compatible with future FenPing backups: later 1.x writers may add top-level metadata, tables, and columns, while preserving the existing `tables.<name>.columns` plus parallel `rows` structure. Readers ignore unknown metadata, tables, and columns, so a 1.6 reader can restore the subset it understands from a later 1.x backup. Removing or changing existing fields requires a new major backup version. Future application releases must continue accepting version 1.6 backups and fill newly introduced columns from schema defaults. The optional `restore.timestamp_shift` extension is used only by the synthetic demo to keep its dated activity relative to restore time.
+
+`audit_events` is deliberately outside `BackupTableCatalog`. Portable backup creation does not export the appliance's security history, and restore does not delete or replace the local trail. A successful restore writes a new `backup.restored` event after the restored database tables and netboot data are applied.
 
 ## Cron
 

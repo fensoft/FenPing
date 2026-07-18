@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FenPing\Backup;
 
+use FenPing\Audit\AuditLogService;
 use FenPing\Health\OperationTracker;
 use FenPing\Realtime\LiveUpdatePublisher;
 use FenPing\Realtime\LiveUpdateScope;
@@ -18,6 +19,7 @@ final readonly class BackupService
         private BackupManager $manager,
         private BackupArchiveTools $tools,
         private OperationTracker $operations,
+        private AuditLogService $audit,
         ?LiveUpdatePublisher $liveUpdates = null,
     ) {
         $this->liveUpdates = $liveUpdates ?? new NullLiveUpdatePublisher();
@@ -31,7 +33,14 @@ final readonly class BackupService
     }
     public function restore(array $arguments): int {
         $code = $this->manager->restore($arguments);
-        if ($code === 0 && count($arguments) === 1) $this->liveUpdates->publish(LiveUpdateScope::All);
+        if ($code === 0 && count($arguments) === 1) {
+            $filename = basename((string) $arguments[0]);
+            $this->audit->record(
+                'backup.restored', 'backup', $filename, 'Restored backup ' . $filename,
+                ['filename' => $filename],
+            );
+            $this->liveUpdates->publish(LiveUpdateScope::All);
+        }
         return $code;
     }
     public function verify(array $arguments): int {

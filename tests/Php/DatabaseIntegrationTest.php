@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FenPing\Tests;
 
 use OutOfBoundsException;
+use FenPing\Database\DatabaseManager;
 use FenPing\Scan\ProfileCatalog;
 use RuntimeException;
 
@@ -19,7 +20,7 @@ final class DatabaseIntegrationTest extends IntegrationTestCase
     {
         $database = $this->app()->database();
         $pdo = $database->connection();
-        self::assertSame(11, $database->schemaVersion());
+        self::assertSame(DatabaseManager::SCHEMA_VERSION, $database->schemaVersion());
         self::assertSame('wal', strtolower((string) $pdo->query('PRAGMA journal_mode')->fetchColumn()));
         self::assertSame([], $database->integrityErrors());
 

@@ -23,6 +23,7 @@ abstract class IntegrationTestCase extends TestCase
         try {
             $pdo->exec('PRAGMA defer_foreign_keys=ON');
             foreach ([
+                'audit_events',
                 'operation_failures', 'operation_status',
                 'scan_port_changes', 'scans', 'scan_snapshot_script_nodes', 'scan_snapshot_scripts',
                 'scan_snapshot_port_cpes', 'scan_snapshot_ports', 'scan_snapshot_extra_reasons', 'scan_snapshot_extra_ports',

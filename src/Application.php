@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace FenPing;
 
 use FenPing\Api\ApiKernel;
-use FenPing\Api\Controller\{AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, SystemController, TopologyController};
+use FenPing\Api\Controller\{AuditController, AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, SystemController, TopologyController};
+use FenPing\Audit\AuditLogService;
 use FenPing\Auth\AuthService;
 use FenPing\Backup\{BackupService, BackupArchiveService, BackupArchiveTools, BackupDatabaseDocument, BackupFilesystem, BackupManager, BackupTableCatalog};
 use FenPing\Discord\DiscordNotifier;
@@ -101,6 +102,7 @@ use FenPing\Vendor\VendorLookup;
 final class Application
 {
     private readonly DatabaseManager $database;
+    private readonly AuditLogService $audit;
     private readonly HttpClient $http;
     private readonly OuiRegistryService $oui;
     private readonly PingRepository $pingRepository;
@@ -165,7 +167,8 @@ final class Application
         $this->http = new NativeHttpClient($httpTransport);
 
         $clock = new SystemClock();
-        $this->auth = new AuthService($config);
+        $this->audit = new AuditLogService($this->database);
+        $this->auth = new AuthService($config, $this->audit);
         $this->ipConflicts = new IpConflictRepository($this->database, $this->liveUpdates);
         $this->processes = new NativeProcessRunner();
         $routes = new RouteDetector($this->processes);
@@ -251,7 +254,7 @@ final class Application
         $this->backupDocuments = new BackupDatabaseDocument($config, $this->database, $this->backupTables, $backupFilesystem, $this->backupTools);
         $this->backupArchives = new BackupArchiveService($config, $this->database, $backupFilesystem, $this->backupTools, $this->backupDocuments, $this->backupTables);
         $this->backupManager = new BackupManager($config, $this->database, $this->backupArchives, $backupFilesystem, $this->backupTools);
-        $this->backups = new BackupService($this->backupManager, $this->backupTools, $this->operations, $this->liveUpdates);
+        $this->backups = new BackupService($this->backupManager, $this->backupTools, $this->operations, $this->audit, $this->liveUpdates);
         $this->health = new HealthService($this->config, new DatabaseHealthProbe($this->database), new ProcessHealthProbe(), $this->ipam, $this->ipConflictService, $this->inventory, $this->notifications, $this->database, $this->operations, $clock);
         $this->doctor = new DoctorService(
             $config,
@@ -284,8 +287,9 @@ final class Application
         return new ApiKernel($this->auth, [
             new DoctorController(new ProcessDoctorReportProvider($this->config, $this->processes)),
             new DockerNetworksController(new PrivilegedDockerNetworkRefreshGateway($this->processes, $this->config->projectDir)),
-            new DnsOverrideController($this->dnsOverrideGroups, $mutations),
+            new DnsOverrideController($this->dnsOverrideGroups, $mutations, $this->audit),
             new AuthController($this->auth),
+            new AuditController($this->audit),
             new SystemController(
                 $this->config,
                 $this->networks,
@@ -295,11 +299,11 @@ final class Application
                 new PrivilegedPingRefreshGateway($this->config),
             ),
             new ExportController($exports, $this->networks),
-            new HostController($hostService, $this->categories, $this->history),
+            new HostController($hostService, $this->categories, $this->history, $this->audit),
             new IpamController($this->ipam, $validator),
-            new NetbootController($this->netboot, $mutations),
+            new NetbootController($this->netboot, $mutations, $this->audit),
             new BackupController($this->backups),
-            new ScanController($this->scanJobs, $this->profiles, $results, $this->networks, new PrivilegedInventoryWorkerLauncher($this->config)),
+            new ScanController($this->scanJobs, $this->profiles, $results, $this->networks, new PrivilegedInventoryWorkerLauncher($this->config), $this->audit),
             new TopologyController($this->topology),
         ], $this->liveUpdates);
     }
@@ -350,6 +354,7 @@ final class Application
     }
     public function config(): AppConfig { return $this->config; }
     public function database(): DatabaseManager { return $this->database; }
+    public function audit(): AuditLogService { return $this->audit; }
     public function operations(): OperationTracker { return $this->operations; }
     public function pingRepository(): PingRepository { return $this->pingRepository; }
     public function dockerNetworks(): DockerNetworkCache { return $this->dockerNetworks; }

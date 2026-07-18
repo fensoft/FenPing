@@ -8,6 +8,7 @@ use FenPing\Api\AuthPolicy;
 use FenPing\Api\HttpException;
 use FenPing\Api\Request;
 use FenPing\Api\Route;
+use FenPing\Audit\AuditLogService;
 use FenPing\Dhcp\MutationCoordinator;
 use FenPing\Dns\DnsOverrideGroupService;
 use FenPing\Realtime\LiveUpdateScope;
@@ -19,6 +20,7 @@ final readonly class DnsOverrideController implements Controller
     public function __construct(
         private DnsOverrideGroupService $groups,
         private MutationCoordinator $mutations,
+        private AuditLogService $audit,
     ) {
     }
 
@@ -54,6 +56,11 @@ final readonly class DnsOverrideController implements Controller
     {
         return $this->call(function () use ($body): array {
             $change = $this->mutations->commit(fn(): array => $this->groups->create($body));
+            $group = $change['result'];
+            $this->audit->record(
+                'dns_override.created', 'dns_override_group', $group['id'], 'Created DNS override group ' . $group['name'],
+                ['after' => $this->snapshot($group)],
+            );
             return ['group' => $change['result'], 'log' => $change['log']];
         });
     }
@@ -61,7 +68,13 @@ final readonly class DnsOverrideController implements Controller
     private function update(int $id, array $body): array
     {
         return $this->call(function () use ($id, $body): array {
+            $before = $this->groups->find($id);
             $change = $this->mutations->commit(fn(): array => $this->groups->update($id, $body));
+            $group = $change['result'];
+            $this->audit->record(
+                'dns_override.updated', 'dns_override_group', $id, 'Updated DNS override group ' . $group['name'],
+                ['before' => $this->snapshot($before), 'after' => $this->snapshot($group)],
+            );
             return ['group' => $change['result'], 'log' => $change['log']];
         });
     }
@@ -69,10 +82,15 @@ final readonly class DnsOverrideController implements Controller
     private function delete(int $id): array
     {
         return $this->call(function () use ($id): array {
+            $before = $this->groups->find($id);
             $change = $this->mutations->commit(function () use ($id): bool {
                 $this->groups->delete($id);
                 return true;
             });
+            $this->audit->record(
+                'dns_override.deleted', 'dns_override_group', $id, 'Deleted DNS override group ' . $before['name'],
+                ['before' => $this->snapshot($before)],
+            );
             return ['deleted' => true, 'log' => $change['log']];
         });
     }
@@ -87,5 +105,15 @@ final readonly class DnsOverrideController implements Controller
             $status = str_contains($error->getMessage(), 'already exists') ? 409 : 400;
             throw new HttpException($status, $error->getMessage());
         }
+    }
+
+    private function snapshot(array $group): array
+    {
+        return [
+            'name' => $group['name'],
+            'enabled' => $group['enabled'],
+            'record_count' => $group['record_count'],
+            'contents_sha256' => hash('sha256', (string) $group['contents']),
+        ];
     }
 }

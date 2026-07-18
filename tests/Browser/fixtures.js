@@ -169,6 +169,32 @@ function createApi() {
       retention_roles: ['daily'],
       download_url: '/api/backups/fenping-daily-20260714-022300.tgz/file'
     }],
+    auditEvents: [
+      {
+        id: 2,
+        occurred_at: '2026-07-14 12:05:00',
+        actor: 'admin',
+        remote_address: '192.0.2.55',
+        user_agent: 'FenPing browser test',
+        action: 'host.updated',
+        resource_type: 'host',
+        resource_id: '1',
+        summary: 'Updated host Core router',
+        details: { changes: { dns: { before: '', after: '192.0.2.53' } } }
+      },
+      {
+        id: 1,
+        occurred_at: '2026-07-14 12:00:00',
+        actor: 'anonymous',
+        remote_address: '198.51.100.10',
+        user_agent: 'FenPing browser test',
+        action: 'auth.login_failed',
+        resource_type: 'session',
+        resource_id: null,
+        summary: 'Failed administrator login',
+        details: {}
+      }
+    ],
     dnsGroups: [{
       id: 1,
       name: 'Lab services',
@@ -239,6 +265,32 @@ async function handleApi(route, api) {
 
   if (method === 'GET' && path === '/api/ipam/conflicts') {
     await fulfillJson(route, { status: 'ok', conflicts: [] });
+    return;
+  }
+
+  if (method === 'GET' && path === '/api/audit') {
+    if (!api.state.authenticated) { await fulfillJson(route, { error: 'login required' }, 403); return; }
+    const action = url.searchParams.get('action') || '';
+    const resourceType = url.searchParams.get('resource_type') || '';
+    const search = (url.searchParams.get('search') || '').toLowerCase();
+    const perPage = Number(url.searchParams.get('per_page') || 50);
+    const page = Number(url.searchParams.get('page') || 1);
+    const all = api.state.auditEvents;
+    const filtered = all.filter(event =>
+      (!action || event.action === action)
+      && (!resourceType || event.resource_type === resourceType)
+      && (!search || `${event.summary} ${event.resource_id || ''} ${event.remote_address || ''}`.toLowerCase().includes(search))
+    );
+    const pages = Math.max(1, Math.ceil(filtered.length / perPage));
+    const selectedPage = Math.min(Math.max(1, page), pages);
+    await fulfillJson(route, {
+      events: clone(filtered.slice((selectedPage - 1) * perPage, selectedPage * perPage)),
+      pagination: { page: selectedPage, per_page: perPage, pages, total: filtered.length },
+      filters: {
+        actions: [...new Set(all.map(event => event.action))].sort(),
+        resource_types: [...new Set(all.map(event => event.resource_type))].sort()
+      }
+    });
     return;
   }
 

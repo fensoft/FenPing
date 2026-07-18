@@ -14,7 +14,6 @@ use FenPing\Api\JsonResponse;
 use FenPing\Api\Request;
 use FenPing\Api\ResponseException;
 use FenPing\Api\Route;
-use FenPing\Auth\AuthService;
 use FenPing\Realtime\LiveUpdateScope;
 use FenPing\Realtime\NchanLiveUpdatePublisher;
 
@@ -71,7 +70,7 @@ final class LiveUpdateTest extends IntegrationTestCase
                 ];
             }
         };
-        $api = new ApiKernel(new AuthService($this->app()->config()), [$controller], $publisher);
+        $api = new ApiKernel($this->app()->auth(), [$controller], $publisher);
 
         self::assertSame(200, $api->handle($this->request('/api/direct'))->status);
         self::assertSame(202, $api->handle($this->request('/api/accepted'))->status);
