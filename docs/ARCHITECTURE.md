@@ -207,7 +207,7 @@ Netboot uploads live in `/var/lib/fenping/netboot`; metadata lives in `netboot_i
 
 `dnsmasq.leases.php` parses and validates the current dnsmasq lease file into a temporary staging table. One immediate SQLite transaction upserts observed MAC/IP assignments and marks missing assignments inactive. `first_seen` is never overwritten, `last_seen` records the latest observation, expired or replaced assignments remain available as history, and readers never observe an empty or partially imported table.
 
-`FenPing\Ipam\IpamService` combines lease, ping, and status observations by MAC. Devices seen within seven days remain pending until approved or converted into a managed fixed host. Approval only updates `device_approvals`; it never changes DHCP access or reloads dnsmasq. Pool utilization counts the union of active unexpired leases and fixed MAC reservations within the configured dynamic range, so overlapping addresses count once.
+`FenPing\Ipam\IpamService` combines lease, ping, and status observations by MAC. Devices seen within seven days remain pending until approved or converted into a managed fixed host. Onboarding suppression is MAC-based: the MAC of a managed fixed host is hidden, while a different MAC observed at that host's reserved IP remains visible. Addresses remain visible regardless of whether they fall inside the dynamic DHCP pool. Pending and approved device lists use numeric IPv4 order with MAC order as the duplicate-address tie-breaker. Approval only updates `device_approvals`; it never changes DHCP access or reloads dnsmasq. Pool utilization counts the union of active unexpired leases and fixed MAC reservations within the configured dynamic range, so overlapping addresses count once.
 
 ## Frontend
 

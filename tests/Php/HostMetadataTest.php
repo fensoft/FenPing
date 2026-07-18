@@ -28,14 +28,14 @@ final class HostMetadataTest extends IntegrationTestCase
     public function testReservingAnApprovedDeviceRemovesItFromIpam(): void
     {
         $backend = $this->app();
-        $mac = '02:00:00:00:00:39';
+        $mac = '02:00:00:00:02:39';
         $backend->pingRepository()->save([
-            ['ip' => '192.0.2.39', 'mac' => $mac, 'status' => 'Up'],
+            ['ip' => '192.0.2.239', 'mac' => $mac, 'status' => 'Up'],
         ]);
         $backend->ipam()->approve($mac);
         self::assertCount(1, $backend->ipam()->summary()['approved']);
 
-        $hostId = $backend->hosts()->create('192.0.2.39', $mac);
+        $hostId = $backend->hosts()->create('192.0.2.239', $mac);
 
         self::assertGreaterThan(0, $hostId);
         self::assertSame(0, (int) $backend->database()->connection()->query(
@@ -44,6 +44,37 @@ final class HostMetadataTest extends IntegrationTestCase
         $ipam = $backend->ipam()->summary();
         self::assertSame([], $ipam['pending']);
         self::assertSame([], $ipam['approved']);
+    }
+
+    public function testIpamOnboardingHidesReservedMacButShowsDifferentMacAtReservedAddress(): void
+    {
+        $backend = $this->app();
+        $backend->hosts()->create('192.0.2.240', '02:00:00:00:02:40');
+        $backend->pingRepository()->save([
+            ['ip' => '192.0.2.200', 'mac' => '02:00:00:00:02:00', 'status' => 'Up'],
+            ['ip' => '192.0.2.100', 'mac' => '02:00:00:00:01:00', 'status' => 'Up'],
+            ['ip' => '192.0.2.240', 'mac' => '02:00:00:00:02:41', 'status' => 'Up'],
+            ['ip' => '192.0.2.251', 'mac' => '02:00:00:00:02:51', 'status' => 'Up'],
+            ['ip' => '192.0.2.9', 'mac' => '02:00:00:00:00:09', 'status' => 'Up'],
+            ['ip' => '192.0.2.250', 'mac' => '02:00:00:00:02:50', 'status' => 'Up'],
+            ['ip' => '192.0.2.199', 'mac' => '02:00:00:00:01:99', 'status' => 'Up'],
+        ]);
+        $backend->ipam()->approve('02:00:00:00:02:40');
+        $backend->ipam()->approve('02:00:00:00:02:41');
+        $backend->ipam()->approve('02:00:00:00:02:51');
+        $backend->ipam()->approve('02:00:00:00:01:99');
+        $backend->ipam()->approve('02:00:00:00:02:50');
+
+        $ipam = $backend->ipam()->summary();
+
+        self::assertSame(
+            ['192.0.2.9', '192.0.2.100', '192.0.2.200'],
+            array_column($ipam['pending'], 'ip'),
+        );
+        self::assertSame(
+            ['192.0.2.199', '192.0.2.240', '192.0.2.250', '192.0.2.251'],
+            array_column($ipam['approved'], 'ip'),
+        );
     }
 
     public function testReservedHostReportsADifferentDetectedMac(): void

@@ -55,7 +55,8 @@ public function getIpam(): array {
   $approved = array();
 
   foreach ($observations as $mac => $observation) {
-    if ($this->ipamNetworkCidr((string)($observation['ip'] ?? '')) === '')
+    $ip = (string)($observation['ip'] ?? '');
+    if ($this->ipamNetworkCidr($ip) === '')
       continue;
     if (isset($managed[$mac]) || isset($approvals[$mac]))
       continue;
@@ -67,13 +68,14 @@ public function getIpam(): array {
   foreach ($approvals as $mac => $approvedAt) {
     if (isset($managed[$mac]))
       continue;
-    if (isset($observations[$mac]) && $this->ipamNetworkCidr((string)($observations[$mac]['ip'] ?? '')) === '')
+    $ip = (string)($observations[$mac]['ip'] ?? '');
+    if ($this->ipamNetworkCidr($ip) === '')
       continue;
     $approved[] = $this->ipamDeviceRow($mac, $observations[$mac] ?? array(), $approvedAt);
   }
 
-  usort($pending, fn($left, $right) => strcmp((string)$right['last_seen'], (string)$left['last_seen']));
-  usort($approved, fn($left, $right) => strcmp((string)$right['approved_at'], (string)$left['approved_at']));
+  usort($pending, $this->ipamDeviceIpOrder(...));
+  usort($approved, $this->ipamDeviceIpOrder(...));
   $conflictStatus = $this->conflicts->status();
 
   return array(
@@ -264,6 +266,23 @@ public function ipamManagedMacs(): array {
       $managed[$mac] = true;
   }
   return $managed;
+}
+
+private function ipamDeviceIpOrder(array $left, array $right): int {
+  $leftIp = (string)($left['ip'] ?? '');
+  $rightIp = (string)($right['ip'] ?? '');
+  $leftPacked = inet_pton($leftIp);
+  $rightPacked = inet_pton($rightIp);
+  if ($leftPacked !== false && $rightPacked !== false) {
+    $order = strcmp($leftPacked, $rightPacked);
+    if ($order !== 0)
+      return $order;
+  } else {
+    $order = strnatcmp($leftIp, $rightIp);
+    if ($order !== 0)
+      return $order;
+  }
+  return strcmp((string)($left['mac'] ?? ''), (string)($right['mac'] ?? ''));
 }
 
 public function ipamDeviceRow(string $mac, array $observation, ?string $approvedAt): array {
