@@ -45,6 +45,7 @@ function seedHosts() {
       dns: 'printer.lan',
       scan_profile: 'lightweight',
       scan_interval_hours: 12,
+      stability: { current_seconds: (2 * 365 + 42) * 24 * 60 * 60 },
       scan: null
     },
     {

@@ -15,6 +15,11 @@ Development after the 1.7 tag.
 - Added authenticated, network-scoped CSV and JSON inventory exports for hosts, DHCP lease history, effective services, scan changes, and retained uptime history.
 - Added an admin-only audit log for login attempts, host and DHCP/DNS edits, restores, netboot changes, and manual scans, with client attribution, structured details, filtering, and pagination.
 
+### Fixed
+
+- Inventory now shows the actual duration of the current Down state instead of capping it at the seven-day uptime-analysis window.
+- Inventory balances desktop columns across Device, Vendor, IP, Activity, and Services and formats activity older than 365 days as years plus remaining days.
+
 ## [1.7] - 2026-07-16
 
 Development after the 1.6 tag through 2026-07-16.

@@ -16,6 +16,16 @@ test('shows the full desktop inventory layout without overflow', async ({ page }
   await expect(page.getByRole('columnheader', { name: 'Vendor' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Activity' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Services' })).toBeVisible();
+  const deviceBox = await page.getByRole('columnheader', { name: 'Device' }).boundingBox();
+  const ipBox = await page.getByRole('columnheader', { name: 'IP', exact: true }).boundingBox();
+  const vendorBox = await page.getByRole('columnheader', { name: 'Vendor' }).boundingBox();
+  const activityBox = await page.getByRole('columnheader', { name: 'Activity' }).boundingBox();
+  const servicesBox = await page.getByRole('columnheader', { name: 'Services' }).boundingBox();
+  expect(Math.abs(deviceBox.width - vendorBox.width)).toBeLessThan(2);
+  expect(Math.abs(ipBox.width - activityBox.width)).toBeLessThan(2);
+  expect(Math.abs(ipBox.width - servicesBox.width)).toBeLessThan(2);
+  expect(deviceBox.width).toBeGreaterThan(ipBox.width);
+  await expect(page.getByText('Down 2y 42d', { exact: true })).toBeVisible();
   await expect(page.locator('.inventory-mobile-meta').first()).toBeHidden();
   await expectNoHorizontalOverflow(page);
 });

@@ -122,7 +122,7 @@ import { useAbortableTask } from '../composables/useAbortableTask.js';
 import { useLiveRefresh } from '../composables/useLiveUpdates.js';
 import { useNow } from '../composables/useNow.js';
 import { usePageController } from '../composables/usePageController.js';
-import { formatDuration, formatMac, formatServerDate, parseServerDate, scanCanCancel, scanIsActiveState, scanProgressLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
+import { formatActivityDuration, formatMac, formatServerDate, parseServerDate, scanCanCancel, scanIsActiveState, scanProgressLabel, statusClass, statusIcon, statusLabel, statusTitle, toFlag } from '../lib/formatters.js';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({
@@ -340,10 +340,10 @@ function activityAge(host) {
 }
 function activityLabel(host) {
   if (!isOnline(host) && host?.stability?.current_seconds !== undefined)
-    return t('Down {duration}', { duration: formatDuration(host.stability.current_seconds) });
+    return t('Down {duration}', { duration: formatActivityDuration(host.stability.current_seconds) });
   const age = activityAge(host);
   if (age === null) return statusLabel(host?.status);
-  return t(isOnline(host) ? 'Seen {duration} ago' : 'Checked {duration} ago', { duration: formatDuration(age) });
+  return t(isOnline(host) ? 'Seen {duration} ago' : 'Checked {duration} ago', { duration: formatActivityDuration(age) });
 }
 function activityTitle(host) {
   const parts = [activityLabel(host)];

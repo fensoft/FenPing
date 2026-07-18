@@ -1214,23 +1214,23 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
 }
 
 .col-device {
-  width: 22%;
+  width: 25%;
 }
 
 .col-ip {
-  width: 8.4rem;
+  width: 17%;
 }
 
 .col-vendor {
-  width: auto;
+  width: 25%;
 }
 
 .col-activity {
-  width: 8.4rem;
+  width: 17%;
 }
 
 .col-services {
-  width: 6.4rem;
+  width: 17%;
 }
 
 .col-actions {

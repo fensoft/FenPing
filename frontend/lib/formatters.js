@@ -17,6 +17,14 @@ export function formatDuration(value) {
   return parts.slice(0, 2).join(' ');
 }
 
+export function formatActivityDuration(value) {
+  const seconds = Math.max(0, Math.floor(Number(value || 0)));
+  const days = Math.floor(seconds / 86400);
+  if (days <= 365) return formatDuration(seconds);
+  const years = Math.floor(days / 365);
+  return `${years}y ${days % 365}d`;
+}
+
 export function formatBytes(value) {
   const bytes = Number(value || 0);
   if (bytes < 1024) return `${bytes} B`;

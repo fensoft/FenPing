@@ -33,4 +33,24 @@ final class StatusHistoryServiceTest extends IntegrationTestCase
             self::assertSame($expectedUnstable[$field], $map['192.0.2.20'][$field]);
         }
     }
+
+    public function testCurrentDurationIsNotCappedBySevenDayUptimeWindow(): void
+    {
+        $ip = '192.0.2.40';
+        $this->app()->database()->connection()->exec("
+            INSERT INTO stats (ip, status, date_begin, date_end)
+            VALUES ('{$ip}', 'Down', datetime('now', '-10 days'), CURRENT_TIMESTAMP)
+        ");
+
+        $history = $this->app()->history();
+        $rows = $history->history($ip);
+        $summary = $history->summary($rows);
+        $map = $history->statsMap();
+
+        self::assertCount(1, $rows);
+        self::assertLessThanOrEqual(7 * 24 * 60 * 60, $rows[0]['duration']);
+        self::assertGreaterThanOrEqual(10 * 24 * 60 * 60 - 5, $summary['current_seconds']);
+        self::assertSame($summary['current_seconds'], $map[$ip]['current_seconds']);
+        self::assertLessThan($summary['current_seconds'], $summary['observed_seconds']);
+    }
 }

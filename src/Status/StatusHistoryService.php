@@ -62,9 +62,17 @@ private function normalizeHistoryRows(array $before, int $blipSeconds): array {
   if (count($before) > 0) {
     $now = $this->clock->now()->getTimestamp();
     $lastIndex = count($before) - 1;
+    $currentStatus = (string)($before[$lastIndex]["status"] ?? "");
+    $currentBegin = (int)($before[$lastIndex]["begin"] ?? $now);
+    for ($index = $lastIndex - 1; $index >= 0; $index--) {
+      if ((string)($before[$index]["status"] ?? "") !== $currentStatus)
+        break;
+      $currentBegin = min($currentBegin, (int)($before[$index]["begin"] ?? $currentBegin));
+    }
     $before[$lastIndex]["end"] = $now;
     $before[$lastIndex]["date_end"] = date("Y-m-d H:i:s", $now);
     $before[$lastIndex]["duration"] = max(0, $now - (int)$before[$lastIndex]["begin"]);
+    $before[$lastIndex]["actual_current_seconds"] = max(0, $now - $currentBegin);
     $before[$lastIndex]["current"] = 1;
   }
   foreach ($before as &$row) {
@@ -86,6 +94,8 @@ private function normalizeHistoryRows(array $before, int $blipSeconds): array {
       $after[$rowIndex]["duration"] += $i["duration"];
       if (!empty($i["current"]))
         $after[$rowIndex]["current"] = 1;
+      if (isset($i["actual_current_seconds"]))
+        $after[$rowIndex]["actual_current_seconds"] = $i["actual_current_seconds"];
     } else {
       array_push($after, $i);
     }
@@ -161,7 +171,7 @@ public function get_history_summary($rows) {
     "transitions" => $transitions,
     "longest_down_seconds" => $longestDown,
     "current_status" => $current["status"] ?? "",
-    "current_seconds" => $current === null ? 0 : max(0, (int)($current["duration"] ?? 0)),
+    "current_seconds" => $current === null ? 0 : max(0, (int)($current["actual_current_seconds"] ?? $current["duration"] ?? 0)),
     "stable" => $stable,
     "level" => $this->stability_level($uptime, $transitions, $longestDown, $current["status"] ?? ""),
     "label" => $this->stability_label($uptime)
