@@ -41,6 +41,7 @@
         <button v-if="isAuthenticated && matchingSavedFilter" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Rename saved view')" :aria-label="t('Rename saved view')" @click="beginSavedFilterEdit"><AppIcon name="pencil" /></button>
         <button v-if="isAuthenticated && matchingSavedFilter" class="btn btn-outline-danger btn-sm icon-btn" type="button" :title="t('Delete saved view')" :aria-label="t('Delete saved view')" @click="deleteSavedFilter"><AppIcon name="trash" /></button>
         <button v-if="hasActiveFilters" class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t('Clear filters')" @click="resetFilters"><AppIcon name="filter-x" /></button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" @click="columnsOpen = true"><AppIcon name="list-details" class="me-1" />{{ t('Columns') }}</button>
         <button v-if="isAuthenticated" class="btn btn-outline-primary btn-sm" type="button" @click="exportOpen = true"><AppIcon name="download" class="me-1" />{{ t('Export') }}</button>
         <div class="inventory-summary" aria-live="polite"><strong>{{ inventorySummary.devices }}</strong> {{ t('devices') }} <span aria-hidden="true">·</span> <span class="inventory-summary-online">{{ inventorySummary.online }} {{ t('online') }}</span> <span v-if="inventorySummary.newDevices > 0" aria-hidden="true">·</span> <span v-if="inventorySummary.newDevices > 0" class="inventory-summary-new">{{ inventorySummary.newDevices }} {{ t('new') }}</span></div>
       </div>
@@ -51,19 +52,22 @@
         <button class="btn btn-link btn-sm" type="button" :disabled="savingFilter" @click="savedFilterEditor = null">{{ t('Cancel') }}</button>
       </form>
       <table class="table table-sm inventory-table">
-        <colgroup><col class="col-status" /><col class="col-device" /><col class="col-ip" /><col class="col-vendor" /><col class="col-activity" /><col class="col-services" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
+        <colgroup><col class="col-status" /><col v-for="column in visibleColumns" :key="column.key" :class="['inventory-configurable-column', `col-${column.key}`]" :style="columnWidthStyle(column)" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
         <thead><tr>
           <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :aria-label="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :disabled="categoryKeys.length === 0" @click="toggleAllCategories"><AppIcon :name="allCategoriesCollapsed ? 'plus' : 'minus'" /></button></th>
-          <th scope="col">{{ t('Device') }}</th><th scope="col">IP</th><th scope="col" class="inventory-vendor-column">{{ t('Vendor') }}</th><th scope="col" class="inventory-activity-column">{{ t('Activity') }}</th><th scope="col" class="inventory-services-column">{{ t('Services') }}</th>
+          <th v-for="column in visibleColumns" :key="column.key" scope="col" :class="['inventory-column-heading', columnResponsiveClass(column.key)]" :aria-label="t(columnDefinition(column.key).label)" draggable="true" @dragstart="startColumnDrag(column.key, $event)" @dragover.prevent @drop.prevent="dropColumn(column.key)" @dragend="draggedColumn = ''">
+            <span>{{ t(columnDefinition(column.key).label) }}</span>
+            <span class="inventory-column-resize-handle" role="separator" tabindex="0" :aria-label="t('Resize {column} column', { column: t(columnDefinition(column.key).label) })" aria-orientation="vertical" :aria-valuemin="5" :aria-valuemax="60" :aria-valuenow="Math.round(column.width)" @pointerdown="beginColumnResize(column, $event)" @keydown.left.prevent="adjustColumnWidth(column.key, -1)" @keydown.right.prevent="adjustColumnWidth(column.key, 1)"></span>
+          </th>
           <th v-if="isAuthenticated" scope="col" class="inventory-actions-heading"><div class="inventory-actions-header"><span>{{ t('Actions') }}</span><button v-if="isDhcpSelected" class="btn btn-outline-primary btn-sm icon-btn" type="button" :title="t('Add category')" :aria-label="t('Add category')" @click="$emit('add-category')"><AppIcon name="folder-plus" /></button></div></th>
         </tr></thead>
         <tbody>
-          <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 7 : 6">{{ t('Loading') }}</td></tr>
-          <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="isAuthenticated ? 7 : 6">{{ t('No hosts') }}</td></tr>
-          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), row.type === 'host' ? downActivityClass(row.host.status, row.host?.stability?.current_seconds) : '', { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter.prevent="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
+          <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="tableColumnCount">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="tableColumnCount">{{ t('No hosts') }}</td></tr>
+          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), row.type === 'host' ? downRowClass(row.host) : '', { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter.prevent="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
             <template v-if="row.type === 'category'">
               <td><button class="btn category-toggle" type="button" :title="t(row.collapsed ? 'Open category' : 'Close category')" :aria-label="t(row.collapsed ? 'Open category' : 'Close category')" @click="toggleCategory(row.categoryKey)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" /></button></td>
-              <td class="category-name" colspan="5"><span class="category-title">{{ row.name }}</span><span class="category-summary">{{ row.total }} {{ t(row.total === 1 ? 'device' : 'devices') }} <span aria-hidden="true">·</span> {{ row.online }} {{ t('online') }}</span></td>
+              <td class="category-name" :colspan="visibleColumns.length"><span class="category-title">{{ row.name }}</span><span class="category-summary">{{ row.total }} {{ t(row.total === 1 ? 'device' : 'devices') }} <span aria-hidden="true">·</span> {{ row.online }} {{ t('online') }}</span></td>
               <td v-if="isAuthenticated" class="text-end category-actions">
                 <div class="inventory-actions">
                   <button v-if="isAuthenticated && isDhcpSelected && row.categoryIp" class="btn btn-outline-info btn-sm icon-btn" type="button" :title="t('Rename category')" :aria-label="t('Rename category')" @click="$emit('rename-category', row)"><AppIcon name="pencil" /></button>
@@ -75,23 +79,25 @@
               <td class="status-cell"><div class="status-icons">
                 <span :class="statusClass(row.host.status)" :title="statusTitle(row.host.status)" :aria-label="statusTitle(row.host.status)" class="status-pill" role="img"><AppIcon :name="statusIcon(row.host.status)" /></span>
               </div></td>
-              <td class="inventory-device-cell text-truncate-cell" :title="deviceTitle(row.host)">
-                <AppIcon v-if="hostIconName(row.host.icon)" :name="hostIconName(row.host.icon)" class="text-primary host-custom-icon" />
-                <span class="host-name-value">{{ deviceName(row.host) }}</span>
-                <span v-if="row.host.tags?.length" class="inventory-host-tags">
-                  <span v-for="tag in row.host.tags" :key="tag.toLowerCase()" class="badge bg-blue-lt text-blue">{{ tag }}</span>
-                </span>
-                <AppIcon v-if="toFlag(row.host.is_new)" name="alert-triangle" class="text-warning host-role-icon" :title="t('New device — approve it in IPAM')" />
-                <AppIcon v-if="toFlag(row.host.mac_mismatch)" name="alert-triangle" class="text-danger host-role-icon" :title="`${t('Reserved MAC differs from detected MAC')}: ${formatMac(row.host.mac)} → ${formatMac(row.host.detected_mac)}`" />
-                <AppIcon v-if="toFlag(row.host.repeater)" name="wifi" class="text-secondary host-role-icon" :title="t('Router/repeater')" />
-                <AppIcon v-if="row.host.via" name="antenna-bars-5" class="text-secondary host-role-icon" :title="row.host.via" />
-                <a v-if="row.host.web == 1 && row.host.ip" class="host-web-link" :href="`http://${row.host.ip}`" target="_blank" rel="noopener noreferrer" :title="t('Open web interface')" :aria-label="t('Open web interface')"><AppIcon name="external-link" /></a>
-                <span class="inventory-mobile-meta">{{ mobileMeta(row.host) }}</span>
-              </td>
-              <td class="text-truncate-cell font-monospace inventory-ip-cell" :title="row.host.ip || ''">{{ row.host.ip }}</td>
-              <td class="text-truncate-cell inventory-vendor-column" :title="row.host.vendor || t('Unknown vendor')">{{ row.host.vendor || t('Unknown') }}</td>
-              <td class="text-truncate-cell inventory-activity-column" :title="activityTitle(row.host)">{{ activityLabel(row.host) }}</td>
-              <td class="text-truncate-cell inventory-services-column" :title="serviceTitle(row.host)">{{ serviceLabel(row.host) }}</td>
+              <template v-for="column in visibleColumns" :key="column.key">
+                <td v-if="column.key === 'device'" class="inventory-device-cell text-truncate-cell" :title="deviceTitle(row.host)">
+                  <AppIcon v-if="hostIconName(row.host.icon)" :name="hostIconName(row.host.icon)" class="text-primary host-custom-icon" />
+                  <span class="host-name-value">{{ deviceName(row.host) }}</span>
+                  <span v-if="row.host.tags?.length" class="inventory-host-tags">
+                    <span v-for="tag in row.host.tags" :key="tag.toLowerCase()" class="badge bg-blue-lt text-blue">{{ tag }}</span>
+                  </span>
+                  <AppIcon v-if="toFlag(row.host.is_new)" name="alert-triangle" class="text-warning host-role-icon" :title="t('New device — approve it in IPAM')" />
+                  <AppIcon v-if="toFlag(row.host.mac_mismatch)" name="alert-triangle" class="text-danger host-role-icon" :title="`${t('Reserved MAC differs from detected MAC')}: ${formatMac(row.host.mac)} → ${formatMac(row.host.detected_mac)}`" />
+                  <AppIcon v-if="toFlag(row.host.repeater)" name="wifi" class="text-secondary host-role-icon" :title="t('Router/repeater')" />
+                  <AppIcon v-if="row.host.via" name="antenna-bars-5" class="text-secondary host-role-icon" :title="row.host.via" />
+                  <a v-if="row.host.web == 1 && row.host.ip" class="host-web-link" :href="`http://${row.host.ip}`" target="_blank" rel="noopener noreferrer" :title="t('Open web interface')" :aria-label="t('Open web interface')"><AppIcon name="external-link" /></a>
+                  <span class="inventory-mobile-meta">{{ mobileMeta(row.host) }}</span>
+                </td>
+                <td v-else-if="column.key === 'ip'" class="text-truncate-cell font-monospace inventory-ip-cell" :title="row.host.ip || ''">{{ row.host.ip }}</td>
+                <td v-else-if="column.key === 'vendor'" class="text-truncate-cell inventory-vendor-column" :title="row.host.vendor || t('Unknown vendor')">{{ row.host.vendor || t('Unknown') }}</td>
+                <td v-else-if="column.key === 'activity'" class="text-truncate-cell inventory-activity-column" :title="activityTitle(row.host)">{{ activityLabel(row.host) }}</td>
+                <td v-else-if="column.key === 'services'" class="text-truncate-cell inventory-services-column" :title="serviceTitle(row.host)">{{ serviceLabel(row.host) }}</td>
+              </template>
               <td v-if="isAuthenticated" class="text-end action-cell">
                 <div class="inventory-actions">
                   <button v-if="row.host.ip" class="btn btn-sm inventory-action-btn inventory-scan-btn" :class="scanActionClass(row.host)" type="button" :title="scanButtonTitle(row.host)" :aria-label="scanButtonTitle(row.host)" :disabled="isScanRunning(row.host)" @click="$emit('scan-host', row.host)"><AppIcon :name="isScanRunning(row.host) ? 'loader-2' : 'search'" /><span class="inventory-action-label">{{ scanButtonLabel(row.host) }}</span></button>
@@ -107,15 +113,18 @@
       </table>
     </div>
     <InventoryExportModal v-if="exportOpen" :network="selectedCidr" @close="exportOpen = false" @download="exportOpen = false" />
+    <InventoryColumnsModal v-if="columnsOpen" :layout="inventoryLayout" @close="columnsOpen = false" @save="saveInventoryLayout" />
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import InventoryColumnsModal from '../components/InventoryColumnsModal.vue';
 import InventoryExportModal from '../components/InventoryExportModal.vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, matchingSavedInventoryFilter, normalizeInventoryFilters, normalizeTags } from '../lib/inventoryFilters.js';
 import { hostIconName } from '../lib/hostIcons.js';
+import { inventoryColumnDefinition, inventoryLayoutStorageKey, normalizeInventoryLayout, reorderInventoryColumns, updateInventoryColumn } from '../lib/inventoryColumns.js';
 import { inventoryNetworkFallback, inventoryNetworkIsDhcp, inventoryNetworkLabel, inventoryNetworkUrl } from '../lib/inventoryNetworks.js';
 import { t } from '../lib/i18n.js';
 import { useAbortableTask } from '../composables/useAbortableTask.js';
@@ -144,6 +153,13 @@ const dhcpCidr = ref('');
 const loading = ref(false);
 const error = ref('');
 const exportOpen = ref(false);
+const columnsOpen = ref(false);
+const inventoryLayout = ref(normalizeInventoryLayout(readStorage(inventoryLayoutStorageKey, null)));
+const draggedColumn = ref('');
+const resizingColumn = ref('');
+const compactInventory = ref(false);
+let resizeState = null;
+let compactMediaQuery = null;
 const request = useAbortableTask();
 const now = useNow(30000);
 const filterGroups = computed(() => [
@@ -155,6 +171,9 @@ const filters = ref(normalizeInventoryFilters(readStorage('fenping_filters', inv
 writeStorage('fenping_filters', filters.value);
 const collapsed = ref(new Set(readStorage('fenping_collapsed_categories', [])));
 const hasActiveFilters = computed(() => inventoryFiltersActive(filters.value));
+const visibleColumns = computed(() => inventoryLayout.value.columns.filter((column) => column.visible));
+const sizedColumns = computed(() => visibleColumns.value.filter((column) => !compactInventory.value || ['device', 'ip'].includes(column.key)));
+const tableColumnCount = computed(() => 1 + visibleColumns.value.length + (props.isAuthenticated ? 1 : 0));
 const isDhcpSelected = computed(() => inventoryNetworkIsDhcp(selectedCidr.value, dhcpCidr.value));
 const matchingSavedFilter = computed(() => matchingSavedInventoryFilter(filters.value.tags, savedFilters.value));
 const selectedSavedFilterValue = computed(() => matchingSavedFilter.value ? String(matchingSavedFilter.value.id) : '');
@@ -215,7 +234,17 @@ usePageController({
 useLiveRefresh(['hosts', 'status', 'scans', 'leases', 'networks', 'vendors'], load);
 watch(filters, (value) => writeStorage('fenping_filters', value), { deep: true });
 watch(collapsed, (value) => writeStorage('fenping_collapsed_categories', Array.from(value)));
-onMounted(load);
+watch(inventoryLayout, (value) => writeStorage(inventoryLayoutStorageKey, normalizeInventoryLayout(value)), { deep: true });
+onMounted(() => {
+  compactMediaQuery = window.matchMedia('(max-width: 991.98px)');
+  updateCompactInventory(compactMediaQuery);
+  compactMediaQuery.addEventListener('change', updateCompactInventory);
+  load();
+});
+onBeforeUnmount(() => {
+  finishColumnResize();
+  compactMediaQuery?.removeEventListener('change', updateCompactInventory);
+});
 
 async function load() {
   const signal = request.nextSignal(); loading.value = true; error.value = '';
@@ -250,6 +279,50 @@ function selectNetwork() {
 
 function readStorage(name, fallback) { try { const value = localStorage.getItem(name); return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
 function writeStorage(name, value) { try { localStorage.setItem(name, JSON.stringify(value)); } catch {} }
+function columnDefinition(key) { return inventoryColumnDefinition(key); }
+function columnResponsiveClass(key) { return ['vendor', 'activity', 'services'].includes(key) ? `inventory-${key}-column` : ''; }
+function columnWidthStyle(column) {
+  if (!sizedColumns.value.some((item) => item.key === column.key)) return { '--inventory-column-width': '0%' };
+  const total = sizedColumns.value.reduce((sum, item) => sum + item.width, 0) || 1;
+  return { '--inventory-column-width': `${column.width / total * 101}%` };
+}
+function updateCompactInventory(event) { compactInventory.value = Boolean(event.matches); }
+function saveInventoryLayout(layout) { inventoryLayout.value = normalizeInventoryLayout(layout); columnsOpen.value = false; }
+function startColumnDrag(key, event) {
+  if (resizingColumn.value) { event.preventDefault(); return; }
+  draggedColumn.value = key;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', key);
+}
+function dropColumn(targetKey) {
+  const sourceKey = draggedColumn.value;
+  draggedColumn.value = '';
+  if (sourceKey) inventoryLayout.value = reorderInventoryColumns(inventoryLayout.value, sourceKey, targetKey);
+}
+function adjustColumnWidth(key, delta) {
+  const column = inventoryLayout.value.columns.find((item) => item.key === key);
+  if (column) inventoryLayout.value = updateInventoryColumn(inventoryLayout.value, key, { width: column.width + delta });
+}
+function beginColumnResize(column, event) {
+  event.preventDefault(); event.stopPropagation();
+  const table = event.currentTarget.closest('table');
+  resizeState = { key: column.key, startX: event.clientX, startWidth: column.width, tableWidth: Math.max(1, table?.getBoundingClientRect().width || 1) };
+  resizingColumn.value = column.key;
+  window.addEventListener('pointermove', continueColumnResize);
+  window.addEventListener('pointerup', finishColumnResize, { once: true });
+}
+function continueColumnResize(event) {
+  if (!resizeState) return;
+  const direction = document.documentElement.dir === 'rtl' ? -1 : 1;
+  const width = resizeState.startWidth + direction * (event.clientX - resizeState.startX) / resizeState.tableWidth * 100;
+  inventoryLayout.value = updateInventoryColumn(inventoryLayout.value, resizeState.key, { width });
+}
+function finishColumnResize() {
+  resizeState = null;
+  resizingColumn.value = '';
+  window.removeEventListener('pointermove', continueColumnResize);
+  window.removeEventListener('pointerup', finishColumnResize);
+}
 function resetFilters() { filters.value = { ...inventoryFilterDefaults, tags: [] }; savedFilterEditor.value = null; }
 function tagSelected(tag) { return filters.value.tags.some((item) => item.toLowerCase() === tag.toLowerCase()); }
 function toggleTag(tag) {
@@ -334,6 +407,7 @@ function scanButtonTitle(host) {
   return host?.scan?.date_end ? t('Scan host, last {date}', { date: formatServerDate(host.scan.date_end) }) : t('Scan host');
 }
 function isOnline(host) { return ['Up', 'arp'].includes(host?.status); }
+function downRowClass(host) { return downActivityClass(host?.status, host?.stability?.current_seconds, inventoryLayout.value.downRecentDays, inventoryLayout.value.downOlderDays); }
 function activityAge(host) {
   const timestamp = parseServerDate(host?.date);
   return Number.isNaN(timestamp) ? null : Math.max(0, Math.floor((now.value - timestamp) / 1000));

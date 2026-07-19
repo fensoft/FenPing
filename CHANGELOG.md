@@ -20,6 +20,10 @@ Development after the 1.7 tag.
 - Inventory now shows the actual duration of the current Down state instead of capping it at the seven-day uptime-analysis window.
 - Inventory balances desktop columns across Device, Vendor, IP, Activity, and Services and formats activity older than 365 days as years plus remaining days.
 - Down rows use progressively darker gray text after one week and one month; backgrounds remain red only for important Down rows.
+- Inventory columns can be resized, reordered, shown or hidden, saved per browser, and reset alongside configurable Down color thresholds.
+- Production builds retain dynamic Inventory column width and responsive selectors, so saved sizes remain effective in desktop and compact layouts.
+- Resizing configurable columns no longer changes the fixed Status or Actions column widths.
+- Default Inventory column weights are Device 17, IP 6, Vendor 20, Activity 7, and Services 6.
 
 ## [1.7] - 2026-07-16
 

@@ -10,6 +10,7 @@ export default {
           defaultExtractor: (content) => content.match(/[\w-/:]+(?<!:)/g) || [],
           safelist: {
             standard: [
+              /^col-(device|ip|vendor|activity|services)$/,
               /^(scan-run|scan-row)-(queued|running|complete|failed|timeout|cancelled)$/,
               /^stability-(good|warn|bad)$/
             ],

@@ -21,10 +21,10 @@ test('shows the full desktop inventory layout without overflow', async ({ page }
   const vendorBox = await page.getByRole('columnheader', { name: 'Vendor' }).boundingBox();
   const activityBox = await page.getByRole('columnheader', { name: 'Activity' }).boundingBox();
   const servicesBox = await page.getByRole('columnheader', { name: 'Services' }).boundingBox();
-  expect(Math.abs(deviceBox.width - vendorBox.width)).toBeLessThan(2);
-  expect(Math.abs(ipBox.width - activityBox.width)).toBeLessThan(2);
+  expect(deviceBox.width / vendorBox.width).toBeCloseTo(17 / 20, 1);
   expect(Math.abs(ipBox.width - servicesBox.width)).toBeLessThan(2);
-  expect(deviceBox.width).toBeGreaterThan(ipBox.width);
+  expect(activityBox.width).toBeGreaterThan(ipBox.width);
+  expect(deviceBox.width).toBeGreaterThan(activityBox.width);
   const oldDownActivity = page.getByText('Down 2y 42d', { exact: true });
   await expect(oldDownActivity).toBeVisible();
   const oldDownRow = page.locator('tr.inventory-host-row').filter({ hasText: 'Office printer' });
@@ -40,6 +40,64 @@ test('shows the full desktop inventory layout without overflow', async ({ page }
   await expectNoHorizontalOverflow(page);
 });
 
+test('customizes and persists inventory columns and Down thresholds', async ({ page }) => {
+  await page.goto('/');
+
+  const initialStatusWidth = (await page.locator('.inventory-table thead th').first().boundingBox()).width;
+  const initialIpWidth = (await page.getByRole('columnheader', { name: 'IP', exact: true }).boundingBox()).width;
+  const ipResizeBox = await page.getByRole('separator', { name: 'Resize IP column' }).boundingBox();
+  await page.mouse.move(ipResizeBox.x + ipResizeBox.width / 2, ipResizeBox.y + ipResizeBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(ipResizeBox.x + ipResizeBox.width / 2 + 80, ipResizeBox.y + ipResizeBox.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const draggedIpWidth = (await page.getByRole('columnheader', { name: 'IP', exact: true }).boundingBox()).width;
+  const draggedStatusWidth = (await page.locator('.inventory-table thead th').first().boundingBox()).width;
+  expect(draggedIpWidth).toBeGreaterThan(initialIpWidth + 30);
+  expect(Math.abs(draggedStatusWidth - initialStatusWidth)).toBeLessThan(1);
+
+  await page.getByRole('button', { name: 'Columns' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Inventory columns' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('checkbox', { name: 'Vendor' }).uncheck();
+  await dialog.getByLabel('IP width').fill('24');
+  await dialog.getByRole('button', { name: 'Move Services up' }).click();
+  await dialog.getByRole('button', { name: 'Move Services up' }).click();
+  await dialog.getByLabel('Light gray under').fill('2');
+  await dialog.getByLabel('Medium gray under').fill('10');
+  await dialog.getByRole('button', { name: 'Save layout' }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('columnheader', { name: 'Vendor' })).toHaveCount(0);
+  const customizedIpWidth = (await page.getByRole('columnheader', { name: 'IP', exact: true }).boundingBox()).width;
+  const customizedStatusWidth = (await page.locator('.inventory-table thead th').first().boundingBox()).width;
+  expect(customizedIpWidth).toBeGreaterThan(initialIpWidth + 30);
+  expect(Math.abs(customizedStatusWidth - initialStatusWidth)).toBeLessThan(1);
+  const headings = await page.locator('.inventory-table thead th').allTextContents();
+  expect(headings.map((heading) => heading.trim()).filter(Boolean)).toEqual(['Device', 'IP', 'Services', 'Activity']);
+  await expect(page.locator('tr.inventory-host-row').filter({ hasText: 'Lobby camera' })).toHaveClass(/activity-down-under-month/);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('fenping_inventory_layout_v1') || 'null'))).toMatchObject({
+    downRecentDays: 2,
+    downOlderDays: 10,
+    columns: [
+      { key: 'device', visible: true, width: 17 },
+      { key: 'ip', visible: true, width: 24 },
+      { key: 'services', visible: true, width: 6 },
+      { key: 'vendor', visible: false, width: 20 },
+      { key: 'activity', visible: true, width: 7 }
+    ]
+  });
+
+  const resizeIp = page.getByRole('separator', { name: 'Resize IP column' });
+  await resizeIp.focus();
+  await resizeIp.press('ArrowRight');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('fenping_inventory_layout_v1')).columns.find((column) => column.key === 'ip').width)).toBe(25);
+
+  await page.reload();
+  await expect(page.getByRole('columnheader', { name: 'Vendor' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Columns' }).click();
+  await expect(page.getByRole('dialog', { name: 'Inventory columns' }).getByLabel('IP width')).toHaveValue('25');
+});
+
 test('uses the compact mobile inventory and single-column modal layout', async ({ page, api }) => {
   api.state.authenticated = true;
   await page.setViewportSize({ width: 375, height: 812 });
@@ -51,6 +109,12 @@ test('uses the compact mobile inventory and single-column modal layout', async (
   await expect(page.getByRole('columnheader', { name: 'Vendor' })).toBeHidden();
   await expect(page.getByRole('columnheader', { name: 'Activity' })).toBeHidden();
   await expect(page.getByRole('columnheader', { name: 'Services' })).toBeHidden();
+  const mobileIpBefore = (await page.getByRole('columnheader', { name: 'IP', exact: true }).boundingBox()).width;
+  const resizeIp = page.getByRole('separator', { name: 'Resize IP column' });
+  await resizeIp.focus();
+  for (let index = 0; index < 10; index++) await resizeIp.press('ArrowRight');
+  const mobileIpAfter = (await page.getByRole('columnheader', { name: 'IP', exact: true }).boundingBox()).width;
+  expect(mobileIpAfter).toBeGreaterThan(mobileIpBefore + 10);
   await expect(page.locator('.inventory-mobile-meta').first()).toBeVisible();
   await expect(page.locator('.inventory-action-label').first()).toBeHidden();
 

@@ -25,11 +25,13 @@ export function formatActivityDuration(value) {
   return `${years}y ${days % 365}d`;
 }
 
-export function downActivityClass(status, value) {
+export function downActivityClass(status, value, recentDays = 7, olderDays = 30) {
   if (!['Down', 'arp-down'].includes(status) || value === undefined || value === null) return '';
   const seconds = Math.max(0, Math.floor(Number(value || 0)));
-  if (seconds < 7 * 86400) return 'activity-down-under-week';
-  if (seconds < 30 * 86400) return 'activity-down-under-month';
+  const recentSeconds = Math.max(1, Number(recentDays || 7)) * 86400;
+  const olderSeconds = Math.max(Number(olderDays || 30), Number(recentDays || 7) + 1) * 86400;
+  if (seconds < recentSeconds) return 'activity-down-under-week';
+  if (seconds < olderSeconds) return 'activity-down-under-month';
   return 'activity-down-over-month';
 }
 

@@ -23,4 +23,7 @@ test('uses progressively darker activity classes only while down', () => {
   assert.equal(downActivityClass('arp-down', 90 * day), 'activity-down-over-month');
   assert.equal(downActivityClass('Up', 90 * day), '');
   assert.equal(downActivityClass('Down'), '');
+  assert.equal(downActivityClass('Down', 8 * day, 10, 45), 'activity-down-under-week');
+  assert.equal(downActivityClass('Down', 20 * day, 10, 45), 'activity-down-under-month');
+  assert.equal(downActivityClass('Down', 45 * day, 10, 45), 'activity-down-over-month');
 });
