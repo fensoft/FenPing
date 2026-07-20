@@ -23,6 +23,9 @@ abstract class IntegrationTestCase extends TestCase
         try {
             $pdo->exec('PRAGMA defer_foreign_keys=ON');
             foreach ([
+                'network_anomaly_events', 'network_anomaly_conditions', 'network_presence_events',
+                'network_observation_runs', 'network_vendor_baselines', 'network_identity_state',
+                'network_anomaly_monitors',
                 'audit_events',
                 'monitored_services',
                 'operation_failures', 'operation_status',

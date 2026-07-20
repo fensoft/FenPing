@@ -71,7 +71,7 @@ final readonly class SystemController implements Controller
                 AuthPolicy::BodyOrSession,
                 [LiveUpdateScope::Hosts],
             ),
-            new Route('GET', '/notify', fn(Request $request, array $params): array => $this->notifications->recent()),
+            new Route('GET', '/notify', fn(Request $request, array $params): array => $this->notifications->recent($this->notificationHours($request))),
             new Route(
                 'GET',
                 '/notify/telegram/chats',
@@ -92,6 +92,14 @@ final readonly class SystemController implements Controller
                 AuthPolicy::Session,
             ),
         ];
+    }
+
+    private function notificationHours(Request $request): int
+    {
+        $value = $request->query['hours'] ?? 24;
+        if (!is_scalar($value) || !ctype_digit((string)$value) || (int)$value < 1 || (int)$value > 720)
+            throw new \FenPing\Api\HttpException(400, 'invalid notification hours');
+        return (int)$value;
     }
 
     private function inventory(Request $request): array

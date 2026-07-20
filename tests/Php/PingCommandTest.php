@@ -35,6 +35,8 @@ final class PingCommandTest extends IntegrationTestCase
             ["ip" => "192.0.2.100", "status" => "Up"],
             $this->storedPing(),
         );
+        self::assertSame(0, (int) $this->app()->database()->connection()
+            ->query('SELECT COUNT(*) FROM network_anomaly_monitors')->fetchColumn());
     }
 
     public function testFailedConflictScanRemainsNonfatalAndPersistsPing(): void
@@ -124,6 +126,8 @@ final class PingCommandTest extends IntegrationTestCase
         self::assertSame(['192.0.2.20'], $scanner->calls[2]['ips']);
         self::assertSame(1, $this->statusHistoryCount('192.0.2.10'));
         self::assertSame(1, $this->statusHistoryCount('192.0.2.20'));
+        self::assertSame(1, (int) $this->app()->database()->connection()
+            ->query('SELECT COUNT(*) FROM network_anomaly_monitors')->fetchColumn());
     }
 
     public function testOnlyPreviouslyUpHostsAreEligibleForRetries(): void
@@ -160,6 +164,7 @@ final class PingCommandTest extends IntegrationTestCase
             $this->app()->discord(),
             $conflictScanner,
             $this->app()->ipConflictService(),
+            $this->app()->anomalies(),
         );
     }
 

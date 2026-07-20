@@ -8,6 +8,7 @@ import {
 } from '../frontend/lib/notificationFilters.js';
 
 const collections = {
+  anomalies: [{ id: 'a1', important: 1 }, { id: 'a2', important: 0 }],
   conflicts: [{ id: 'c1', important: 1 }, { id: 'c2', important: 0 }],
   status: [{ id: 's1', important: '1' }, { id: 's2', important: null }],
   services: [{ id: 'p1', important: true }, { id: 'p2', important: false }]
@@ -22,19 +23,30 @@ test('normalizes notification importance and type filters', () => {
 test('filters every notification collection by importance', () => {
   const important = filterNotificationCollections(collections, { importance: 'important', type: 'all' });
   assert.deepEqual(important.conflicts.map(({ id }) => id), ['c1']);
+  assert.deepEqual(important.anomalies.map(({ id }) => id), ['a1']);
   assert.deepEqual(important.status.map(({ id }) => id), ['s1']);
   assert.deepEqual(important.services.map(({ id }) => id), ['p1']);
 
   const normal = filterNotificationCollections(collections, { importance: 'normal', type: 'all' });
   assert.deepEqual(normal.conflicts.map(({ id }) => id), ['c2']);
+  assert.deepEqual(normal.anomalies.map(({ id }) => id), ['a2']);
   assert.deepEqual(normal.status.map(({ id }) => id), ['s2']);
   assert.deepEqual(normal.services.map(({ id }) => id), ['p2']);
 });
 
 test('notification type selection keeps only the selected collection', () => {
   assert.deepEqual(filterNotificationCollections(collections, { importance: 'all', type: 'status' }), {
-    conflicts: [], status: collections.status, services: []
+    anomalies: [], conflicts: [], status: collections.status, services: []
   });
+});
+
+test('appeared ports are rendered only through the anomaly projection', () => {
+  const values = filterNotificationCollections({
+    anomalies: [{ id: 'open', type: 'open_port' }],
+    services: [{ id: 'open', change_type: 'appeared' }, { id: 'closed', change_type: 'disappeared' }]
+  }, { importance: 'all', type: 'all' });
+  assert.deepEqual(values.anomalies.map(({ id }) => id), ['open']);
+  assert.deepEqual(values.services.map(({ id }) => id), ['closed']);
 });
 
 test('paginates and clamps pages and supported page sizes', () => {

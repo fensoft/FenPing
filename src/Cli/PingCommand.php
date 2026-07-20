@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FenPing\Cli;
 
+use FenPing\Anomaly\NetworkAnomalyService;
 use FenPing\Config\AppConfig;
 use FenPing\Discord\DiscordNotifier;
 use FenPing\Ipam\IpConflictScanner;
@@ -27,6 +28,7 @@ final readonly class PingCommand implements Command
         private DiscordNotifier $discord,
         private IpConflictScanner $conflictDetector,
         private IpConflictService $conflicts,
+        private NetworkAnomalyService $anomalies,
     ) {
     }
 
@@ -87,6 +89,8 @@ public function run(array $args): int {
   ))));
   $hosts = $this->verifiedHosts($targets, $localIps);
   $this->repository->save($hosts);
+  if ($from === 1 && $to === 254)
+    $this->notifications->sendAnomalyChanges($this->anomalies->observePing($selectedNetwork, $hosts));
   $this->notifications->sendStatusChangesSince($notifyAfterId);
 
   if ($debug) {

@@ -77,6 +77,31 @@ public function sendTelegramServiceChanges(array $changes): void {
     $this->telegramPostText($message);
 }
 
+public function sendTelegramAnomalyChanges(array $changes): void {
+  if (!$this->chats->telegramNotificationsEnabled()) return;
+  $changes = $this->rules->filterAnomalies($changes);
+  $blocks = array();
+  foreach ($changes as $change) {
+    $type = str_replace('_', ' ', (string)($change['anomaly_type'] ?? $change['type'] ?? 'anomaly'));
+    $event = (string)($change['event_type'] ?? $change['event'] ?? 'detected');
+    $lines = array(
+      ucfirst($type) . ' ' . $event,
+      'Network: ' . $this->notificationTextValue((string)($change['network'] ?? '')),
+      'IP: ' . $this->notificationTextValue((string)($change['ip'] ?? '')),
+      'MAC: ' . $this->notificationTextValue((string)($change['mac'] ?? '')),
+      'Important: ' . ((int)($change['important'] ?? 0) === 1 ? 'Yes' : 'No'),
+      'Time: ' . $this->notificationTextValue((string)($change['occurred_at'] ?? ''))
+    );
+    if (($change['anomaly_type'] ?? '') === 'ip_change')
+      $lines[] = 'Previous IP: ' . $this->notificationTextValue((string)($change['previous_ip'] ?? ''));
+    if (($change['anomaly_type'] ?? '') === 'unexpected_vendor')
+      $lines[] = 'Vendor: ' . $this->notificationTextValue((string)($change['vendor'] ?? ''));
+    $blocks[] = implode("\n", $lines);
+  }
+  foreach ($this->telegramBatchMessages('FenPing network anomalies', $blocks) as $message)
+    $this->telegramPostText($message);
+}
+
 public function sendTelegramManualServiceChange(array $change): void {
   if (!$this->chats->telegramNotificationsEnabled())
     return;
@@ -199,9 +224,6 @@ private function filterStatusChanges(array $changes): array {
 }
 
 private function filterServiceChanges(array $changes): array {
-  $rules = $this->rules->notificationRules()['service_changes'];
-  return array_values(array_filter($changes, static function(array $change) use ($rules): bool {
-    return $rules[(int)($change['important'] ?? 0) === 1 ? 'important' : 'normal'];
-  }));
+  return $this->rules->filterServiceChanges($changes);
 }
 }

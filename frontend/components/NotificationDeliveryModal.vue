@@ -94,6 +94,7 @@
                 <tbody>
                   <tr><th scope="row">{{ t('Host status changes') }}</th><td><input v-model="rules.host_status.normal" class="form-check-input" type="checkbox" :aria-label="t('Normal-device host status changes')" :disabled="!isAuthenticated || saving" /></td><td><input v-model="rules.host_status.important" class="form-check-input" type="checkbox" :aria-label="t('Important-device host status changes')" :disabled="!isAuthenticated || saving" /></td></tr>
                   <tr><th scope="row">{{ t('Service changes') }}</th><td><input v-model="rules.service_changes.normal" class="form-check-input" type="checkbox" :aria-label="t('Normal-device service changes')" :disabled="!isAuthenticated || saving" /></td><td><input v-model="rules.service_changes.important" class="form-check-input" type="checkbox" :aria-label="t('Important-device service changes')" :disabled="!isAuthenticated || saving" /></td></tr>
+                  <tr v-for="anomaly in anomalyRules" :key="anomaly.key"><th scope="row">{{ anomaly.label }}</th><td><input v-model="rules.network_anomalies[anomaly.key].normal" class="form-check-input" type="checkbox" :aria-label="t('Normal-device {event}', { event: anomaly.label })" :disabled="!isAuthenticated || saving" /></td><td><input v-model="rules.network_anomalies[anomaly.key].important" class="form-check-input" type="checkbox" :aria-label="t('Important-device {event}', { event: anomaly.label })" :disabled="!isAuthenticated || saving" /></td></tr>
                 </tbody>
               </table>
             </div>
@@ -161,6 +162,14 @@ import { computed } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { useAccessibleModal } from '../composables/useAccessibleModal.js';
 import { t } from '../lib/i18n.js';
+
+const anomalyRules = [
+  { key: 'open_ports', label: t('New open ports') },
+  { key: 'unexpected_vendors', label: t('Unexpected vendors') },
+  { key: 'ip_changes', label: t('IP changes') },
+  { key: 'duplicate_identities', label: t('Duplicate identities') },
+  { key: 'churn', label: t('Unusual churn') }
+];
 
 const props = defineProps({
   delivery: { type: Object, required: true },

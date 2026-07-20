@@ -5,9 +5,14 @@
     <div class="page-refresh-header">
       <div>
         <h2>{{ t('Notify') }}</h2>
-        <div class="text-secondary small">{{ t('Last {hours}h of status, service, and IP conflict changes', { hours: notify.hours || 24 }) }}</div>
+        <div class="text-secondary small">{{ t('Last {hours}h of status, service, and IP conflict changes', { hours: notify.hours || 24 }) }} · {{ t('Network anomalies') }}</div>
       </div>
       <div class="d-flex flex-wrap gap-2">
+        <select v-model.number="selectedHours" class="form-select form-select-sm w-auto" :aria-label="t('History range')" @change="load">
+          <option :value="24">{{ t('Last 24 hours') }}</option>
+          <option :value="168">{{ t('Last 7 days') }}</option>
+          <option :value="720">{{ t('Last 30 days') }}</option>
+        </select>
         <button class="btn btn-outline-primary btn-sm" type="button" @click="openNotificationSettings">
           <AppIcon name="edit" class="me-1" />{{ t('Notification delivery') }}
         </button>
@@ -39,12 +44,39 @@
     <div class="notify-summary">
       <div class="notify-summary-item"><span>{{ t('Total') }}</span><strong>{{ filteredSummary.total }}</strong></div>
       <div class="notify-summary-item"><span>{{ t('Hosts') }}</span><strong>{{ filteredSummary.hosts }}</strong></div>
+      <div class="notify-summary-item"><span>{{ t('Anomalies') }}</span><strong>{{ filteredSummary.anomaly_total }}</strong></div>
       <div class="notify-summary-item"><span>{{ t('Services') }}</span><strong>{{ filteredSummary.port_total }}</strong></div>
       <div class="notify-summary-item"><span>{{ t('IP conflicts') }}</span><strong>{{ filteredSummary.conflict_total }}</strong></div>
       <div v-for="item in statusCounts" :key="item.status" class="notify-summary-item">
         <span>{{ statusLabel(item.status) }}</span><strong>{{ item.count }}</strong>
       </div>
     </div>
+
+    <template v-if="typeVisible('anomalies')">
+    <div class="notification-section-heading"><h3>{{ t('Network anomalies') }}</h3><span class="text-secondary small">{{ t('{count} anomaly events', { count: anomalyChanges.length }) }}</span></div>
+    <div class="table-wrap">
+      <table class="table table-sm notify-table anomaly-table">
+        <thead><tr><th>{{ t('Time') }}</th><th>{{ t('Type') }}</th><th>{{ t('Identity') }}</th><th>{{ t('Event') }}</th><th>{{ t('Evidence') }}</th></tr></thead>
+        <tbody>
+          <tr v-if="loading && anomalyChanges.length === 0"><td class="text-secondary text-center py-4" colspan="5">{{ t('Loading') }}</td></tr>
+          <tr v-else-if="!loading && anomalyChanges.length === 0"><td class="text-secondary text-center py-4" colspan="5">{{ hasActiveFilters ? t('No matching notifications') : t('No network anomalies in the selected period') }}</td></tr>
+          <tr v-for="change in anomalyPage.items" :key="change.event_id" :class="{ 'table-success': change.event === 'resolved' }">
+            <td class="notify-time"><span>{{ formatNotifyDate(change.occurred_at) }}</span><small>{{ formatRelativeAge(change.occurred, now) }}</small></td>
+            <td><span class="badge bg-yellow-lt text-yellow">{{ anomalyTypeLabel(change) }}</span><small v-if="change.subtype" class="d-block text-secondary">{{ anomalySubtypeLabel(change.subtype) }}</small></td>
+            <td class="notify-host">
+              <button v-if="change.ip" class="btn btn-link btn-sm p-0 notify-host-name" type="button" @click="openAnomaly(change)">{{ change.name || change.ip }}</button>
+              <strong v-else>{{ change.hostname || change.mac || change.network || t('Unknown') }}</strong>
+              <span v-if="change.ip" class="font-monospace">{{ change.ip }}</span>
+              <span v-if="change.mac" class="font-monospace text-secondary">{{ formatMac(change.mac) }}</span>
+            </td>
+            <td><span class="badge" :class="change.event === 'resolved' ? 'bg-green-lt text-green' : 'bg-orange-lt text-orange'">{{ t(change.event === 'resolved' ? 'Resolved' : 'Detected') }}</span></td>
+            <td class="small">{{ anomalyEvidence(change) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <AppPagination :pagination="anomalyPage" @update:page="pages.anomalies = $event" />
+    </template>
 
     <template v-if="typeVisible('conflicts')">
     <div class="notification-section-heading"><h3>{{ t('IP conflicts') }}</h3><span class="text-secondary small">{{ t('{count} conflict events', { count: conflictChanges.length }) }}</span></div>
@@ -195,7 +227,8 @@ const defaultRules = Object.freeze({
   restart: true,
   host_status: { normal: true, important: true },
   service_changes: { normal: true, important: true },
-  ip_conflicts: true
+  ip_conflicts: true,
+  network_anomalies: Object.fromEntries(['open_ports', 'unexpected_vendors', 'ip_changes', 'duplicate_identities', 'churn'].map((key) => [key, { normal: true, important: true }]))
 });
 const defaultReports = Object.freeze({
   daily_enabled: false,
@@ -204,7 +237,8 @@ const defaultReports = Object.freeze({
   weekly_day: 1,
   certificate_warning_days: 30
 });
-const notify = ref({ hours: 24, summary: {}, changes: [], port_changes: [], conflict_changes: [] });
+const notify = ref({ hours: 24, summary: {}, changes: [], port_changes: [], conflict_changes: [], anomaly_changes: [] });
+const selectedHours = ref(24);
 const delivery = ref({
   rules: cloneRules(defaultRules),
   discord: { configured: false, mention_target: null },
@@ -232,25 +266,28 @@ const request = useAbortableTask();
 const filters = ref({ ...notificationFilterDefaults });
 const pageSizes = Object.freeze([10, 25, 50]);
 const pageSize = ref(10);
-const pages = reactive({ conflicts: 1, status: 1, services: 1 });
+const pages = reactive({ anomalies: 1, conflicts: 1, status: 1, services: 1 });
 const filterGroups = computed(() => [
   { key: 'importance', label: t('Importance filter'), options: [{ value: 'normal', label: t('Normal') }, { value: 'all', label: t('All') }, { value: 'important', label: t('Important') }] },
-  { key: 'type', label: t('Notification type filter'), options: [{ value: 'all', label: t('All') }, { value: 'conflicts', label: t('IP conflicts') }, { value: 'status', label: t('Host status') }, { value: 'services', label: t('Services') }] }
+  { key: 'type', label: t('Notification type filter'), options: [{ value: 'all', label: t('All') }, { value: 'anomalies', label: t('Anomalies') }, { value: 'conflicts', label: t('IP conflicts') }, { value: 'status', label: t('Host status') }, { value: 'services', label: t('Services') }] }
 ]);
 const hasActiveFilters = computed(() => filters.value.importance !== 'all' || filters.value.type !== 'all');
 const filtered = computed(() => filterNotificationCollections({
+  anomalies: notify.value.anomaly_changes,
   conflicts: notify.value.conflict_changes,
   status: notify.value.changes,
   services: notify.value.port_changes
 }, filters.value));
 const changes = computed(() => filtered.value.status);
+const anomalyChanges = computed(() => filtered.value.anomalies);
 const portChanges = computed(() => filtered.value.services);
 const conflictChanges = computed(() => filtered.value.conflicts);
 const conflictPage = computed(() => paginateItems(conflictChanges.value, pages.conflicts, pageSize.value));
+const anomalyPage = computed(() => paginateItems(anomalyChanges.value, pages.anomalies, pageSize.value));
 const statusPage = computed(() => paginateItems(changes.value, pages.status, pageSize.value));
 const servicePage = computed(() => paginateItems(portChanges.value, pages.services, pageSize.value));
 const filteredSummary = computed(() => {
-  const allRows = [...conflictChanges.value, ...changes.value, ...portChanges.value];
+  const allRows = [...anomalyChanges.value, ...conflictChanges.value, ...changes.value, ...portChanges.value];
   const statusCounts = {};
   for (const change of changes.value) {
     const status = String(change?.status || '');
@@ -262,6 +299,7 @@ const filteredSummary = computed(() => {
     status_total: changes.value.length,
     port_total: portChanges.value.length,
     conflict_total: conflictChanges.value.length,
+    anomaly_total: anomalyChanges.value.length,
     status_counts: statusCounts
   };
 });
@@ -280,7 +318,7 @@ usePageController({
   disabled: false,
   refresh: load
 });
-useLiveRefresh(['hosts', 'status', 'scans', 'conflicts', 'vendors'], load);
+useLiveRefresh(['hosts', 'status', 'scans', 'conflicts', 'vendors', 'anomalies'], load);
 watch(
   () => [filters.value.importance, filters.value.type, pageSize.value],
   () => resetPages()
@@ -289,6 +327,7 @@ watch(
 onMounted(load);
 
 function resetPages() {
+  pages.anomalies = 1;
   pages.conflicts = 1;
   pages.status = 1;
   pages.services = 1;
@@ -319,7 +358,7 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const data = await apiJson('/api/notify', { signal });
+    const data = await apiJson(`/api/notify?hours=${selectedHours.value}`, { signal });
     if (!request.isCurrent(signal)) return;
     emit('network', data.network || '');
     notify.value = {
@@ -327,7 +366,8 @@ async function load() {
       summary: data.summary || {},
       changes: data.changes || [],
       port_changes: data.port_changes || [],
-      conflict_changes: data.conflict_changes || []
+      conflict_changes: data.conflict_changes || [],
+      anomaly_changes: data.anomaly_changes || []
     };
     const rulesWereDirty = rulesDirty.value;
     const reportsWereDirty = reportsDirty.value;
@@ -429,7 +469,11 @@ function cloneRules(value) {
       normal: Boolean(value?.service_changes?.normal),
       important: Boolean(value?.service_changes?.important)
     },
-    ip_conflicts: Boolean(value?.ip_conflicts)
+    ip_conflicts: Boolean(value?.ip_conflicts),
+    network_anomalies: Object.fromEntries(['open_ports', 'unexpected_vendors', 'ip_changes', 'duplicate_identities', 'churn'].map((key) => [key, {
+      normal: Boolean(value?.network_anomalies?.[key]?.normal ?? true),
+      important: Boolean(value?.network_anomalies?.[key]?.important ?? true)
+    }]))
   };
 }
 
@@ -467,6 +511,25 @@ function serviceLabel(change, prefix) {
 
 function conflictDeviceName(device) {
   return device?.name || device?.vendor || formatMac(device?.mac) || t('Unknown device');
+}
+
+function anomalyTypeLabel(change) {
+  return t(({ open_port: 'New open port', unexpected_vendor: 'Unexpected vendor', ip_change: 'IP change', duplicate_identity: 'Duplicate identity', churn: 'Unusual churn' })[change?.type] || 'Network anomaly');
+}
+function anomalySubtypeLabel(value) { return t(String(value || '').replaceAll('_', ' ')); }
+function anomalyEvidence(change) {
+  const details = change?.details || {};
+  if (change?.type === 'open_port') return `${details.port || '-'}${details.protocol ? `/${details.protocol}` : ''} ${[details.service, details.version].filter(Boolean).join(' ')}`.trim();
+  if (change?.type === 'unexpected_vendor') return change.vendor || details.vendor || '-';
+  if (change?.type === 'ip_change') return `${change.previous_ip || '-'} → ${change.ip || '-'}`;
+  if (change?.subtype === 'duplicate_mac') return (details.ips || []).join(', ');
+  if (change?.subtype === 'duplicate_hostname') return (details.macs || []).map(formatMac).join(', ');
+  if (change?.type === 'churn') return t('{count} transitions in {hours}h', { count: details.transition_count || 0, hours: details.window_hours || 1 });
+  return '-';
+}
+function openAnomaly(change) {
+  if (change?.source === 'scan_port_change' && change?.details?.scan_id) emit('open-scan', change.ip, change.details.scan_id);
+  else if (change?.ip) emit('open-history', change.ip);
 }
 
 </script>

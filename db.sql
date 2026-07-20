@@ -229,6 +229,16 @@ CREATE TABLE IF NOT EXISTS notification_delivery_settings (
   service_changes_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (service_changes_normal_enabled IN (0, 1)),
   service_changes_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (service_changes_important_enabled IN (0, 1)),
   ip_conflicts_enabled INTEGER NOT NULL DEFAULT 1 CHECK (ip_conflicts_enabled IN (0, 1)),
+  anomaly_open_ports_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_open_ports_normal_enabled IN (0, 1)),
+  anomaly_open_ports_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_open_ports_important_enabled IN (0, 1)),
+  anomaly_unexpected_vendors_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_unexpected_vendors_normal_enabled IN (0, 1)),
+  anomaly_unexpected_vendors_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_unexpected_vendors_important_enabled IN (0, 1)),
+  anomaly_ip_changes_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_ip_changes_normal_enabled IN (0, 1)),
+  anomaly_ip_changes_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_ip_changes_important_enabled IN (0, 1)),
+  anomaly_duplicate_identities_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_duplicate_identities_normal_enabled IN (0, 1)),
+  anomaly_duplicate_identities_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_duplicate_identities_important_enabled IN (0, 1)),
+  anomaly_churn_normal_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_churn_normal_enabled IN (0, 1)),
+  anomaly_churn_important_enabled INTEGER NOT NULL DEFAULT 1 CHECK (anomaly_churn_important_enabled IN (0, 1)),
   telegram_chat_id TEXT,
   telegram_bot_fingerprint TEXT
 );
@@ -456,6 +466,79 @@ CREATE TABLE IF NOT EXISTS audit_events (
   details_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS network_anomaly_monitors (
+  network TEXT PRIMARY KEY,
+  initialized_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_observed_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS network_identity_state (
+  network TEXT NOT NULL,
+  mac TEXT COLLATE NOCASE NOT NULL,
+  current_ip TEXT,
+  vendor_key TEXT,
+  vendor TEXT,
+  first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  present INTEGER NOT NULL DEFAULT 1 CHECK (present IN (0, 1)),
+  PRIMARY KEY (network, mac)
+);
+
+CREATE TABLE IF NOT EXISTS network_vendor_baselines (
+  network TEXT NOT NULL,
+  vendor_key TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (network, vendor_key)
+);
+
+CREATE TABLE IF NOT EXISTS network_observation_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  network TEXT NOT NULL,
+  observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS network_presence_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  network TEXT NOT NULL,
+  mac TEXT COLLATE NOCASE NOT NULL,
+  ip TEXT,
+  change_type TEXT NOT NULL CHECK (change_type IN ('arrival', 'departure')),
+  important INTEGER NOT NULL DEFAULT 0 CHECK (important IN (0, 1)),
+  occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS network_anomaly_conditions (
+  condition_key TEXT PRIMARY KEY,
+  network TEXT NOT NULL,
+  anomaly_type TEXT NOT NULL CHECK (anomaly_type IN ('duplicate_identity', 'churn')),
+  subtype TEXT NOT NULL,
+  identity_key TEXT,
+  important INTEGER NOT NULL DEFAULT 0 CHECK (important IN (0, 1)),
+  details_json TEXT NOT NULL DEFAULT '{}',
+  detected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  notified INTEGER NOT NULL DEFAULT 1 CHECK (notified IN (0, 1))
+);
+
+CREATE TABLE IF NOT EXISTS network_anomaly_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  network TEXT NOT NULL,
+  anomaly_type TEXT NOT NULL CHECK (anomaly_type IN ('unexpected_vendor', 'ip_change', 'duplicate_identity', 'churn')),
+  subtype TEXT,
+  event_type TEXT NOT NULL CHECK (event_type IN ('detected', 'resolved')),
+  ip TEXT,
+  previous_ip TEXT,
+  mac TEXT COLLATE NOCASE,
+  hostname TEXT,
+  vendor TEXT,
+  important INTEGER NOT NULL DEFAULT 0 CHECK (important IN (0, 1)),
+  details_json TEXT NOT NULL DEFAULT '{}',
+  dedupe_key TEXT NOT NULL UNIQUE,
+  occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS monitored_services (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source TEXT NOT NULL CHECK (source IN ('discovered', 'manual')),
@@ -529,10 +612,17 @@ CREATE INDEX IF NOT EXISTS scheduled_report_runs_started ON scheduled_report_run
 CREATE INDEX IF NOT EXISTS audit_events_occurred ON audit_events (occurred_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS audit_events_action_occurred ON audit_events (action, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS audit_events_resource_occurred ON audit_events (resource_type, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS network_identity_state_present ON network_identity_state (network, present, last_seen_at);
+CREATE INDEX IF NOT EXISTS network_observation_runs_network_time ON network_observation_runs (network, observed_at);
+CREATE INDEX IF NOT EXISTS network_presence_events_network_time ON network_presence_events (network, occurred_at);
+CREATE INDEX IF NOT EXISTS network_presence_events_mac_time ON network_presence_events (network, mac, occurred_at);
+CREATE INDEX IF NOT EXISTS network_anomaly_events_time ON network_anomaly_events (occurred_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS network_anomaly_events_network_time ON network_anomaly_events (network, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS network_anomaly_events_type_time ON network_anomaly_events (anomaly_type, occurred_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS monitored_services_discovered_target
   ON monitored_services (target, protocol, port) WHERE source='discovered';
 CREATE UNIQUE INDEX IF NOT EXISTS monitored_services_manual_target
   ON monitored_services (type, target, COALESCE(port, 0)) WHERE source='manual';
 CREATE INDEX IF NOT EXISTS monitored_services_source ON monitored_services (source, id);
 
-PRAGMA user_version = 14;
+PRAGMA user_version = 15;

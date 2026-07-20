@@ -66,6 +66,43 @@ public function discordManualServiceChangeEmbed(array $change): array {
   return $embed;
 }
 
+public function discordAnomalyEmbed(array $change): array {
+  $type = (string)($change['anomaly_type'] ?? $change['type'] ?? 'anomaly');
+  $subtype = (string)($change['subtype'] ?? '');
+  $event = (string)($change['event_type'] ?? $change['event'] ?? 'detected');
+  $details = is_array($change['details'] ?? null) ? $change['details'] : array();
+  $labels = array(
+    'unexpected_vendor' => 'Unexpected vendor', 'ip_change' => 'IP address changed',
+    'duplicate_identity' => 'Duplicate identity', 'churn' => 'Unusual network churn',
+    'open_port' => 'New open port'
+  );
+  $title = ($labels[$type] ?? 'Network anomaly') . ($event === 'resolved' ? ' resolved' : ' detected');
+  $fields = array(
+    $this->discordEmbedField('Network', (string)($change['network'] ?? '-'), true),
+    $this->discordEmbedField('IP', (string)($change['ip'] ?? '-'), true),
+    $this->discordEmbedField('MAC', (string)($change['mac'] ?? '-'), true),
+    $this->discordEmbedField('Type', str_replace('_', ' ', $subtype !== '' ? $subtype : $type), true),
+    $this->discordEmbedField('Important', (int)($change['important'] ?? 0) === 1 ? 'Yes' : 'No', true)
+  );
+  if ($type === 'ip_change')
+    $fields[] = $this->discordEmbedField('Move', (string)($change['previous_ip'] ?? '-') . ' -> ' . (string)($change['ip'] ?? '-'), false);
+  elseif ($type === 'unexpected_vendor')
+    $fields[] = $this->discordEmbedField('Vendor', (string)($change['vendor'] ?? '-'), false);
+  elseif ($type === 'duplicate_identity')
+    $fields[] = $this->discordEmbedField('Evidence', json_encode($details, JSON_UNESCAPED_SLASHES) ?: '-', false);
+  elseif ($type === 'churn')
+    $fields[] = $this->discordEmbedField('Transitions', (string)($details['transition_count'] ?? '-'), false);
+  $timestamp = strtotime((string)($change['occurred_at'] ?? ''));
+  $embed = array(
+    'title' => $title,
+    'description' => 'FenPing observed a network identity or behavior anomaly.',
+    'color' => $event === 'resolved' ? 0x16a34a : 0xf59e0b,
+    'fields' => $fields
+  );
+  if ($timestamp !== false) $embed['timestamp'] = date(DATE_ATOM, $timestamp);
+  return $embed;
+}
+
 public function discordPortServiceLabel(array $change, string $prefix): string {
   $service = trim((string)($change[$prefix . '_service'] ?? ''));
   $version = trim((string)($change[$prefix . '_version'] ?? ''));

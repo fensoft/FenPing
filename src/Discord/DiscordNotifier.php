@@ -63,6 +63,15 @@ public function sendDiscordPortChanges(array $changes): void {
     $this->discordPostPayload($payload);
 }
 
+public function sendDiscordAnomalyChanges(array $changes): void {
+  if (!$this->discordNotificationsEnabled()) return;
+  $changes = $this->rules->filterAnomalies($changes);
+  foreach (array_chunk($changes, 10) as $chunk) {
+    $embeds = array_map($this->payloads->discordAnomalyEmbed(...), $chunk);
+    $this->discordPostPayload($this->payloads->discordApplyMention(array('username' => 'FenPing', 'embeds' => $embeds)));
+  }
+}
+
 public function sendDiscordManualServiceChange(array $change): void {
   if (!$this->discordNotificationsEnabled())
     return;
@@ -347,9 +356,6 @@ private function filterStatusChanges(array $changes): array {
 }
 
 private function filterServiceChanges(array $changes): array {
-  $rules = $this->rules->notificationRules()['service_changes'];
-  return array_values(array_filter($changes, static function(array $change) use ($rules): bool {
-    return $rules[(int)($change['important'] ?? 0) === 1 ? 'important' : 'normal'];
-  }));
+  return $this->rules->filterServiceChanges($changes);
 }
 }

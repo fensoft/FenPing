@@ -18,5 +18,6 @@ enum LiveUpdateScope: string
     case Vendors = 'vendors';
     case Dns = 'dns';
     case Services = 'services';
+    case Anomalies = 'anomalies';
     case All = 'all';
 }

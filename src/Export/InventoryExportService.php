@@ -16,7 +16,7 @@ use PDO;
 
 final readonly class InventoryExportService
 {
-    private const DATASETS = ['hosts', 'leases', 'services', 'scan_changes', 'uptime_history'];
+    private const DATASETS = ['hosts', 'leases', 'services', 'scan_changes', 'anomalies', 'uptime_history'];
 
     public function __construct(
         private DatabaseManager $database,
@@ -60,6 +60,7 @@ final readonly class InventoryExportService
             'leases' => $this->leases($network),
             'services' => $this->services($network),
             'scan_changes' => $this->scanChanges($network),
+            'anomalies' => $this->anomalies($network),
             'uptime_history' => $this->uptimeHistory($network),
             default => throw new InvalidArgumentException('invalid export dataset'),
         };
@@ -167,6 +168,44 @@ final readonly class InventoryExportService
             $record['current'] = (int) $record['current'];
         }
         unset($record);
+        return compact('columns', 'records');
+    }
+
+    private function anomalies(Ipv4Network $network): array
+    {
+        $columns = ['event_id', 'type', 'subtype', 'event', 'network', 'ip', 'previous_ip', 'mac', 'hostname', 'vendor', 'important', 'details', 'occurred_at'];
+        $records = [];
+        foreach ($this->fetch("
+            SELECT id, network, anomaly_type, subtype, event_type, ip, previous_ip, mac,
+                   hostname, vendor, important, details_json, occurred_at
+            FROM network_anomaly_events
+            WHERE occurred_at>=datetime('now', '-30 days') ORDER BY occurred_at, id
+        ") as $row) {
+            if ((string)$row['network'] !== $network->cidr) continue;
+            $records[] = [
+                'event_id' => 'anomaly:' . $row['id'], 'type' => $row['anomaly_type'],
+                'subtype' => $row['subtype'], 'event' => $row['event_type'], 'network' => $row['network'],
+                'ip' => $row['ip'], 'previous_ip' => $row['previous_ip'], 'mac' => $row['mac'],
+                'hostname' => $row['hostname'], 'vendor' => $row['vendor'], 'important' => (int)$row['important'],
+                'details' => $row['details_json'], 'occurred_at' => $row['occurred_at'],
+            ];
+        }
+        foreach ($this->fetch("
+            SELECT id, ip, protocol, port, current_service, current_version, created_at
+            FROM scan_port_changes
+            WHERE change_type='appeared' AND created_at>=datetime('now', '-30 days')
+            ORDER BY created_at, id
+        ") as $row) {
+            if (!$network->contains((string)$row['ip'])) continue;
+            $records[] = [
+                'event_id' => 'port:' . $row['id'], 'type' => 'open_port', 'subtype' => 'port_appeared',
+                'event' => 'detected', 'network' => $network->cidr, 'ip' => $row['ip'],
+                'previous_ip' => null, 'mac' => null, 'hostname' => null, 'vendor' => null, 'important' => 0,
+                'details' => json_encode(['protocol' => $row['protocol'], 'port' => (int)$row['port'], 'service' => $row['current_service'], 'version' => $row['current_version']], JSON_UNESCAPED_SLASHES),
+                'occurred_at' => $row['created_at'],
+            ];
+        }
+        usort($records, static fn(array $a, array $b): int => strcmp((string)$a['occurred_at'], (string)$b['occurred_at']));
         return compact('columns', 'records');
     }
 

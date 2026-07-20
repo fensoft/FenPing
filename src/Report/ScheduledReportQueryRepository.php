@@ -70,6 +70,20 @@ final readonly class ScheduledReportQueryRepository
              ORDER BY created_at",
             $parameters,
         );
+        $anomalies = $this->fetch(
+            "SELECT network, anomaly_type, subtype, event_type, ip, previous_ip, mac,
+                    hostname, vendor, important, details_json, occurred_at
+             FROM network_anomaly_events
+             WHERE occurred_at >= :start AND occurred_at < :end
+             ORDER BY occurred_at",
+            $parameters,
+        );
+        foreach ($anomalies as &$anomaly) {
+            $anomaly['important'] = (int) $anomaly['important'];
+            $anomaly['details'] = json_decode((string) $anomaly['details_json'], true) ?: [];
+            unset($anomaly['details_json']);
+        }
+        unset($anomaly);
         $certificates = $this->expiringCertificates($end, $certificateDays);
         return [
             'window_start' => $parameters['start'],
@@ -79,12 +93,14 @@ final readonly class ScheduledReportQueryRepository
                 'new_devices' => count($newDevices),
                 'conflicts' => count($conflicts),
                 'changed_ports' => count($ports),
+                'anomalies' => count($anomalies) + count(array_filter($ports, static fn(array $row): bool => $row['change_type'] === 'appeared')),
                 'expiring_certificates' => count($certificates),
             ],
             'outages' => $outages,
             'new_devices' => $newDevices,
             'conflicts' => $conflicts,
             'changed_ports' => $ports,
+            'anomalies' => $anomalies,
             'expiring_certificates' => $certificates,
         ];
     }

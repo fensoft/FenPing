@@ -1,9 +1,7 @@
 <?php
-
 declare(strict_types=1);
-
 namespace FenPing;
-
+use FenPing\Anomaly\{NetworkAnomalyService, NetworkChurnAnalyzer};
 use FenPing\Api\ApiKernel;
 use FenPing\Api\Controller\{AuditController, AuthController, BackupController, BulkInventoryController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, ServiceController, SystemController, TopologyController};
 use FenPing\Audit\AuditLogService;
@@ -122,6 +120,7 @@ final class Application
     private readonly ScanJobRepository $scanJobs;
     private readonly SnapshotRepository $snapshots;
     private readonly VendorLookup $vendors;
+    private readonly NetworkAnomalyService $anomalies;
     private readonly InventoryScanner $inventoryScanner;
     private readonly InventoryScheduler $inventoryScheduler;
     private readonly InventoryService $inventory;
@@ -155,7 +154,6 @@ final class Application
     private readonly DockerNetworkRefreshService $dockerNetworkRefresh;
     private readonly DockerNetworkWatcher $dockerNetworkWatcher;
     private readonly LiveUpdatePublisher $liveUpdates;
-
     private function __construct(private readonly AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null, ?HttpTransport $httpTransport = null, ?ServiceProbe $serviceProbe = null)
     {
         $this->liveUpdates = $liveUpdates ?? new NchanLiveUpdatePublisher();
@@ -207,6 +205,7 @@ final class Application
         $this->scanJobs = new ScanJobRepository($config, $this->database, $this->liveUpdates, $this->profiles, $this->scanPolicy, $this->scanControl, $this->scanResultStore, $this->snapshots, $this->portChanges, $monitoredServiceRepository);
         $this->oui = new OuiRegistryService($config, $this->database, $this->http);
         $this->vendors = new VendorLookup($this->database, $this->oui);
+        $this->anomalies = new NetworkAnomalyService($this->database, $this->vendors, $this->liveUpdates, new NetworkChurnAnalyzer());
         $this->ipConflictService = new IpConflictService($config, $this->ipConflicts, $this->networks, $this->vendors);
         $this->hostMetadataNormalizer = new HostMetadataNormalizer($this->profiles);
         $this->hostMetadata = new HostMetadataRepository($this->database, $dockerCache, $this->hostMetadataNormalizer);
@@ -315,7 +314,7 @@ final class Application
             $usage,
         );
         $ping = new LockingCommand(
-            new TrackedCommand(new PingCommand($this->config, $this->networks, $this->pingScanner, $this->pingRepository, $this->notifications, $this->discord, $this->ipConflictDetector, $this->ipConflictService), $this->operations, 'ping'),
+            new TrackedCommand(new PingCommand($this->config, $this->networks, $this->pingScanner, $this->pingRepository, $this->notifications, $this->discord, $this->ipConflictDetector, $this->ipConflictService, $this->anomalies), $this->operations, 'ping'),
             '/tmp/ping.lck', 'ping scan',
         );
         $inventoryRaw = new CallableCommand(fn(array $arguments): int => $this->inventory->run($arguments));
@@ -397,4 +396,5 @@ final class Application
     public function backupTables(): BackupTableCatalog { return $this->backupTables; }
     public function ipConflicts(): IpConflictRepository { return $this->ipConflicts; }
     public function ipConflictDetector(): IpConflictDetector { return $this->ipConflictDetector; }
+    public function anomalies(): NetworkAnomalyService { return $this->anomalies; }
 }

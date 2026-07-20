@@ -67,6 +67,11 @@ final readonly class ScheduledReportFormatter
                 static fn(array $row): string => '• ' . $row['ip'] . ' · ' . $row['port'] . '/' . $row['protocol'] . ' ' . $row['change_type'],
                 $report['changed_ports'],
             )],
+            ['title' => 'Network anomalies', 'rows' => array_map(
+                static fn(array $row): string => '• ' . str_replace('_', ' ', $row['anomaly_type'])
+                    . ' · ' . $row['event_type'] . ' · ' . ($row['ip'] ?: ($row['mac'] ?: $row['network'])),
+                $report['anomalies'] ?? [],
+            )],
             ['title' => 'Expiring certificates', 'rows' => array_map(
                 static fn(array $row): string => '• ' . $row['ip'] . ':' . $row['port'] . ' · ' . $row['expires_at'] . ' (' . $row['days_remaining'] . 'd)',
                 $report['expiring_certificates'],

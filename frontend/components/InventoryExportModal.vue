@@ -51,6 +51,7 @@ const datasets = computed(() => [
   { value: 'leases', label: t('Lease history'), description: t('Current and historical DHCP address assignments.') },
   { value: 'services', label: t('Services'), description: t('Open ports from each host’s latest effective scan.') },
   { value: 'scan_changes', label: t('Scan changes'), description: t('Appeared, disappeared, and version-changed services.') },
+  { value: 'anomalies', label: t('Network anomalies'), description: t('Open ports, vendors, IP moves, duplicate identities, and churn from the last 30 days.') },
   { value: 'uptime_history', label: t('Uptime history'), description: t('Retained raw status intervals from the last seven days.') }
 ]);
 const downloadUrl = computed(() => `/api/exports/${encodeURIComponent(dataset.value)}?format=${encodeURIComponent(format.value)}&network=${encodeURIComponent(props.network)}`);

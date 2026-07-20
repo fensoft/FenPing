@@ -46,4 +46,38 @@ final class VendorLookup
         }
         return $this->cache[$normalized] = $this->registry->ieeeOuiVendor($normalized);
     }
+
+    /** @return array{key: string, vendor: string}|null */
+    public function assignmentForMac(string $mac): ?array
+    {
+        $normalized = $this->registry->normalizeMac($mac);
+        if ($normalized === '' || (hexdec(substr($normalized, 0, 2)) & 0x02) !== 0) {
+            return null;
+        }
+        try {
+            $statement = $this->database->connection()->prepare("
+                SELECT prefix_length, prefix, vendor
+                FROM oui_vendors
+                WHERE (prefix_length=9 AND prefix=:prefix9)
+                   OR (prefix_length=7 AND prefix=:prefix7)
+                   OR (prefix_length=6 AND prefix=:prefix6)
+                ORDER BY prefix_length DESC LIMIT 1
+            ");
+            $statement->execute([
+                'prefix9' => substr($normalized, 0, 9),
+                'prefix7' => substr($normalized, 0, 7),
+                'prefix6' => substr($normalized, 0, 6),
+            ]);
+            $row = $statement->fetch(\PDO::FETCH_ASSOC);
+            if ($row === false || trim((string) $row['vendor']) === '') {
+                return null;
+            }
+            return [
+                'key' => strtolower(trim((string) $row['vendor'])),
+                'vendor' => trim((string) $row['vendor']),
+            ];
+        } catch (Throwable) {
+            return null;
+        }
+    }
 }

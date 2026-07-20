@@ -53,7 +53,7 @@ public function get_history_response($ip) {
 }
 
 public function get_port_notify($hours = 24) {
-  $hours = max(1, min(168, (int)$hours));
+  $hours = max(1, min(720, (int)$hours));
   $stmt = $this->database->connection()->prepare("
     SELECT
       c.id,
@@ -101,8 +101,79 @@ public function get_port_notify($hours = 24) {
   return $changes;
 }
 
+public function get_anomaly_notify($hours = 24, ?array $portChanges = null) {
+  $hours = max(1, min(720, (int)$hours));
+  $stmt = $this->database->connection()->prepare("
+    SELECT
+      e.*,
+      unixepoch(e.occurred_at) AS occurred,
+      COALESCE(NULLIF((SELECT i.name FROM ips i
+        WHERE (e.mac IS NOT NULL AND LOWER(i.mac)=LOWER(e.mac)) OR i.ip=e.ip
+        ORDER BY i.id DESC LIMIT 1), ''), '') AS name
+    FROM network_anomaly_events e
+    WHERE e.occurred_at >= datetime('now', '-$hours hours')
+    ORDER BY e.occurred_at DESC, e.id DESC
+  ");
+  $stmt->execute();
+  $changes = array();
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $details = json_decode((string)($row['details_json'] ?? '{}'), true);
+    $changes[] = array(
+      'event_id' => 'anomaly:' . (int)$row['id'],
+      'source' => 'network_anomaly',
+      'source_id' => (int)$row['id'],
+      'type' => (string)$row['anomaly_type'],
+      'subtype' => (string)($row['subtype'] ?? ''),
+      'event' => (string)$row['event_type'],
+      'occurred_at' => (string)$row['occurred_at'],
+      'occurred' => (int)$row['occurred'],
+      'network' => (string)$row['network'],
+      'ip' => (string)($row['ip'] ?? ''),
+      'previous_ip' => (string)($row['previous_ip'] ?? ''),
+      'mac' => (string)($row['mac'] ?? ''),
+      'hostname' => (string)($row['hostname'] ?? ''),
+      'name' => (string)($row['name'] ?? ''),
+      'vendor' => (string)($row['vendor'] ?? ''),
+      'important' => (int)$row['important'],
+      'details' => is_array($details) ? $details : array()
+    );
+  }
+
+  foreach ($portChanges ?? $this->get_port_notify($hours) as $change) {
+    if ((string)($change['change_type'] ?? '') !== 'appeared') continue;
+    $changes[] = array(
+      'event_id' => 'port:' . (int)$change['id'],
+      'source' => 'scan_port_change',
+      'source_id' => (int)$change['id'],
+      'type' => 'open_port',
+      'subtype' => 'port_appeared',
+      'event' => 'detected',
+      'occurred_at' => (string)$change['created_at'],
+      'occurred' => (int)$change['created'],
+      'network' => '',
+      'ip' => (string)$change['ip'],
+      'previous_ip' => '',
+      'mac' => (string)($change['mac'] ?? ''),
+      'hostname' => '',
+      'name' => (string)($change['name'] ?? ''),
+      'vendor' => (string)($change['vendor'] ?? ''),
+      'important' => (int)($change['important'] ?? 0),
+      'details' => array(
+        'scan_id' => (int)$change['scan_id'], 'mode' => (string)$change['mode'],
+        'protocol' => (string)$change['protocol'], 'port' => (int)$change['port'],
+        'service' => (string)($change['current_service'] ?? ''),
+        'version' => (string)($change['current_version'] ?? '')
+      )
+    );
+  }
+  usort($changes, static fn(array $a, array $b): int =>
+    ($b['occurred'] <=> $a['occurred']) ?: strcmp($b['event_id'], $a['event_id'])
+  );
+  return $changes;
+}
+
 public function get_notify($hours = 24, array $delivery = array()) {
-  $hours = max(1, min(168, (int)$hours));
+  $hours = max(1, min(720, (int)$hours));
   $stmt = $this->database->connection()->prepare("
     SELECT
       s.id,
@@ -221,23 +292,37 @@ public function get_notify($hours = 24, array $delivery = array()) {
       $hosts[$ip] = true;
   }
 
+  $anomalyChanges = $this->get_anomaly_notify($hours, $portChanges);
+  $anomalyCounts = array();
+  $storedAnomalyCount = 0;
+  foreach ($anomalyChanges as $change) {
+    $type = (string)($change['type'] ?? '');
+    $anomalyCounts[$type] = ($anomalyCounts[$type] ?? 0) + 1;
+    $ip = (string)($change['ip'] ?? '');
+    if ($ip !== '') $hosts[$ip] = true;
+    if (($change['source'] ?? '') === 'network_anomaly') $storedAnomalyCount++;
+  }
+
   return array(
     "network" => $this->config->network,
     "since" => date("Y-m-d H:i:s", time() - $hours * 60 * 60),
     "hours" => $hours,
     "summary" => array(
-      "total" => count($changes) + count($portChanges) + count($conflictChanges),
+      "total" => count($changes) + count($portChanges) + count($conflictChanges) + $storedAnomalyCount,
       "status_total" => count($changes),
       "port_total" => count($portChanges),
       "conflict_total" => count($conflictChanges),
       "hosts" => count($hosts),
       "status_counts" => $statusCounts,
       "port_change_counts" => $portChangeCounts,
-      "conflict_counts" => $conflictCounts
+      "conflict_counts" => $conflictCounts,
+      "anomaly_total" => count($anomalyChanges),
+      "anomaly_counts" => $anomalyCounts
     ),
     "changes" => $changes,
     "port_changes" => $portChanges,
     "conflict_changes" => $conflictChanges,
+    "anomaly_changes" => $anomalyChanges,
     "delivery" => $delivery
   );
 }

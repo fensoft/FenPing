@@ -102,6 +102,12 @@ final readonly class NotificationService
         $this->telegram->sendTelegramIpConflictChanges($changes);
     }
 
+    public function sendAnomalyChanges(array $changes): void {
+        if (!$this->providersEnabled() || $changes === []) return;
+        $this->discord->sendDiscordAnomalyChanges($changes);
+        $this->telegram->sendTelegramAnomalyChanges($changes);
+    }
+
     public function sendManualServiceChange(array $change): void
     {
         if (!$this->rules->notificationRules()['service_changes']['important']) return;

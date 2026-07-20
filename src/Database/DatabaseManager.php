@@ -11,7 +11,7 @@ use Throwable;
 
 final class DatabaseManager
 {
-    public const SCHEMA_VERSION = 14;
+    public const SCHEMA_VERSION = 15;
     private const BUSY_TIMEOUT_MS = 30000;
 
     private ?PDO $connection = null;
@@ -113,6 +113,9 @@ final class DatabaseManager
         }
         if (!$this->tableExists('audit_events')) {
             throw new RuntimeException('database schema version 12 is missing table: audit_events');
+        }
+        if (!$this->tableExists('network_anomaly_events') || !$this->tableExists('network_identity_state')) {
+            throw new RuntimeException('database schema version 15 is missing network anomaly tables');
         }
         if (!$this->tableExists('monitored_services')) {
             throw new RuntimeException('database schema version 13 is missing table: monitored_services');

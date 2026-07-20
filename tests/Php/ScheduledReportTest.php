@@ -37,6 +37,10 @@ final class ScheduledReportTest extends IntegrationTestCase
         $database->exec("INSERT INTO scan_port_changes
             (scan_id, ip, mode, change_type, protocol, port, current_service, created_at)
             VALUES (50, '192.0.2.40', 'standard', 'appeared', 'tcp', 443, 'https', '$recent')");
+        $database->exec("INSERT INTO network_anomaly_events
+            (network, anomaly_type, subtype, event_type, ip, mac, important, details_json, dedupe_key, occurred_at)
+            VALUES ('192.0.2.0/24', 'ip_change', 'mac_moved', 'detected', '192.0.2.41',
+                    '02:00:00:00:00:41', 0, '{\"previous_ip\":\"192.0.2.40\"}', 'report-ip-change', '$recent')");
 
         $expires = $now->modify('+5 days')->format('Y-m-d\TH:i:s');
         $database->exec("INSERT INTO scan_snapshots (id, ip, mode, result_hash, content_hash, created_at)
@@ -54,10 +58,12 @@ final class ScheduledReportTest extends IntegrationTestCase
             'new_devices' => 1,
             'conflicts' => 1,
             'changed_ports' => 1,
+            'anomalies' => 2,
             'expiring_certificates' => 1,
         ], $report['counts']);
         self::assertSame('192.0.2.50', $report['expiring_certificates'][0]['ip']);
         self::assertSame(5, $report['expiring_certificates'][0]['days_remaining']);
+        self::assertSame('ip_change', $report['anomalies'][0]['anomaly_type']);
     }
 
     public function testSettingsApiIsStrictAndDueRunsAreIdempotent(): void

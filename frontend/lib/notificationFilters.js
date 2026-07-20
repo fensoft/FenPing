@@ -4,7 +4,7 @@ export const notificationFilterDefaults = Object.freeze({
 });
 
 const importanceValues = new Set(['normal', 'all', 'important']);
-const typeValues = new Set(['all', 'conflicts', 'status', 'services']);
+const typeValues = new Set(['all', 'anomalies', 'conflicts', 'status', 'services']);
 
 export function normalizeNotificationFilters(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -23,12 +23,14 @@ export function filterNotificationCollections(collections, filters) {
     return true;
   };
   return {
+    anomalies: normalized.type === 'all' || normalized.type === 'anomalies'
+      ? array(collections?.anomalies).filter(include) : [],
     conflicts: normalized.type === 'all' || normalized.type === 'conflicts'
       ? array(collections?.conflicts).filter(include) : [],
     status: normalized.type === 'all' || normalized.type === 'status'
       ? array(collections?.status).filter(include) : [],
     services: normalized.type === 'all' || normalized.type === 'services'
-      ? array(collections?.services).filter(include) : []
+      ? array(collections?.services).filter((row) => row?.change_type !== 'appeared').filter(include) : []
   };
 }
 

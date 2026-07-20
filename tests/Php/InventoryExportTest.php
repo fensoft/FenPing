@@ -32,7 +32,7 @@ final class InventoryExportTest extends IntegrationTestCase
     public function testEveryDatasetExportsAsVersionedJson(): void
     {
         self::assertTrue($this->app()->auth()->login(''));
-        foreach (['hosts', 'leases', 'services', 'scan_changes', 'uptime_history'] as $dataset) {
+        foreach (['hosts', 'leases', 'services', 'scan_changes', 'anomalies', 'uptime_history'] as $dataset) {
             $response = $this->download($dataset, 'json');
             self::assertSame(200, $response->status, $response->body);
             self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
@@ -82,6 +82,11 @@ final class InventoryExportTest extends IntegrationTestCase
         $database->exec("INSERT INTO scan_port_changes
             (scan_id, ip, mode, change_type, protocol, port, current_service, current_version)
             VALUES (91, '192.0.2.91', 'standard', 'appeared', 'tcp', 443, 'https', 'nginx 1.27')");
+        $database->exec("INSERT INTO network_anomaly_events
+            (network, anomaly_type, subtype, event_type, ip, mac, vendor, important, details_json, dedupe_key)
+            VALUES ('192.0.2.0/24', 'unexpected_vendor', 'network_first_seen', 'detected',
+                    '192.0.2.91', '02:00:00:00:00:91', 'Export Devices', 1,
+                    '{\"vendor\":\"Export Devices\"}', 'export-vendor')");
     }
 
     private function download(string $dataset, string $format, string $network = '192.0.2.0/24')

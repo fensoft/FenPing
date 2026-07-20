@@ -25,7 +25,7 @@ final readonly class PortChangeService
         $statement = $this->database->connection()->prepare(
             "DELETE FROM scan_port_changes WHERE created_at < datetime(CURRENT_TIMESTAMP, :retention)"
         );
-        $statement->execute(["retention" => "-7 days"]);
+        $statement->execute(["retention" => "-30 days"]);
     }
 
 public function scanRecordPortChanges(array $job, array $scan, ?string $createdAt = null): int {

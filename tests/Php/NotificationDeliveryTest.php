@@ -45,6 +45,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'host_status' => ['normal' => false, 'important' => true],
             'service_changes' => ['normal' => true, 'important' => false],
             'ip_conflicts' => false,
+            'network_anomalies' => $backend->notificationRules()->notificationDefaultRules()['network_anomalies'],
         ];
         self::assertSame($rules, $backend->notificationRules()->notificationRulesUpdate($rules));
         self::assertSame($rules, $backend->notificationRules()->notificationRules());
@@ -389,6 +390,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'host_status' => ['normal' => true, 'important' => false],
             'service_changes' => ['normal' => false, 'important' => true],
             'ip_conflicts' => true,
+            'network_anomalies' => $this->app()->notificationRules()->notificationDefaultRules()['network_anomalies'],
         ];
         $guest = $this->app()->api()->handle(
             $this->request('PUT', '/api/notify/delivery', ['rules' => $validRules]),
