@@ -429,6 +429,45 @@ async function handleApi(route, api) {
     return;
   }
 
+  if (method === 'POST' && path === '/api/inventory/bulk-actions') {
+    if (!api.state.authenticated) { await fulfillJson(route, { error: 'login required' }, 403); return; }
+    let changed = 0;
+    let unchanged = 0;
+    const skipped = [];
+    for (const target of body?.targets || []) {
+      const host = target.kind === 'host'
+        ? api.state.hosts.find(candidate => Number(candidate.id) === Number(target.id))
+        : api.state.hosts.find(candidate => normalizedMac(candidate.mac) === normalizedMac(target.mac));
+      if (body?.action === 'tags' && host?.id) {
+        const removed = new Set((body.remove_tags || []).map(tag => String(tag).toLowerCase()));
+        const tags = [...(host.tags || []).filter(tag => !removed.has(String(tag).toLowerCase())), ...(body.add_tags || [])];
+        host.tags = [...new Map(tags.map(tag => [String(tag).toLowerCase(), String(tag)])).values()]
+          .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+        changed++;
+      } else if (body?.action === 'scan_profile' && host?.id) {
+        if (host.scan_profile === body.scan_profile) unchanged++;
+        else { host.scan_profile = body.scan_profile; changed++; }
+      } else if (body?.action === 'approve' && host && !host.id && host.mac) {
+        if (host.is_new) { host.is_new = 0; host.approved = 1; changed++; }
+        else unchanged++;
+      } else if (body?.action === 'delete' && host?.id && host.network_is_dhcp) {
+        api.state.hosts = api.state.hosts.filter(candidate => Number(candidate.id) !== Number(host.id));
+        changed++;
+      } else {
+        skipped.push({ target: clone(target), reason: body?.action === 'delete' ? 'not_dhcp_reservation' : 'not_metadata_editable' });
+      }
+    }
+    await fulfillJson(route, {
+      action: body?.action,
+      requested_count: (body?.targets || []).length,
+      changed_count: changed,
+      unchanged_count: unchanged,
+      skipped_count: skipped.length,
+      skipped
+    });
+    return;
+  }
+
   const exportMatch = path.match(/^\/api\/exports\/(hosts|leases|services|scan_changes|uptime_history)$/);
   if (method === 'GET' && exportMatch) {
     const format = url.searchParams.get('format') === 'json' ? 'json' : 'csv';

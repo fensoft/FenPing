@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace FenPing;
 
 use FenPing\Api\ApiKernel;
-use FenPing\Api\Controller\{AuditController, AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, ServiceController, SystemController, TopologyController};
+use FenPing\Api\Controller\{AuditController, AuthController, BackupController, BulkInventoryController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, ServiceController, SystemController, TopologyController};
 use FenPing\Audit\AuditLogService;
 use FenPing\Auth\AuthService;
 use FenPing\Backup\{BackupService, BackupArchiveService, BackupArchiveTools, BackupDatabaseDocument, BackupFilesystem, BackupManager, BackupTableCatalog};
@@ -45,13 +45,7 @@ use FenPing\Host\HostMetadataNormalizer;
 use FenPing\Host\HostMetadataRepository;
 use FenPing\Host\HostService;
 use FenPing\Host\HostRepository;
-use FenPing\Inventory\InventoryReadService;
-use FenPing\Inventory\InventoryRowNormalizer;
-use FenPing\Inventory\InventoryScanner;
-use FenPing\Inventory\InventoryScheduler;
-use FenPing\Inventory\InventoryService;
-use FenPing\Inventory\SavedInventoryFilterRepository;
-use FenPing\Inventory\PrivilegedInventoryWorkerLauncher;
+use FenPing\Inventory\{BulkInventoryService, BulkInventoryTargetNormalizer, InventoryReadService, InventoryRowNormalizer, InventoryScanner, InventoryScheduler, InventoryService, PrivilegedInventoryWorkerLauncher, SavedInventoryFilterRepository};
 use FenPing\Ipam\IpConflictDetector;
 use FenPing\Ipam\IpConflictRepository;
 use FenPing\Ipam\IpConflictService;
@@ -279,16 +273,22 @@ final class Application
         $mutations = $this->dhcpMutations;
         $validator = $this->hostValidator;
         $hostService = new HostService($this->config, $this->database, $this->networks, $this->hosts, $this->hostMetadata, $this->hostMetadataNormalizer, $this->discoveredHostMetadata, $validator, $mutations, $this->inventory, $this->history, $this->scanJobs, $this->netboot, $this->vendors);
+        $bulkInventory = new BulkInventoryService(
+            $this->config, $this->database, $this->hosts,
+            $this->hostMetadata, $this->hostMetadataNormalizer, $this->discoveredHostMetadata,
+            new BulkInventoryTargetNormalizer($this->hostMetadata, $validator),
+            $mutations, $this->audit,
+        );
         $results = $this->scanResults();
         $exports = new InventoryExportService($this->database, $this->inventory, $results);
         $clock = new SystemClock();
-
         return new ApiKernel($this->auth, [
             new DoctorController(new ProcessDoctorReportProvider($this->config, $this->processes)),
             new DockerNetworksController(new PrivilegedDockerNetworkRefreshGateway($this->processes, $this->config->projectDir)),
             new DnsOverrideController($this->dnsOverrideGroups, $mutations, $this->audit),
             new AuthController($this->auth),
             new AuditController($this->audit),
+            new BulkInventoryController($bulkInventory),
             new SystemController(
                 $this->config,
                 $this->networks,

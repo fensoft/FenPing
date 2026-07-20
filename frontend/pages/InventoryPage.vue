@@ -51,10 +51,19 @@
         <button class="btn btn-primary btn-sm" type="submit" :disabled="savingFilter">{{ t(savedFilterEditor.id ? 'Update view' : 'Save view') }}</button>
         <button class="btn btn-link btn-sm" type="button" :disabled="savingFilter" @click="savedFilterEditor = null">{{ t('Cancel') }}</button>
       </form>
+      <div v-if="isAuthenticated && selectedHosts.length" class="inventory-bulk-toolbar" role="toolbar" :aria-label="t('Bulk actions')">
+        <strong>{{ t('{count} selected', { count: selectedHosts.length }) }}</strong>
+        <button class="btn btn-outline-primary btn-sm" type="button" :disabled="bulkEligibleCount('tags') === 0" @click="openBulkAction('tags')"><AppIcon name="edit" class="me-1" />{{ t('Edit tags') }} ({{ bulkEligibleCount('tags') }})</button>
+        <button class="btn btn-outline-success btn-sm" type="button" :disabled="bulkEligibleCount('approve') === 0" @click="openBulkAction('approve')"><AppIcon name="check" class="me-1" />{{ t('Approve') }} ({{ bulkEligibleCount('approve') }})</button>
+        <button class="btn btn-outline-primary btn-sm" type="button" :disabled="bulkEligibleCount('scan_profile') === 0" @click="openBulkAction('scan_profile')"><AppIcon name="radar" class="me-1" />{{ t('Change scan profile') }} ({{ bulkEligibleCount('scan_profile') }})</button>
+        <button class="btn btn-outline-danger btn-sm" type="button" :disabled="bulkEligibleCount('delete') === 0" @click="openBulkAction('delete')"><AppIcon name="trash" class="me-1" />{{ t('Delete reservations') }} ({{ bulkEligibleCount('delete') }})</button>
+        <button class="btn btn-link btn-sm ms-auto" type="button" @click="clearSelection">{{ t('Clear selection') }}</button>
+      </div>
       <table class="table table-sm inventory-table">
-        <colgroup><col class="col-status" /><col v-for="column in visibleColumns" :key="column.key" :class="['inventory-configurable-column', `col-${column.key}`]" :style="columnWidthStyle(column)" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
+        <colgroup><col v-if="isAuthenticated" class="col-selection" /><col class="col-status" /><col v-for="column in visibleColumns" :key="column.key" :class="['inventory-configurable-column', `col-${column.key}`]" :style="columnWidthStyle(column)" /><col v-if="isAuthenticated" class="col-actions" /></colgroup>
         <thead><tr>
-          <th scope="col"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :aria-label="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :disabled="categoryKeys.length === 0" @click="toggleAllCategories"><AppIcon :name="allCategoriesCollapsed ? 'plus' : 'minus'" /></button></th>
+          <th v-if="isAuthenticated" scope="col" class="inventory-selection-cell"><input class="form-check-input" type="checkbox" :checked="allVisibleSelected" :indeterminate="someVisibleSelected" :disabled="visibleHosts.length === 0" :aria-label="t('Select all filtered devices')" @change="toggleAllVisible($event.target.checked)" /></th>
+          <th scope="col" class="inventory-status-heading"><button class="btn btn-outline-secondary btn-sm icon-btn" type="button" :title="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :aria-label="t(allCategoriesCollapsed ? 'Open all categories' : 'Close all categories')" :disabled="categoryKeys.length === 0" @click="toggleAllCategories"><AppIcon :name="allCategoriesCollapsed ? 'plus' : 'minus'" /></button></th>
           <th v-for="column in visibleColumns" :key="column.key" scope="col" :class="['inventory-column-heading', columnResponsiveClass(column.key)]" :aria-label="t(columnDefinition(column.key).label)" draggable="true" @dragstart="startColumnDrag(column.key, $event)" @dragover.prevent @drop.prevent="dropColumn(column.key)" @dragend="draggedColumn = ''">
             <span>{{ t(columnDefinition(column.key).label) }}</span>
             <span class="inventory-column-resize-handle" role="separator" tabindex="0" :aria-label="t('Resize {column} column', { column: t(columnDefinition(column.key).label) })" aria-orientation="vertical" :aria-valuemin="5" :aria-valuemax="60" :aria-valuenow="Math.round(column.width)" @pointerdown="beginColumnResize(column, $event)" @keydown.left.prevent="adjustColumnWidth(column.key, -1)" @keydown.right.prevent="adjustColumnWidth(column.key, 1)"></span>
@@ -64,9 +73,10 @@
         <tbody>
           <tr v-if="loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="tableColumnCount">{{ t('Loading') }}</td></tr>
           <tr v-else-if="!loading && tableRows.length === 0"><td class="text-secondary text-center py-4" :colspan="tableColumnCount">{{ t('No hosts') }}</td></tr>
-          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), row.type === 'host' ? downRowClass(row.host) : '', { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter.prevent="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
+          <tr v-for="row in tableRows" :key="row.key" :class="[rowClass(row), row.type === 'host' ? downRowClass(row.host) : '', { 'inventory-host-row': row.type === 'host', 'inventory-host-row-collapsed': row.type === 'host' && row.collapsed, 'inventory-host-row-selected': row.type === 'host' && hostSelected(row.host) }]" :tabindex="row.type === 'category' || (row.type === 'host' && !row.collapsed && (row.host?.id || row.host?.ip)) ? 0 : undefined" :aria-label="rowAriaLabel(row)" :aria-expanded="row.type === 'category' ? !row.collapsed : undefined" :aria-hidden="row.type === 'host' && row.collapsed ? 'true' : undefined" @click="activateRow(row, $event)" @keydown.enter.prevent="activateRow(row, $event)" @keydown.space="activateCategoryRow(row, $event)">
             <template v-if="row.type === 'category'">
-              <td><button class="btn category-toggle" type="button" :title="t(row.collapsed ? 'Open category' : 'Close category')" :aria-label="t(row.collapsed ? 'Open category' : 'Close category')" @click="toggleCategory(row.categoryKey)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" /></button></td>
+              <td v-if="isAuthenticated" class="inventory-selection-cell"><input class="form-check-input" type="checkbox" :checked="categorySelected(row.categoryKey)" :indeterminate="categoryPartiallySelected(row.categoryKey)" :aria-label="t('Select category {name}', { name: row.name })" @change="toggleCategorySelection(row.categoryKey, $event.target.checked)" /></td>
+              <td class="category-status-cell"><button class="btn category-toggle" type="button" :title="t(row.collapsed ? 'Open category' : 'Close category')" :aria-label="t(row.collapsed ? 'Open category' : 'Close category')" @click="toggleCategory(row.categoryKey)"><AppIcon :name="row.collapsed ? 'chevron-right' : 'chevron-down'" /></button></td>
               <td class="category-name" :colspan="visibleColumns.length"><span class="category-title">{{ row.name }}</span><span class="category-summary">{{ row.total }} {{ t(row.total === 1 ? 'device' : 'devices') }} <span aria-hidden="true">·</span> {{ row.online }} {{ t('online') }}</span></td>
               <td v-if="isAuthenticated" class="text-end category-actions">
                 <div class="inventory-actions">
@@ -76,6 +86,7 @@
               </td>
             </template>
             <template v-else>
+              <td v-if="isAuthenticated" class="inventory-selection-cell"><input class="form-check-input" type="checkbox" :checked="hostSelected(row.host)" :aria-label="t('Select {name}', { name: deviceName(row.host) })" @change="toggleHostSelection(row.host, $event.target.checked)" /></td>
               <td class="status-cell"><div class="status-icons">
                 <span :class="statusClass(row.host.status)" :title="statusTitle(row.host.status)" :aria-label="statusTitle(row.host.status)" class="status-pill" role="img"><AppIcon :name="statusIcon(row.host.status)" /></span>
               </div></td>
@@ -114,6 +125,7 @@
     </div>
     <InventoryExportModal v-if="exportOpen" :network="selectedCidr" @close="exportOpen = false" @download="exportOpen = false" />
     <InventoryColumnsModal v-if="columnsOpen" :layout="inventoryLayout" @close="columnsOpen = false" @save="saveInventoryLayout" />
+    <InventoryBulkActionModal v-if="bulkAction" :action="bulkAction" :eligible-count="bulkEligibleCount(bulkAction)" :skipped-count="selectedHosts.length - bulkEligibleCount(bulkAction)" :saving="bulkSaving" :error="bulkError" @close="closeBulkAction" @submit="submitBulkAction" />
   </section>
 </template>
 
@@ -121,6 +133,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import InventoryColumnsModal from '../components/InventoryColumnsModal.vue';
 import InventoryExportModal from '../components/InventoryExportModal.vue';
+import InventoryBulkActionModal from '../components/InventoryBulkActionModal.vue';
 import { apiJson, isAbortError } from '../lib/api.js';
 import { inventoryFilterDefaults, inventoryFiltersActive, inventoryHostMatches, matchingSavedInventoryFilter, normalizeInventoryFilters, normalizeTags } from '../lib/inventoryFilters.js';
 import { hostIconName } from '../lib/hostIcons.js';
@@ -141,7 +154,7 @@ const props = defineProps({
   scanningHosts: { type: Object, required: true },
   cancellingScans: { type: Object, required: true }
 });
-const emit = defineEmits(['add-category', 'cancel-scan', 'delete-category', 'host-detail', 'network', 'selected-network', 'open-create', 'open-edit', 'open-metadata', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
+const emit = defineEmits(['add-category', 'cancel-scan', 'delete-category', 'host-detail', 'network', 'notice', 'selected-network', 'open-create', 'open-edit', 'open-metadata', 'open-history', 'ping-refresh', 'rename-category', 'scan-host']);
 const hosts = ref([]);
 const networks = ref([]);
 const availableTags = ref([]);
@@ -154,6 +167,10 @@ const loading = ref(false);
 const error = ref('');
 const exportOpen = ref(false);
 const columnsOpen = ref(false);
+const selectedKeys = ref(new Set());
+const bulkAction = ref('');
+const bulkSaving = ref(false);
+const bulkError = ref('');
 const inventoryLayout = ref(normalizeInventoryLayout(readStorage(inventoryLayoutStorageKey, null)));
 const draggedColumn = ref('');
 const resizingColumn = ref('');
@@ -173,7 +190,7 @@ const collapsed = ref(new Set(readStorage('fenping_collapsed_categories', [])));
 const hasActiveFilters = computed(() => inventoryFiltersActive(filters.value));
 const visibleColumns = computed(() => inventoryLayout.value.columns.filter((column) => column.visible));
 const sizedColumns = computed(() => visibleColumns.value.filter((column) => !compactInventory.value || ['device', 'ip'].includes(column.key)));
-const tableColumnCount = computed(() => 1 + visibleColumns.value.length + (props.isAuthenticated ? 1 : 0));
+const tableColumnCount = computed(() => 1 + visibleColumns.value.length + (props.isAuthenticated ? 2 : 0));
 const isDhcpSelected = computed(() => inventoryNetworkIsDhcp(selectedCidr.value, dhcpCidr.value));
 const matchingSavedFilter = computed(() => matchingSavedInventoryFilter(filters.value.tags, savedFilters.value));
 const selectedSavedFilterValue = computed(() => matchingSavedFilter.value ? String(matchingSavedFilter.value.id) : '');
@@ -222,6 +239,9 @@ const tableRows = computed(() => {
   }
   return rows;
 });
+const selectedHosts = computed(() => visibleHosts.value.filter((host) => selectedKeys.value.has(selectionKey(host))));
+const allVisibleSelected = computed(() => visibleHosts.value.length > 0 && selectedHosts.value.length === visibleHosts.value.length);
+const someVisibleSelected = computed(() => selectedHosts.value.length > 0 && !allVisibleSelected.value);
 
 usePageController({
   loading,
@@ -235,6 +255,7 @@ useLiveRefresh(['hosts', 'status', 'scans', 'leases', 'networks', 'vendors'], lo
 watch(filters, (value) => writeStorage('fenping_filters', value), { deep: true });
 watch(collapsed, (value) => writeStorage('fenping_collapsed_categories', Array.from(value)));
 watch(inventoryLayout, (value) => writeStorage(inventoryLayoutStorageKey, normalizeInventoryLayout(value)), { deep: true });
+watch(() => visibleHosts.value.map(selectionKey).join('\n'), reconcileSelection);
 onMounted(() => {
   compactMediaQuery = window.matchMedia('(max-width: 991.98px)');
   updateCompactInventory(compactMediaQuery);
@@ -272,6 +293,7 @@ async function load() {
 }
 
 function selectNetwork() {
+  clearSelection();
   writeStorage('fenping_selected_network', selectedCidr.value);
   emit('selected-network', selectedCidr.value);
   load();
@@ -324,6 +346,106 @@ function finishColumnResize() {
   window.removeEventListener('pointerup', finishColumnResize);
 }
 function resetFilters() { filters.value = { ...inventoryFilterDefaults, tags: [] }; savedFilterEditor.value = null; }
+
+function selectionKey(host) {
+  if (host?.id) return `host:${host.id}`;
+  if (host?.device_identity?.network && host?.device_identity?.container)
+    return `device:${host.device_identity.network}\u0000${host.device_identity.container}`;
+  const mac = String(host?.mac || '').trim().toLowerCase();
+  return mac ? `observed:mac:${mac}` : `observed:ip:${host?.ip || ''}`;
+}
+
+function selectionTarget(host) {
+  if (host?.id) return { kind: 'host', id: Number(host.id) };
+  if (host?.device_identity?.network && host?.device_identity?.container) {
+    return {
+      kind: 'device',
+      network: host.device_identity.network,
+      container: host.device_identity.container,
+      ...(host.mac ? { mac: host.mac } : {})
+    };
+  }
+  return { kind: 'observed', ...(host?.mac ? { mac: host.mac } : {}), ...(host?.ip ? { ip: host.ip } : {}) };
+}
+
+function reconcileSelection() {
+  const visible = new Set(visibleHosts.value.map(selectionKey));
+  const next = new Set(Array.from(selectedKeys.value).filter((key) => visible.has(key)));
+  if (next.size !== selectedKeys.value.size) selectedKeys.value = next;
+  if (next.size === 0 && bulkAction.value) closeBulkAction();
+}
+
+function clearSelection() { selectedKeys.value = new Set(); }
+function hostSelected(host) { return selectedKeys.value.has(selectionKey(host)); }
+function toggleHostSelection(host, checked) {
+  const next = new Set(selectedKeys.value);
+  checked ? next.add(selectionKey(host)) : next.delete(selectionKey(host));
+  selectedKeys.value = next;
+}
+function toggleAllVisible(checked) {
+  selectedKeys.value = checked ? new Set(visibleHosts.value.map(selectionKey)) : new Set();
+}
+function categoryHosts(key) { return visibleHosts.value.filter((host) => host.categoryContext?.key === key); }
+function categorySelected(key) {
+  const members = categoryHosts(key);
+  return members.length > 0 && members.every(hostSelected);
+}
+function categoryPartiallySelected(key) {
+  const members = categoryHosts(key);
+  const count = members.filter(hostSelected).length;
+  return count > 0 && count < members.length;
+}
+function toggleCategorySelection(key, checked) {
+  const next = new Set(selectedKeys.value);
+  for (const host of categoryHosts(key)) checked ? next.add(selectionKey(host)) : next.delete(selectionKey(host));
+  selectedKeys.value = next;
+}
+
+function metadataBulkEligible(host) {
+  if (host?.id) return toFlag(host.network_is_dhcp) || toFlag(host.metadata_editable);
+  return toFlag(host?.metadata_editable) && Boolean(host?.device_identity?.network && host?.device_identity?.container);
+}
+function bulkHostEligible(host, action) {
+  if (action === 'tags' || action === 'scan_profile') return metadataBulkEligible(host);
+  if (action === 'approve') return toFlag(host?.is_new) && Boolean(host?.mac);
+  if (action === 'delete') return Boolean(host?.id) && toFlag(host?.network_is_dhcp);
+  return false;
+}
+function bulkEligibleCount(action) { return selectedHosts.value.filter((host) => bulkHostEligible(host, action)).length; }
+function openBulkAction(action) {
+  if (bulkEligibleCount(action) < 1) return;
+  bulkError.value = '';
+  bulkAction.value = action;
+}
+function closeBulkAction() {
+  if (bulkSaving.value) return;
+  bulkAction.value = '';
+  bulkError.value = '';
+}
+async function submitBulkAction(values) {
+  if (!bulkAction.value || bulkSaving.value) return;
+  bulkSaving.value = true;
+  bulkError.value = '';
+  try {
+    const result = await apiJson('/api/inventory/bulk-actions', {
+      method: 'POST',
+      body: JSON.stringify({ action: bulkAction.value, targets: selectedHosts.value.map(selectionTarget), ...values })
+    });
+    const message = t('Bulk action complete: {changed} changed, {unchanged} unchanged, {skipped} skipped', {
+      changed: result.changed_count || 0,
+      unchanged: result.unchanged_count || 0,
+      skipped: result.skipped_count || 0
+    });
+    bulkAction.value = '';
+    clearSelection();
+    emit('notice', message);
+    await load();
+  } catch (bulkSaveError) {
+    bulkError.value = bulkSaveError.message;
+  } finally {
+    bulkSaving.value = false;
+  }
+}
 function tagSelected(tag) { return filters.value.tags.some((item) => item.toLowerCase() === tag.toLowerCase()); }
 function toggleTag(tag) {
   filters.value = {

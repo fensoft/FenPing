@@ -329,6 +329,7 @@ final class ApiKernelTest extends IntegrationTestCase
             'PUT /dns/groups/{id:int} session dns', 'DELETE /dns/groups/{id:int} session dns',
             'GET /auth/session guest ', 'POST /auth/login guest ', 'POST /auth/logout guest ',
             'GET /audit session ',
+            'POST /inventory/bulk-actions session hosts',
             'GET /health guest ', 'GET /health/live guest ', 'GET /health/ready guest ',
             'GET /inventory guest ', 'PUT /inventory/device-metadata body hosts',
             'POST /inventory/saved-filters body hosts', 'PUT /inventory/saved-filters/{id:int} body hosts',
