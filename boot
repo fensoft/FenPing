@@ -123,6 +123,7 @@ cat > /etc/crontabs/root <<'EOF'
 * * * * * php /opt/fenping/cli.php inventory --work
 17 3 1 * * php /opt/fenping/cli.php oui-refresh
 */15 * * * * php /opt/fenping/cli.php ping
+*/5 * * * * php /opt/fenping/cli.php service-check
 * * * * * php /opt/fenping/cli.php dnsmasq-leases
 11 * * * * php /opt/fenping/cli.php scheduled-report
 23 2 * * * php /opt/fenping/cli.php backup-maintenance daily

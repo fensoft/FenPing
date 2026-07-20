@@ -40,6 +40,32 @@ public function discordPortChangeEmbed(array $change): array {
   return $embed;
 }
 
+public function discordManualServiceChangeEmbed(array $change): array {
+  $name = trim((string)($change['name'] ?? '')) ?: 'Manual service';
+  $previous = (string)($change['previous_status'] ?? 'unknown');
+  $current = (string)($change['status'] ?? 'unknown');
+  $target = (string)($change['target'] ?? '');
+  $port = $change['port'] ?? null;
+  $type = strtoupper((string)($change['type'] ?? 'service'));
+  $timestamp = strtotime((string)($change['occurred_at'] ?? ''));
+  $embed = array(
+    'title' => $name . ' is now ' . $current,
+    'description' => 'An important manually monitored service changed state.',
+    'color' => $current === 'healthy' ? 0x16a34a : 0xdc2626,
+    'fields' => array(
+      $this->discordEmbedField('Service', $name, true),
+      $this->discordEmbedField('Type', $type, true),
+      $this->discordEmbedField('Target', $target . ($port === null ? '' : ':' . (int)$port), false),
+      $this->discordEmbedField('Previous', $previous, true),
+      $this->discordEmbedField('Current', $current, true),
+      $this->discordEmbedField('Detail', (string)($change['check_detail'] ?? '-'), false)
+    )
+  );
+  if ($timestamp !== false)
+    $embed['timestamp'] = date(DATE_ATOM, $timestamp);
+  return $embed;
+}
+
 public function discordPortServiceLabel(array $change, string $prefix): string {
   $service = trim((string)($change[$prefix . '_service'] ?? ''));
   $version = trim((string)($change[$prefix . '_version'] ?? ''));

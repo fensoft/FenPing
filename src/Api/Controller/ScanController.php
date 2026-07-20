@@ -41,7 +41,6 @@ final readonly class ScanController implements Controller
                 'policy' => $this->jobs->policySummary(),
             ]),
             new Route('GET', '/scans/profiles', fn(Request $request, array $params): array => ['profiles' => $this->profiles->all()]),
-            new Route('GET', '/services', fn(Request $request, array $params): array => $this->results->services()),
             new Route(
                 'POST',
                 '/scans/{ip:ipv4}',

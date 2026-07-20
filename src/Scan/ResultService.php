@@ -8,6 +8,7 @@ use FenPing\Api\HttpException;
 use FenPing\Api\Response;
 use FenPing\Config\AppConfig;
 use FenPing\Vendor\VendorLookup;
+use FenPing\Service\MonitoredServiceManager;
 
 final readonly class ResultService
 {
@@ -19,6 +20,7 @@ final readonly class ResultService
         private ProfileCatalog $profiles,
         private XmlCodec $codec,
         private VendorLookup $vendors,
+        private MonitoredServiceManager $monitoredServices,
     ) {
     }
 
@@ -119,12 +121,12 @@ final readonly class ResultService
             ];
         }
 
-        return [
+        return $this->monitoredServices->merge([
             'network' => $this->config->network,
             'summary' => ['hosts' => count($hosts), 'services' => count($services)],
             'hosts' => $hosts,
             'services' => $services,
-        ];
+        ]);
     }
 
     public function xml(string $ip, ?int $id = null): Response

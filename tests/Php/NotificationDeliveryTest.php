@@ -9,6 +9,8 @@ use FenPing\Application;
 use FenPing\Config\AppConfig;
 use FenPing\Http\HttpTransport;
 use FenPing\Realtime\NullLiveUpdatePublisher;
+use FenPing\Service\ServiceProbe;
+use FenPing\Service\ServiceProbeResult;
 use InvalidArgumentException;
 
 final class NotificationDeliveryTest extends IntegrationTestCase
@@ -318,6 +320,58 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             'ip_conflicts' => true,
         ]);
         self::assertCount($requestCount, $transport->requests, 're-enabling rules must not replay disabled events');
+    }
+
+    public function testScheduledManualServiceTransitionsAreDeduplicatedAndRespectDeliveryRules(): void
+    {
+        $transport = new FakeNotificationHttpTransport();
+        $probe = new class([
+            new ServiceProbeResult(true, 'HTTP 204'),
+            new ServiceProbeResult(false, 'HTTP 503'),
+            new ServiceProbeResult(false, 'HTTP 503'),
+            new ServiceProbeResult(true, 'HTTP 200'),
+            new ServiceProbeResult(false, 'HTTP 503'),
+        ]) implements ServiceProbe {
+            public function __construct(private array $results) {}
+            public function check(array $service): ServiceProbeResult
+            {
+                return array_shift($this->results) ?? new ServiceProbeResult(false, 'unexpected check');
+            }
+        };
+        $application = $this->configuredApplication(
+            $transport,
+            telegram: false,
+            serviceProbe: $probe,
+        );
+        self::assertTrue($application->auth()->login(''));
+        $created = $application->api()->handle($this->request('POST', '/api/services/manual', [
+            'name' => 'Status page', 'type' => 'https', 'url' => 'https://status.example.test/health',
+        ]));
+        self::assertSame(200, $created->status);
+        $id = json_decode($created->body, true, flags: JSON_THROW_ON_ERROR)['service']['id'];
+        self::assertCount(0, $transport->requests, 'the initial baseline must not alert');
+        $application->auth()->logout();
+
+        $transport->enqueue(['status' => 503, 'headers' => [], 'body' => 'unavailable']);
+        self::assertSame(0, $this->runServiceChecker($application));
+        self::assertSame('unhealthy', $this->manualServiceStatus($application, $id));
+        self::assertCount(1, $transport->requests);
+        self::assertSame('success', $application->operations()->statuses()['service_checks']['state']);
+        self::assertSame('failure', $application->operations()->statuses()['notification_delivery']['state']);
+
+        self::assertSame(0, $this->runServiceChecker($application));
+        self::assertCount(1, $transport->requests, 'an unchanged failure must not repeat');
+
+        self::assertSame(0, $this->runServiceChecker($application));
+        self::assertSame('healthy', $this->manualServiceStatus($application, $id));
+        self::assertCount(2, $transport->requests, 'recovery must alert once');
+
+        $rules = $application->notificationRules()->notificationRules();
+        $rules['service_changes']['important'] = false;
+        $application->notificationRules()->notificationRulesUpdate($rules);
+        self::assertSame(0, $this->runServiceChecker($application));
+        self::assertSame('unhealthy', $this->manualServiceStatus($application, $id));
+        self::assertCount(2, $transport->requests, 'disabled important delivery must suppress alerts');
     }
 
     public function testNotificationApiIsStrictAuthenticatedAndRedactsEnvironmentValues(): void
@@ -675,6 +729,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
         bool $discord = true,
         bool $telegram = true,
         bool $selectTelegram = true,
+        ?ServiceProbe $serviceProbe = null,
     ): Application {
         $databasePath = tempnam(sys_get_temp_dir(), 'fenping-notification-provider-');
         self::assertIsString($databasePath);
@@ -690,6 +745,7 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             ),
             new NullLiveUpdatePublisher(),
             $transport,
+            $serviceProbe,
         );
         $application->database()->initialize();
         if ($telegram && $selectTelegram) {
@@ -702,6 +758,25 @@ final class NotificationDeliveryTest extends IntegrationTestCase
             $application->telegramChats()->telegramChatSelectionUpdate('-1001234567890');
         }
         return $application;
+    }
+
+    private function runServiceChecker(Application $application): int
+    {
+        ob_start();
+        try {
+            return $application->cli()->run(['cli.php', 'service-check']);
+        } finally {
+            ob_end_clean();
+        }
+    }
+
+    private function manualServiceStatus(Application $application, int $id): string
+    {
+        $statement = $application->database()->connection()->prepare(
+            'SELECT check_status FROM monitored_services WHERE id=:id',
+        );
+        $statement->execute(['id' => $id]);
+        return (string) $statement->fetchColumn();
     }
 
     private function copyConfig(

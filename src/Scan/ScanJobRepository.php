@@ -8,6 +8,7 @@ use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
 use FenPing\Realtime\LiveUpdatePublisher;
 use FenPing\Realtime\LiveUpdateScope;
+use FenPing\Service\MonitoredServiceRepository;
 use InvalidArgumentException;
 use PDO;
 use RuntimeException;
@@ -25,6 +26,7 @@ final readonly class ScanJobRepository
         private ScanResultStore $results,
         private SnapshotRepository $snapshots,
         private PortChangeService $portChanges,
+        private MonitoredServiceRepository $monitoredServices,
     ) {
     }
 
@@ -278,6 +280,7 @@ public function complete(int $id, array $scan): bool {
       $snapshotId = $snapshot['id'];
       $changed = $snapshot['changed'] ? 1 : 0;
       $this->portChanges->scanRecordPortChanges($job, $scan);
+      $this->monitoredServices->observeScan((string)$job['ip'], $scan);
     }
 
     $stmt = $database->prepare("

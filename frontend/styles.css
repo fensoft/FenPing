@@ -1048,6 +1048,46 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   min-width: 72rem;
 }
 
+.services-toolbar {
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  margin-bottom: 1rem;
+}
+
+.services-section + .services-section {
+  margin-top: 1.25rem;
+}
+
+.services-section-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+}
+
+.services-section-heading h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.important-services-table {
+  min-width: 64rem;
+}
+
+.important-services-table td:nth-child(2) {
+  max-width: 25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-service-target-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) 8rem;
+}
+
 .services-table th,
 .services-table td {
   line-height: 1.15;
@@ -1084,6 +1124,12 @@ html[dir='rtl'] :is(.services-host-name, .notify-host-name, .scan-queue-host-nam
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+  .manual-service-target-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ipam-subnets {

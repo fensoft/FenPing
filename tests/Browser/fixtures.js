@@ -70,6 +70,13 @@ function seedHosts() {
   ];
 }
 
+function seedServices() {
+  return [
+    { host_id: 1, name: 'Gateway', ip: `${NETWORK}.10`, mac: '02:00:00:00:00:10', vendor: 'Router Labs', scan_id: 42, scan_mode: 'standard', scan_date: '2026-07-14 10:00:00', merged: false, protocol: 'tcp', port: 443, service: 'https', version: 'Gateway UI', tunnel: 'ssl', source: 'standard', important: false },
+    { host_id: 2, name: 'Office printer', ip: `${NETWORK}.20`, mac: '02:00:00:00:00:20', vendor: 'Print Corp', scan_id: 43, scan_mode: 'lightweight', scan_date: '2026-07-14 09:00:00', merged: false, protocol: 'tcp', port: 22, service: 'ssh', version: 'OpenSSH', tunnel: '', source: 'lightweight', important: false }
+  ];
+}
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -161,6 +168,9 @@ function createApi() {
     configured: true,
     password: 'correct horse battery staple',
     hosts: seedHosts(),
+    services: seedServices(),
+    importantServices: [],
+    nextServiceId: 1,
     backups: [{
       filename: 'fenping-daily-20260714-022300.tgz',
       kind: 'daily',
@@ -298,6 +308,71 @@ async function handleApi(route, api) {
 
   if (method === 'GET' && path === '/api/topology') {
     await fulfillJson(route, topologyPayload());
+    return;
+  }
+
+  if (method === 'GET' && path === '/api/services') {
+    const services = clone(api.state.services).map(service => {
+      const pin = api.state.importantServices.find(item => item.origin === 'discovered' && item.ip === service.ip && item.protocol === service.protocol && Number(item.port) === Number(service.port));
+      return pin ? { ...service, important: true, monitored_service_id: pin.id } : service;
+    });
+    await fulfillJson(route, {
+      network: NETWORK,
+      summary: { hosts: 2, services: services.length, important: api.state.importantServices.length, manual: api.state.importantServices.filter(item => item.origin === 'manual').length },
+      hosts: [], services, important_services: clone(api.state.importantServices)
+    });
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/services/pins') {
+    if (!api.state.authenticated) { await fulfillJson(route, { error: 'login required' }, 403); return; }
+    const service = api.state.services.find(item => item.ip === body?.ip && item.protocol === body?.protocol && Number(item.port) === Number(body?.port));
+    if (!service) { await fulfillJson(route, { error: 'discovered service is not available' }, 400); return; }
+    const pinned = { ...clone(service), id: api.state.nextServiceId++, monitored_service_id: api.state.nextServiceId - 1, origin: 'discovered', important: true, available: true, last_seen_at: service.scan_date, check_status: null, check_detail: null };
+    api.state.importantServices.push(pinned);
+    await fulfillJson(route, { service: clone(pinned) });
+    return;
+  }
+
+  const pinMatch = path.match(/^\/api\/services\/pins\/(\d+)$/);
+  if (method === 'DELETE' && pinMatch) {
+    api.state.importantServices = api.state.importantServices.filter(item => Number(item.id) !== Number(pinMatch[1]));
+    await fulfillJson(route, { deleted: true });
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/services/manual') {
+    if (!api.state.authenticated) { await fulfillJson(route, { error: 'login required' }, 403); return; }
+    const manual = {
+      id: api.state.nextServiceId++, origin: 'manual', source: 'manual', important: true,
+      type: body?.type, name: body?.name, target: body?.type === 'https' ? body?.url : body?.host,
+      port: body?.type === 'https' ? null : Number(body?.port), check_status: 'healthy',
+      check_detail: ['proxy', 'socks5'].includes(body?.type) ? 'Proxy exit 203.0.113.5' : body?.type === 'ssh' ? 'SSH-2.0-OpenSSH' : 'HTTP 200',
+      observed_ip: ['proxy', 'socks5'].includes(body?.type) ? '203.0.113.5' : null, last_checked_at: '2026-07-14 12:00:00', available: true
+    };
+    api.state.importantServices.push(manual);
+    await fulfillJson(route, { service: clone(manual) });
+    return;
+  }
+
+  const manualMatch = path.match(/^\/api\/services\/manual\/(\d+)$/);
+  const manualCheckMatch = path.match(/^\/api\/services\/manual\/(\d+)\/check$/);
+  if (method === 'POST' && manualCheckMatch) {
+    const manual = api.state.importantServices.find(item => Number(item.id) === Number(manualCheckMatch[1]));
+    if (!manual) { await fulfillJson(route, { error: 'monitored service not found' }, 404); return; }
+    manual.check_status = 'healthy'; manual.last_checked_at = '2026-07-14 12:05:00';
+    await fulfillJson(route, { service: clone(manual) });
+    return;
+  }
+  if (method === 'PUT' && manualMatch) {
+    const manual = api.state.importantServices.find(item => Number(item.id) === Number(manualMatch[1]));
+    Object.assign(manual, { type: body?.type, name: body?.name, target: body?.type === 'https' ? body?.url : body?.host, port: body?.type === 'https' ? null : Number(body?.port), check_status: 'healthy' });
+    await fulfillJson(route, { service: clone(manual) });
+    return;
+  }
+  if (method === 'DELETE' && manualMatch) {
+    api.state.importantServices = api.state.importantServices.filter(item => Number(item.id) !== Number(manualMatch[1]));
+    await fulfillJson(route, { deleted: true });
     return;
   }
 

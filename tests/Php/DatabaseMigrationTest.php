@@ -119,6 +119,7 @@ final class DatabaseMigrationTest extends IntegrationTestCase
             'scheduled_report_settings', 'scheduled_report_runs',
             'telegram_known_chats', 'tags', 'host_tags', 'inventory_saved_filters',
             'inventory_saved_filter_tags', 'inventory_device_metadata', 'inventory_device_tags',
+            'monitored_services',
         ] as $table) {
             $exists = $database->prepare(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:table",
@@ -191,6 +192,52 @@ final class DatabaseMigrationTest extends IntegrationTestCase
             'SELECT COUNT(*) FROM inventory_device_tags',
         )->fetchColumn());
         self::assertSame([], $database->query('PRAGMA foreign_key_check')->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    public function testVersionThirteenMonitoredServicesGainSocks5WithoutDataLoss(): void
+    {
+        $database = $this->memoryDatabase();
+        $migration = file_get_contents($this->app()->config()->projectDir . '/migrations/0013_monitored_services.sql');
+        self::assertIsString($migration);
+        $database->exec($migration);
+        $database->exec(<<<'SQL'
+          INSERT INTO monitored_services (
+            source, type, name, target, port, check_status, check_detail, observed_ip
+          ) VALUES (
+            'manual', 'proxy', 'Existing HTTP proxy', 'proxy.example.test', 3128,
+            'healthy', 'Proxy exit 8.8.8.8', '8.8.8.8'
+          );
+          PRAGMA user_version=13;
+          SQL);
+
+        $this->app()->database()->applyMigrations(
+            $database,
+            DatabaseManager::SCHEMA_VERSION,
+            $this->app()->config()->projectDir . '/migrations',
+        );
+
+        self::assertSame(DatabaseManager::SCHEMA_VERSION, $this->app()->database()->schemaVersion($database));
+        $existing = $database->query(
+            'SELECT id, type, name, target, port, check_status, check_detail, observed_ip FROM monitored_services',
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame([
+            'id' => 1,
+            'type' => 'proxy',
+            'name' => 'Existing HTTP proxy',
+            'target' => 'proxy.example.test',
+            'port' => 3128,
+            'check_status' => 'healthy',
+            'check_detail' => 'Proxy exit 8.8.8.8',
+            'observed_ip' => '8.8.8.8',
+        ], $existing);
+        $database->exec(<<<'SQL'
+          INSERT INTO monitored_services (source, type, name, target, port, check_status)
+          VALUES ('manual', 'socks5', 'SOCKS exit', 'socks.example.test', 1080, 'pending')
+          SQL);
+        self::assertSame('socks5', $database->query(
+            "SELECT type FROM monitored_services WHERE name='SOCKS exit'",
+        )->fetchColumn());
+        self::assertSame('ok', $database->query('PRAGMA integrity_check')->fetchColumn());
     }
 
     public function testVersionSevenHostsGainMetadataTagsAndSavedFilters(): void

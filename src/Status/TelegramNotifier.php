@@ -77,6 +77,23 @@ public function sendTelegramServiceChanges(array $changes): void {
     $this->telegramPostText($message);
 }
 
+public function sendTelegramManualServiceChange(array $change): void {
+  if (!$this->chats->telegramNotificationsEnabled())
+    return;
+  $target = (string)($change['target'] ?? '');
+  if (($change['port'] ?? null) !== null)
+    $target .= ':' . (int)$change['port'];
+  $this->telegramPostText(implode("\n", array(
+    'FenPing manual service change',
+    $this->notificationTextValue((string)($change['name'] ?? 'Manual service')) . ': '
+      . (string)($change['previous_status'] ?? 'unknown') . ' -> ' . (string)($change['status'] ?? 'unknown'),
+    'Type: ' . strtoupper((string)($change['type'] ?? 'service')),
+    'Target: ' . $this->notificationTextValue($target),
+    'Detail: ' . $this->notificationTextValue((string)($change['check_detail'] ?? '-')),
+    'Time: ' . $this->notificationTextValue((string)($change['occurred_at'] ?? ''))
+  )));
+}
+
 public function telegramServiceBlock(array $change): string {
   $name = trim((string)($change['name'] ?? ''));
   $ip = trim((string)($change['ip'] ?? ''));

@@ -24,6 +24,7 @@ final readonly class CliUsage
         fwrite(STDERR, "       php cli.php dnsmasq-leases" . PHP_EOL);
         fwrite(STDERR, "       php cli.php notify-restart" . PHP_EOL);
         fwrite(STDERR, "       php cli.php scheduled-report" . PHP_EOL);
+        fwrite(STDERR, "       php cli.php service-check" . PHP_EOL);
         fwrite(STDERR, "       php cli.php discord-restart" . PHP_EOL);
         fwrite(STDERR, "       php cli.php backup [backup.tgz]" . PHP_EOL);
         fwrite(STDERR, "       php cli.php backup-verify <backup.tgz>" . PHP_EOL);

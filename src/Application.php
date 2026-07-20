@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace FenPing;
 
 use FenPing\Api\ApiKernel;
-use FenPing\Api\Controller\{AuditController, AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, SystemController, TopologyController};
+use FenPing\Api\Controller\{AuditController, AuthController, BackupController, DnsOverrideController, DoctorController, DockerNetworksController, ExportController, HostController, IpamController, NetbootController, ScanController, ServiceController, SystemController, TopologyController};
 use FenPing\Audit\AuditLogService;
 use FenPing\Auth\AuthService;
 use FenPing\Backup\{BackupService, BackupArchiveService, BackupArchiveTools, BackupDatabaseDocument, BackupFilesystem, BackupManager, BackupTableCatalog};
 use FenPing\Discord\DiscordNotifier;
 use FenPing\Discord\DiscordPayloadBuilder;
-use FenPing\Cli\{CliKernel, CliUsage, BackupCommand, CallableCommand, DatabaseCommand, DiscordRestartCommand, HostsCommand, InventoryCommand, LeaseImportCommand, LockingCommand, NotificationRestartCommand, NoArgumentsCommand, OuiCommand, PingCommand, PublishingCommand, ScanPortBackfillCommand, ScheduledReportCommand, StatusHistoryCleanCommand, TrackedCommand, DoctorCommand, DockerNetworksRefreshCommand, DockerNetworksWatchCommand};
+use FenPing\Cli\{CliKernel, CliUsage, BackupCommand, CallableCommand, DatabaseCommand, DiscordRestartCommand, HostsCommand, InventoryCommand, LeaseImportCommand, LockingCommand, NotificationRestartCommand, NoArgumentsCommand, OuiCommand, PingCommand, PublishingCommand, ScanPortBackfillCommand, ScheduledReportCommand, ServiceCheckCommand, StatusHistoryCleanCommand, TrackedCommand, DoctorCommand, DockerNetworksRefreshCommand, DockerNetworksWatchCommand};
 use FenPing\Config\AppConfig;
 use FenPing\Database\DatabaseManager;
 use FenPing\Dhcp\ConfigManager;
@@ -86,6 +86,7 @@ use FenPing\Scan\ScanXmlParser;
 use FenPing\Scan\ScanXmlRenderer;
 use FenPing\Scan\SnapshotRepository;
 use FenPing\Scan\XmlCodec;
+use FenPing\Service\{MonitoredServiceManager, MonitoredServiceRepository, NativeServiceProbe, NativeSshConnector, ServiceProbe};
 use FenPing\Status\NotificationService;
 use FenPing\Status\NotificationQueryRepository;
 use FenPing\Status\NotificationRuleRepository;
@@ -138,6 +139,7 @@ final class Application
     private readonly StatusHistoryService $history;
     private readonly StatusHistoryCleaner $historyCleaner;
     private readonly NotificationService $notifications;
+    private readonly MonitoredServiceManager $monitoredServices;
     private readonly ScheduledReportService $scheduledReports;
     private readonly NotificationRuleRepository $notificationRules;
     private readonly DiscordNotifier $discord;
@@ -160,7 +162,7 @@ final class Application
     private readonly DockerNetworkWatcher $dockerNetworkWatcher;
     private readonly LiveUpdatePublisher $liveUpdates;
 
-    private function __construct(private readonly AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null, ?HttpTransport $httpTransport = null)
+    private function __construct(private readonly AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null, ?HttpTransport $httpTransport = null, ?ServiceProbe $serviceProbe = null)
     {
         $this->liveUpdates = $liveUpdates ?? new NchanLiveUpdatePublisher();
         $this->database = new DatabaseManager($config);
@@ -207,7 +209,8 @@ final class Application
         $this->scanResultStore = new ScanResultStore($this->database, $this->profiles, $this->scanPolicy, $this->scanCodec, $portKnowledge);
         $this->snapshots = new SnapshotRepository($this->database, $this->scanCodec, $this->scanResultStore);
         $this->portChanges = new PortChangeService($this->database, $this->scanPolicy, $this->snapshots, $portKnowledge);
-        $this->scanJobs = new ScanJobRepository($config, $this->database, $this->liveUpdates, $this->profiles, $this->scanPolicy, $this->scanControl, $this->scanResultStore, $this->snapshots, $this->portChanges);
+        $monitoredServiceRepository = new MonitoredServiceRepository($this->database);
+        $this->scanJobs = new ScanJobRepository($config, $this->database, $this->liveUpdates, $this->profiles, $this->scanPolicy, $this->scanControl, $this->scanResultStore, $this->snapshots, $this->portChanges, $monitoredServiceRepository);
         $this->oui = new OuiRegistryService($config, $this->database, $this->http);
         $this->vendors = new VendorLookup($this->database, $this->oui);
         $this->ipConflictService = new IpConflictService($config, $this->ipConflicts, $this->networks, $this->vendors);
@@ -238,6 +241,8 @@ final class Application
             $this->liveUpdates,
         );
         $this->notifications = new NotificationService($config, $notificationQueries, $this->notificationRules, $this->discord, $this->telegram, $this->telegramChats, $this->scheduledReports);
+        $serviceProbe ??= new NativeServiceProbe($this->processes, new NativeSshConnector());
+        $this->monitoredServices = new MonitoredServiceManager($monitoredServiceRepository, $serviceProbe, $this->notifications);
         $retention = new RetentionService($this->database, $this->portChanges);
         $this->inventoryScanner = new InventoryScanner($this->profiles, $this->scanJobs, $this->scanCodec, $retention, $this->notifications);
         $this->inventoryScheduler = new InventoryScheduler($config, $this->database, $dockerCache, $this->hostMetadata, $this->inventoryScanner, $this->scanJobs, $this->profiles, $this->networks, $this->operations, $this->liveUpdates);
@@ -264,15 +269,9 @@ final class Application
         );
     }
 
-    public static function fromEnvironment(string $projectDir): self
-    {
-        return new self(AppConfig::fromEnvironment($projectDir));
-    }
+    public static function fromEnvironment(string $projectDir): self { return new self(AppConfig::fromEnvironment($projectDir)); }
 
-    public static function forConfig(AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null, ?HttpTransport $httpTransport = null): self
-    {
-        return new self($config, $liveUpdates, $httpTransport);
-    }
+    public static function forConfig(AppConfig $config, ?LiveUpdatePublisher $liveUpdates = null, ?HttpTransport $httpTransport = null, ?ServiceProbe $serviceProbe = null): self { return new self($config, $liveUpdates, $httpTransport, $serviceProbe); }
 
     public function api(): ApiKernel
     {
@@ -303,6 +302,7 @@ final class Application
             new IpamController($this->ipam, $validator),
             new NetbootController($this->netboot, $mutations, $this->audit),
             new BackupController($this->backups),
+            new ServiceController($results, $this->monitoredServices, $this->audit),
             new ScanController($this->scanJobs, $this->profiles, $results, $this->networks, new PrivilegedInventoryWorkerLauncher($this->config), $this->audit),
             new TopologyController($this->topology),
         ], $this->liveUpdates);
@@ -344,6 +344,7 @@ final class Application
             'oui-refresh' => $ouiRefresh, 'oui-sync' => $ouiSync, 'dnsmasq-leases' => $leases,
             "notify-restart" => new NoArgumentsCommand(new NotificationRestartCommand($this->notifications), $usage),
             "scheduled-report" => new ScheduledReportCommand($this->scheduledReports, $usage),
+            'service-check' => new LockingCommand(new TrackedCommand(new PublishingCommand(new ServiceCheckCommand($this->monitoredServices), $this->liveUpdates, [LiveUpdateScope::Services]), $this->operations, 'service_checks'), '/tmp/fenping-service-check.lck', 'manual service checks'),
             "discord-restart" => new NoArgumentsCommand(new DiscordRestartCommand($this->discord), $usage),
             'backup' => new BackupCommand($this->backups, 'backup'),
             'restore' => new BackupCommand($this->backups, 'restore'),
@@ -374,7 +375,7 @@ final class Application
     public function profiles(): ProfileCatalog { return $this->profiles; }
     public function scanJobs(): ScanJobRepository { return $this->scanJobs; }
     public function snapshots(): SnapshotRepository { return $this->snapshots; }
-    public function scanResults(): ResultService { return new ResultService($this->config, $this->scanResultStore, $this->scanJobs, $this->snapshots, $this->profiles, $this->scanCodec, $this->vendors); }
+    public function scanResults(): ResultService { return new ResultService($this->config, $this->scanResultStore, $this->scanJobs, $this->snapshots, $this->profiles, $this->scanCodec, $this->vendors, $this->monitoredServices); }
     public function scanPortChanges(): PortChangeService { return $this->portChanges; }
     public function scanRetention(): RetentionService { return new RetentionService($this->database, $this->portChanges); }
     public function scanXml(): XmlCodec { return $this->scanCodec; }

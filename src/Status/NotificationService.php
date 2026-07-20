@@ -102,6 +102,13 @@ final readonly class NotificationService
         $this->telegram->sendTelegramIpConflictChanges($changes);
     }
 
+    public function sendManualServiceChange(array $change): void
+    {
+        if (!$this->rules->notificationRules()['service_changes']['important']) return;
+        $this->discord->sendDiscordManualServiceChange($change);
+        $this->telegram->sendTelegramManualServiceChange($change);
+    }
+
     public function sendRestartNotification(): array {
         if (!$this->rules->notificationRules()['restart']) return ['discord' => null, 'telegram' => null];
         return [

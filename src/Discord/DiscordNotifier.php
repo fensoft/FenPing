@@ -63,6 +63,15 @@ public function sendDiscordPortChanges(array $changes): void {
     $this->discordPostPayload($payload);
 }
 
+public function sendDiscordManualServiceChange(array $change): void {
+  if (!$this->discordNotificationsEnabled())
+    return;
+  $this->discordPostPayload(array(
+    'username' => 'FenPing',
+    'embeds' => array($this->payloads->discordManualServiceChangeEmbed($change))
+  ));
+}
+
 public function sendDiscordIpConflictChanges(array $changes): void {
   if (!$this->discordNotificationsEnabled() || !$this->rules->notificationRules()['ip_conflicts'] || $changes === array())
     return;
